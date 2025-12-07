@@ -1,0 +1,54 @@
+[
+  {
+    "id": "World1/park_tree_small_chopped.png",
+    "texture": {
+      "pivot": [
+        0.0160000007599592,
+        -0.8479999899864197
+      ]
+    }
+  },
+  {
+    "id": "World1/park_tree_medium_chopped.png",
+    "texture": {
+      "pivot": [
+        0.0270000007003546,
+        -0.8399999737739563
+      ]
+    }
+  },
+  {
+    "id": "World1/world1_ground_texture.png",
+    "texture": {
+      "pixels_per_unit": 480,
+      "wrap_repeat": true
+    }
+  },
+  {
+    "id": "World1/park_tree_small.png",
+    "texture": {
+      "pivot": [
+        0.0164126157760620,
+        -0.8479874134063721
+      ]
+    }
+  },
+  {
+    "id": "World1/duck.png",
+    "texture": {
+      "pivot": [
+        -0.1089810729026794,
+        -0.2461898922920227
+      ]
+    }
+  },
+  {
+    "id": "World1/park_tree_medium.png",
+    "texture": {
+      "pivot": [
+        0.0265840291976929,
+        -0.8401718735694885
+      ]
+    }
+  }
+]

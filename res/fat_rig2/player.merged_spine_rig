@@ -1,0 +1,6 @@
+{
+    "base_rig": "fat_rig2/playercharacter.spine",
+    "rigs_to_merge": [
+        { "rig": "$AO/schleem/playercharacter.spine", },
+    ],
+}

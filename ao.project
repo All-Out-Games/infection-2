@@ -1,0 +1,10 @@
+{
+    csl: true,
+    projects:
+    [
+        {
+            name: "Infection"
+            id: "6935dcc718506c430b35c652"
+        }
+    ]
+}

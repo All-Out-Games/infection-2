@@ -1,0 +1,18 @@
+0a0a25a9f05d9ce9.png
+	size: 564, 564
+	filter: Linear, Linear
+images/hit_effect/hit_effect1
+	bounds: 78, 438, 118, 123
+	offsets: 1, 1, 120, 124
+	rotate: 90
+images/hit_effect/hit_effect2
+	bounds: 207, 399, 157, 162
+	offsets: 1, 1, 159, 163
+	rotate: 90
+images/hit_effect/hit_effect3
+	bounds: 375, 383, 173, 181
+	offsets: 1, 1, 175, 182
+	rotate: 90
+images/hit_effect/hit_effect_0
+	bounds: 6, 497, 66, 59
+	offsets: 1, 1, 68, 61

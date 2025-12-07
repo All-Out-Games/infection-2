@@ -1,0 +1,56 @@
+STG101_dire_wolf.png
+	size: 808, 808
+	filter: Linear, Linear
+images/dire_wolf/back_lower_leg_l
+	bounds: 705, 626, 77, 130
+	offsets: 1, 1, 79, 131
+images/dire_wolf/back_lower_leg_r
+	bounds: 713, 324, 77, 130
+	offsets: 1, 1, 79, 131
+images/dire_wolf/back_upper_leg_l
+	bounds: 555, 324, 159, 156
+	offsets: 1, 1, 161, 158
+	rotate: 90
+images/dire_wolf/back_upper_leg_r
+	bounds: 675, 485, 131, 139
+	offsets: 1, 1, 133, 141
+images/dire_wolf/blood_puddle
+	bounds: 2, 367, 375, 177
+	offsets: 1, 1, 377, 179
+images/dire_wolf/body
+	bounds: 2, 546, 356, 260
+images/dire_wolf/front_lower_leg_l
+	bounds: 359, 730, 69, 76
+	offsets: 1, 1, 71, 78
+images/dire_wolf/front_lower_leg_r
+	bounds: 2, 730, 69, 76
+	offsets: 1, 1, 71, 78
+images/dire_wolf/front_upper_leg_l
+	bounds: 712, 197, 90, 125
+	offsets: 1, 1, 92, 126
+images/dire_wolf/front_upper_leg_r
+	bounds: 379, 411, 88, 133
+	offsets: 1, 1, 90, 134
+images/dire_wolf/head
+	bounds: 555, 156, 155, 166
+	offsets: 1, 1, 157, 167
+images/dire_wolf/head_closed_eyes
+	bounds: 518, 494, 155, 166
+	offsets: 1, 1, 157, 167
+images/dire_wolf/head_flinch
+	bounds: 360, 546, 156, 174
+	offsets: 1, 1, 158, 175
+images/dire_wolf/head_mouth_open
+	bounds: 271, 156, 201, 209
+	offsets: 1, 1, 203, 211
+images/dire_wolf/neck_fur
+	bounds: 2, 171, 194, 267
+	offsets: 1, 1, 196, 269
+	rotate: 90
+images/dire_wolf/shadow
+	bounds: 474, 156, 336, 79
+	offsets: 1, 1, 338, 81
+	rotate: 90
+images/dire_wolf/tail
+	bounds: 499, 662, 204, 140
+	rotate: 180
