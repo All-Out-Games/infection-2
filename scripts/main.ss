@@ -10,6 +10,31 @@ button_orange:   Texture_Asset;
 
 keybind_dodge_roll: Keybind;
 
+Game_State :: enum {
+    WAITING_FOR_PLAYERS;
+    GAMEPLAY;
+}
+
+Player_Team :: enum {
+    SURVIVOR;
+    ZOMBIE;
+    SPECTATOR;
+}
+
+g_game: struct {
+    state: Game_State;
+};
+
+server_rng: u64;
+
+ROUND_COUNTDOWN_TIMER                           :: 10;
+ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
+
+player_count_last_frame: int;
+round_countdown_timer: float;
+
+g_game_manager: Game_Manager;
+
 ao_start :: proc() {
     white_sprite    = get_asset(Texture_Asset, "$AO/white.png");
     modal_bg_sprite = get_asset(Texture_Asset, "ui/modal_simple_white1.png");
@@ -17,25 +42,109 @@ ao_start :: proc() {
     button_red      = get_asset(Texture_Asset, "ui/button_large_red1.png");
     button_orange   = get_asset(Texture_Asset, "ui/button_large_yellow2.png");
 
-    // todo(josh): named arguments!
-    // food_value, health, required_mouth_size
-    food_definitions[Food_Kind.APPLE.(int)]               = .{"Apple", 1, 3, 1};
-    food_definitions[Food_Kind.FEASTABLE_BAR.(int)]       = .{"Feastable Bar", 2, 5, 1};
-    food_definitions[Food_Kind.POPCORN.(int)]             = .{"Popcorn", 3, 7, 2};
-    food_definitions[Food_Kind.GRIMACE_SHAKE_SMALL.(int)] = .{"Grimace Shake", 4, 9, 2};
-    food_definitions[Food_Kind.MILK_JUG.(int)]            = .{"Milk Jug", 5, 11, 3};
-    food_definitions[Food_Kind.DOGGY_POOP_BIN.(int)]      = .{"Dog Poop", 6, 13, 4};
-    food_definitions[Food_Kind.FIRE_HYDRANT.(int)]        = .{"Fire Hydrant", 7, 15, 5};
-    food_definitions[Food_Kind.TRASH_BAG.(int)]           = .{"Trash Bag", 8, 17, 6};
-    food_definitions[Food_Kind.INFINITY_GAUNTLET.(int)]   = .{"Infinity Gauntlet", 9, 19, 7};
-
     Economy.register_currency("Food", "icons/burger.png");
     Economy.register_currency("Coins", "icons/coin.png");
 
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
+
+    server_rng = rng_seed((get_time() * 1000000).(u64));
+}
+
+draw_big_game_text :: proc(str: string, args: [^]any = .{}) {
+    ts := UI.default_text_settings();
+    ts.size = 64;
+    text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 150);
+    UI.text(text_rect, ts, str, args);
+}
+
+draw_small_game_text :: proc(str: string, args: [^]any = .{}) {
+    ts := UI.default_text_settings();
+    ts.size = 48;
+    text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 75);
+    UI.text(text_rect, ts, str, args);
 }
 
 ao_update :: proc(dt: float) {
+    switch g_game.state {
+        case .WAITING_FOR_PLAYERS: {
+            player_count := 0;
+            foreach player: component_iterator(Player) {
+                player_count += 1;
+            }
+            defer player_count_last_frame = player_count;
+
+            REQUIRED_PLAYERS :: 3;
+            if player_count < REQUIRED_PLAYERS {
+                draw_big_game_text("Waiting for players...");
+                draw_small_game_text("% / %", .{player_count, REQUIRED_PLAYERS});
+            }
+            else {
+                if player_count_last_frame < REQUIRED_PLAYERS {
+                    round_countdown_timer = ROUND_COUNTDOWN_TIMER.(float);
+                }
+                else {
+                    if player_count_last_frame != player_count {
+                        round_countdown_timer = max(round_countdown_timer, ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES.(float));
+                    }
+                }
+                round_countdown_timer -= dt;
+
+                draw_big_game_text("Starting round in %s...", .{round_countdown_timer.(int) + 1});
+                draw_small_game_text("% players", .{player_count});
+
+                if round_countdown_timer <= 0 {
+                    round_countdown_timer = 0;
+                    players := new(Player, player_count);
+                    player_index := 0;
+                    foreach player: component_iterator(Player) {
+                        players[player_index] = player;
+                        player_index += 1;
+                        player.team = .SURVIVOR;
+                    }
+
+                    first_zombie := rng_range_int(&server_rng, 0, player_count-1);
+                    players[first_zombie].team = .ZOMBIE;
+                    g_game.state = .GAMEPLAY;
+
+                    for i: 0..players.count-1 {
+                        player := players[i];
+                        respawn_player(player);
+                    }
+                }
+            }
+        }
+        case .GAMEPLAY: {
+            survivors_left := 0;
+            foreach player: component_iterator(Player) {
+                if player.team == .SURVIVOR {
+                    survivors_left += 1;
+                }
+            }
+            if survivors_left == 0 {
+                foreach player: component_iterator(Player) {
+                    player->remove_ghost_reason("spectator");
+                    player.team = .SURVIVOR;
+                    respawn_player(player);
+                }
+
+                g_game = .{};
+            }
+        }
+    }
+}
+
+respawn_player :: proc(using player: Player) {
+    player.animator.instance.color_multiplier = .{1, 1, 1, 1};
+    player.health->set_max_health(1, true);
+
+    switch team {
+        case .SURVIVOR: {
+            player.entity->set_local_position(g_game_manager.survivor_spawn.world_position);
+        }
+        case .ZOMBIE: {
+            player.entity->set_local_position(g_game_manager.zombie_spawn.world_position);
+        }
+    }
 }
 
 ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> bool {
@@ -50,6 +159,15 @@ ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
     listener_type := #object_type(interactable.listener);
     switch listener_type {
         case Sell_Zone: interactable.listener.(Sell_Zone)->on_interact(player);
+    }
+}
+
+Game_Manager :: class : Component {
+    survivor_spawn: Entity @ao_serialize;
+    zombie_spawn:   Entity @ao_serialize;
+
+    ao_start :: proc(using this: Game_Manager) {
+        g_game_manager = this;
     }
 }
 
@@ -102,7 +220,7 @@ Interact_Ability :: class : Ability_Base {
             defer UI.pop_layer();
             UI.push_id("click to interact");
             defer UI.pop_id();
-            click_zone := UI.button(UI.get_screen_rect(), "", .{}, .{});
+            click_zone := UI.button(UI.get_screen_rect(), .{}, .{}, "");
             if player.device_kind == .PC && !click_zone.hovering {
                 hovering_click_zone = false;
             }
@@ -181,62 +299,65 @@ Interact_Ability :: class : Ability_Base {
     }
 }
 
+Always_Aiming_Ability_Data :: struct {
+    aim:   bool;
+    shoot: bool;
+}
+
+update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_Params) -> Always_Aiming_Ability_Data {
+    result: Always_Aiming_Ability_Data;
+    if params.held {
+        if length(params.drag_offset) > 0.1 {
+            result.aim = true;
+            result.shoot = true;
+        }
+    }
+    else {
+        if player.device_kind == .PC {
+            if player.active_ability == null {
+                UI.push_layer(-1000);
+                defer UI.pop_layer();
+                UI.push_id("click to shoot");
+                defer UI.pop_id();
+
+                interact := UI.button(UI.get_screen_rect(), .{}, .{}, "");
+
+                if params.can_use {
+                    if interact.hovering {
+                        result.aim = true;
+                        params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
+                    }
+
+                    if interact.active {
+                        result.shoot = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if result.aim {
+        draw_thin_aiming_line(player.entity.world_position, params.drag_direction, 1.0 / player.camera.size * 4);
+    }
+
+    return result;
+}
+
 // On mobile: press and hold, shoots automatically while aiming
 // On PC: always active, click to shoot
 Shoot_Ability :: class : Ability_Base {
     on_init :: proc(ability: Shoot_Ability) {
         ability.name = "Shoot";
         ability.disable_keybind = true;
-        // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
         ability.is_aimed_ability = true;
     }
 
-    can_use :: proc(ability: Shoot_Ability, player: Player) -> bool {
-        current_food := Economy.get_balance(player, "Food");
-        return current_food > 0;
-    }
-
     on_update :: proc(ability: Shoot_Ability, player: Player, params: Ability_Update_Params) {
-        aim := false;
-        shoot := false;
-        if params.held {
-            if length(params.drag_offset) > 0.1 {
-                aim = true;
-                shoot = true;
+        if update_always_aiming_ability(player, &params).shoot {
+            if params.can_use {
+                ability.current_cooldown = 0.5;
+                shoot_projectile(player.entity.world_position, params.drag_direction * 15.0, 1, player.team, player.entity);
             }
-        }
-        else {
-            if player.device_kind == .PC {
-                if player.active_ability == null {
-                    UI.push_layer(-1000); // be behind the interact ability
-                    defer UI.pop_layer();
-                    UI.push_id("click to shoot");
-                    defer UI.pop_id();
-
-                    interact := UI.button(UI.get_screen_rect(), "", .{}, .{});
-
-                    if params.can_use {
-                        if interact.hovering {
-                            aim = true;
-                            params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
-                        }
-
-                        if interact.active {
-                            shoot = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if aim {
-            draw_thin_aiming_line(player.entity.world_position, params.drag_direction, 1.0 / player.camera.size * 4);
-        }
-
-        if params.can_use && shoot {
-            ability.current_cooldown = 0.25;
-            Economy.withdraw_currency(player, "Food", 1);
-            shoot_projectile(player.entity.world_position, params.drag_direction * 15.0, player.chew_stat, player.entity);
         }
     }
 }
@@ -276,7 +397,7 @@ Dodge_Roll :: class : Ability_Base {
                 UI.push_id("click to roll");
                 defer UI.pop_id();
 
-                interact := UI.button(UI.get_screen_rect(), "", .{}, .{});
+                interact := UI.button(UI.get_screen_rect(), .{}, .{}, "");
                 if interact.just_pressed {
                     activate = true;
                     player.active_ability = null;
@@ -327,6 +448,76 @@ Roll_Controller :: class : Controller_Base {
 
     controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
         player.animator.instance.color_multiplier = .{1, 1, 1, 1};
+        player.agent.friction = original_friction;
+    }
+}
+
+// On mobile: press and hold, drag to aim
+// On PC: toggle on, click to shoot
+Slash_Ability :: class : Ability_Base {
+    on_init :: proc(ability: Slash_Ability) {
+        ability.name = "Slash";
+        // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
+        ability.is_aimed_ability = true;
+        ability.keybind_override = keybind_dodge_roll;
+    }
+
+    can_use :: proc(ability: Slash_Ability, player: Player) -> bool {
+        return true;
+    }
+
+    on_update :: proc(ability: Slash_Ability, player: Player, params: Ability_Update_Params) {
+        if update_always_aiming_ability(player, &params).shoot {
+            if params.can_use {
+                ability.current_cooldown = 0.5;
+
+                controller := new(Slash_Controller);
+                controller.direction = params.drag_direction;
+                set_controller(player, controller);
+            }
+        }
+    }
+}
+
+Slash_Controller :: class : Controller_Base {
+    direction: v2;
+    original_friction: float;
+    already_hit_list: List(Player);
+
+    controller_begin :: proc(using this: Slash_Controller) {
+        disable_movement_inputs = true;
+        player->player_set_trigger("dodge_roll");
+        original_friction = player.agent.friction;
+        player.agent.friction = 0;
+        player->set_facing_right(direction.x > 0);
+    }
+
+    controller_update :: proc(using this: Slash_Controller, dt: float) {
+        foreach other: component_iterator(Player) {
+            if other.team == player.team continue;
+            if in_range(other.entity.world_position - player.entity.world_position, 0.4) {
+                already_hit := false;
+                for i: 0..already_hit_list.elements.count-1 {
+                    if already_hit_list.elements[i] == other {
+                        already_hit = true;
+                        break;
+                    }
+                }
+                if already_hit {
+                    continue;
+                }
+                other->take_damage(1);
+                already_hit_list->append(other);
+            }
+        }
+
+        player.agent.velocity = direction * 10;
+        if elapsed_time > 0.5 {
+            end_controller(player, false);
+        }
+    }
+
+    controller_end :: proc(using this: Slash_Controller, interrupt: bool) {
         player.agent.friction = original_friction;
     }
 }
@@ -440,7 +631,7 @@ Eating_Controller :: class : Controller_Base {
     }
 
     controller_update :: proc(using this: Eating_Controller, dt: float) {
-        rotation := jitter(ease_t(get_time() - time_last_clicked, 0.5), 8);
+        rotation := Ease.jitter(Ease.T(get_time() - time_last_clicked, 0.5), 8);
         food.entity->set_local_rotation(rotation * 15);
 
         bone_position := player.animator.instance->get_bone_position("Hand_R");
@@ -776,19 +967,19 @@ Damage_Number :: class : Component {
         ts.size = lerp(0.7, 0.2, fade_t);
         ts.valign = .CENTER;
         ts.halign = .CENTER;
-        
+
         // Fade out towards the end of lifetime
         alpha := 1.0 - fade_t;
         ts.color = .{1, 0, 0, alpha}; // Red
         ts.outline_color = .{0, 0, 0, 1};
-        UI.text(rect, format_string("%", .{value}), ts);
+        UI.text(rect, ts, "%", .{value});
     }
 }
 
 spawn_damage_number :: proc(value: int, position: v2) {
     entity := create_entity();
     entity->set_local_position(position);
-    
+
     damage_number := entity->add_component(Damage_Number);
     damage_number.value = value;
     damage_number.spawn_time = get_time();
@@ -836,11 +1027,41 @@ make_finder :: proc($T: typeid, position: v2) -> Finder(T) {
     return result;
 }
 
+Death_Controller :: class : Controller_Base {
+    controller_begin :: proc(using this: Roll_Controller) {
+        freeze_player = true;
+        player->add_name_invisibility_reason("death");
+        player->player_set_trigger("death");
+    }
+
+    controller_update :: proc(using this: Roll_Controller, dt: float) {
+        time_until_respawn := 5.0 - elapsed_time;
+        if player->is_local() {
+            draw_big_game_text("Respawning in %s", .{time_until_respawn.(int) + 1});
+        }
+        if time_until_respawn <= 0 {
+            end_controller(player, false);
+        }
+    }
+
+    controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
+        player->remove_name_invisibility_reason("death");
+        if player.team == .SURVIVOR {
+            player.team = .ZOMBIE;
+        }
+        respawn_player(player);
+        player.health->reset();
+        player->player_set_trigger("RESET");
+    }
+}
+
 //
 // Player, mostly UI
 //
 
 Player :: class : Player_Base {
+    team: Player_Team;
+
     last_food_arrive_time: float;
     last_coin_arrive_time: float;
 
@@ -862,8 +1083,27 @@ Player :: class : Player_Base {
         return 8 + (stomach_stat - 1) * 3;
     }
 
+    take_damage :: proc(using this: Player, damage: int) {
+        if health.is_dead {
+            return;
+        }
+        health->take_damage(damage);
+        if health.is_dead {
+            controller := new(Death_Controller);
+            this->set_controller(controller);
+        }
+    }
+
     ao_start :: proc(using this: Player) {
-        agent.movement_speed = 250;
+        switch g_game.state {
+            case .GAMEPLAY: {
+                team = .SPECTATOR;
+                this->add_ghost_reason("spectator");
+            }
+            case: {
+                team = .SURVIVOR;
+            }
+        }
 
         mouth_stat         = Save.get_int(this, "mouth_level",        1);
         stomach_stat       = Save.get_int(this, "stomach_level",      1);
@@ -871,20 +1111,28 @@ Player :: class : Player_Base {
         total_things_eaten = Save.get_int(this, "total_things_eaten", 0);
 
         health = entity->add_component(Health_Component);
-        health->set_max_health(10, true);
+        health->set_max_health(1, true);
         health.health_bar_offset = .{0, 1.75};
 
         {
             register_ability(this, Interact_Ability);
             register_ability(this, Shoot_Ability);
             register_ability(this, Dodge_Roll);
+            register_ability(this, Slash_Ability);
         }
     }
 
     ao_update :: proc(using this: Player, dt: float) {
-        if health.is_dead {
-            entity->set_local_position(.{});
-            health->reset();
+        switch team {
+            case .SURVIVOR: {
+                agent.movement_speed = 250;
+            }
+            case .ZOMBIE: {
+                agent.movement_speed = 325;
+            }
+            case .SPECTATOR: {
+                agent.movement_speed = 400;
+            }
         }
 
         if this->is_local_or_server() {
@@ -892,46 +1140,46 @@ Player :: class : Player_Base {
             {
                 UI.push_layer(100);
                 defer UI.pop_layer();
-                
+
                 // Food display (top left)
                 {
                     food_icon_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 60, 60, 0)->offset(20, -20);
-                    
+
                     food_icon := get_asset(Texture_Asset, "icons/burger.png");
                     UI.quad(food_icon_rect, food_icon);
-                    
-                    effect_t := ease_t(get_time() - last_food_arrive_time, 0.5);
+
+                    effect_t := Ease.T(get_time() - last_food_arrive_time, 0.5);
                     food_ts := UI.default_text_settings();
                     food_ts.size = lerp(44.0, 36, effect_t);
                     food_ts.valign = .CENTER;
                     food_ts.halign = .LEFT;
                     food_ts.color = lerp(v4.{0, 1, 0, 1}, .{1, 1, 1, 1}, effect_t);
-                    
+
                     text_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 200, 60, 0)->offset(90, -20);
-                    
+
                     food_amount := Economy.get_balance(this, "Food");
                     max_food := get_max_food(this);
-                    UI.text(text_rect, format_string("%/%", .{food_amount, max_food}), food_ts);
+                    UI.text(text_rect, food_ts, "%/%", .{food_amount, max_food});
                 }
-                
+
                 // Coins display (to the right of food)
                 {
                     coin_icon_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 60, 60, 0)->offset(270, -20);
-                    
+
                     coin_icon := get_asset(Texture_Asset, "icons/coin.png");
                     UI.quad(coin_icon_rect, coin_icon);
-                    
-                    coin_effect_t := ease_t(get_time() - last_coin_arrive_time, 0.5);
+
+                    coin_effect_t := Ease.T(get_time() - last_coin_arrive_time, 0.5);
                     coin_ts := UI.default_text_settings();
                     coin_ts.size = lerp(44.0, 36, coin_effect_t);
                     coin_ts.valign = .CENTER;
                     coin_ts.halign = .LEFT;
                     coin_ts.color = lerp(v4.{1, 0.843, 0, 1}, .{1, 1, 1, 1}, coin_effect_t); // Gold to white
-                    
+
                     text_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 200, 60, 0)->offset(340, -20);
-                    
+
                     coin_amount := Economy.get_balance(this, "Coins");
-                    UI.text(text_rect, format_string("%", .{coin_amount}), coin_ts);
+                    UI.text(text_rect, coin_ts, "%", .{coin_amount});
                 }
             }
 
@@ -942,7 +1190,7 @@ Player :: class : Player_Base {
                 bs.sprite = button_orange;
                 bs.press_scaling = 1;
                 rect := UI.get_safe_screen_rect()->subrect(0, 0.5, 0, 0.5)->offset(10, 5)->grow(75, 175, 0, 0);
-                if UI.button(rect, "Upgrades", bs, ts).clicked {
+                if UI.button(rect, bs, ts, "Upgrades").clicked {
                     upgrade_menu_open = true;
                     upgrade_menu_tab_index = 0;
                 }
@@ -955,11 +1203,11 @@ Player :: class : Player_Base {
                 stat_ts.valign = .TOP;
                 stat_ts.halign = .LEFT;
                 text_rect := UI.get_safe_screen_rect()->subrect(0, 0.5, 0, 0.5)->offset(10, 0);
-                UI.text(text_rect, format_string("Mouth: %", .{mouth_stat}), stat_ts);
+                UI.text(text_rect, stat_ts, "Mouth: %", .{mouth_stat});
                 text_rect = text_rect->offset(0, -30);
-                UI.text(text_rect, format_string("Stomach: %", .{stomach_stat}), stat_ts);
+                UI.text(text_rect, stat_ts, "Stomach: %", .{stomach_stat});
                 text_rect = text_rect->offset(0, -30);
-                UI.text(text_rect, format_string("Chew: %", .{chew_stat}), stat_ts);
+                UI.text(text_rect, stat_ts, "Chew: %", .{chew_stat});
             }
 
             if upgrade_menu_open {
@@ -1021,7 +1269,7 @@ Player :: class : Player_Base {
                 modal_bg_bs.hovered_color  = .{0, 0, 0, 0.8};
                 modal_bg_bs.pressed_color  = .{0, 0, 0, 0.8};
                 modal_bg_bs.disabled_color = .{0, 0, 0, 0.8};
-                if UI.button(UI.get_screen_rect(), "", modal_bg_bs, .{}).clicked {
+                if UI.button(UI.get_screen_rect(), modal_bg_bs, .{}, "").clicked {
                     upgrade_menu_open = false;
                 }
 
@@ -1068,12 +1316,12 @@ Player :: class : Player_Base {
                     if !unlocked_tabs[i] {
                         name_to_draw = "???";
                     }
-                    if UI.button(tab_rect, name_to_draw, tab_bs, tab_ts).clicked {
+                    if UI.button(tab_rect, tab_bs, tab_ts, name_to_draw).clicked {
                         upgrade_menu_tab_index = i;
                     }
                 }
 
-                UI.button(modal_rect, "bg", .{}, .{});
+                UI.button(modal_rect, .{}, .{}, "bg");
                 UI.quad(modal_rect, modal_bg_sprite);
 
                 {
@@ -1089,10 +1337,10 @@ Player :: class : Player_Base {
                         ts.size = 48;
                         ts.halign = .LEFT;
                         ts.valign = .TOP;
-                        UI.text(title_rect, format_string("%: %", .{name, stat ref}), ts);
+                        UI.text(title_rect, ts, "%: %", .{name, stat ref});
                         title_rect = title_rect->offset(0, -75);
                         ts.size = 32;
-                        UI.text(title_rect, desc, ts);
+                        UI.text(title_rect, ts, desc);
 
                         // Calculate upgrade cost
                         upgrade_cost := (pow(1.25, stat ref.(float)) * 10).(s64);
@@ -1109,7 +1357,7 @@ Player :: class : Player_Base {
                         bs.press_scaling = 1;
                         result := false;
 
-                        upgrade := UI.begin_button(button_rect, "", bs, .{}); {
+                        upgrade := UI.begin_button(button_rect, bs, .{}, ""); {
                             defer UI.end_button();
 
                             if upgrade.clicked {
@@ -1128,12 +1376,12 @@ Player :: class : Player_Base {
                                 top_text_rect := button_rect->offset(0, 25);
                                 ts := UI.default_text_settings();
                                 ts.size = 40;
-                                UI.text(top_text_rect, "Upgrade", ts);
+                                UI.text(top_text_rect, ts, "Upgrade");
 
                                 // Draw cost in bottom half
                                 bottom_text_rect := button_rect->offset(0, -25);
                                 ts.size = 36;
-                                UI.text(bottom_text_rect, format_string("% coins", .{upgrade_cost}), ts);
+                                UI.text(bottom_text_rect, ts, "% coins", .{upgrade_cost});
                             }
                         }
 
@@ -1143,7 +1391,7 @@ Player :: class : Player_Base {
                     if !unlocked_tabs[upgrade_menu_tab_index] {
                         ts := UI.default_text_settings();
                         ts.size = 32;
-                        UI.text(modal_rect, unlock_strings[upgrade_menu_tab_index], ts);
+                        UI.text(modal_rect, ts, unlock_strings[upgrade_menu_tab_index]);
                     }
                     else {
                         switch upgrade_menu_tab_index {
@@ -1176,7 +1424,7 @@ Player :: class : Player_Base {
 
                     ts := UI.default_text_settings();
 
-                    if UI.button(reset_button_rect, "Reset Save Data", reset_bs, ts).clicked {
+                    if UI.button(reset_button_rect, reset_bs, ts, "Reset Save Data").clicked {
                         reset_player_save :: proc(using this: Player) {
                             mouth_stat         = 1; Save.set_int(this, "mouth_level",        1);
                             stomach_stat       = 1; Save.set_int(this, "stomach_level",      1);
@@ -1195,31 +1443,47 @@ Player :: class : Player_Base {
                 }
             }
         }
+
+        {
+            name_color := v4.{1, 1, 1, 1};
+            switch team {
+                case .SURVIVOR: {
+                    name_color = .{0, 1, 0, 1};
+                }
+                case .ZOMBIE: {
+                    name_color = .{1, 0, 0, 1};
+                }
+            }
+
+            do_name_color_override = true;
+            name_color_override = name_color;
+        }
     }
 
     ao_late_update :: proc(using this: Player, dt: float) {
-        scroll := get_mouse_scroll(true);
-        camera.size -= camera.size * scroll * dt;
+        // scroll := get_mouse_scroll(true);
+        // camera.size -= camera.size * scroll * dt;
 
-        if this->is_local_or_server() {
-            draw_ability_button(this, Shoot_Ability, 0);
-            draw_ability_button(this, Interact_Ability, 1);
-            draw_ability_button(this, Dodge_Roll, 2);
+        if g_game.state == .GAMEPLAY {
+            if this->is_local_or_server() {
+                switch team {
+                    case .SURVIVOR: {
+                        draw_ability_button(this, Shoot_Ability, 0);
+                        draw_ability_button(this, Dodge_Roll, 1);
+                    }
+                    case .ZOMBIE: {
+                        draw_ability_button(this, Slash_Ability, 0);
+                    }
+                }
+            }
+
+            UI.push_world_draw_context();
+            defer UI.pop_draw_context();
+
+            if !health.is_dead && this->will_draw_name() {
+                health->draw_health_bar(entity.world_position.y-0.001);
+            }
         }
-
-        UI.push_world_draw_context();
-        defer UI.pop_draw_context();
-
-        if !health.is_dead {
-            health->draw_health_bar(entity.world_position.y-0.001);
-        }
-
-        visual_position := entity->calculate_visual_position();
-        rect := Rect.{visual_position, visual_position}->offset(0.75, 1.5);
-        UI.quad(rect->grow(0.25), get_asset(Texture_Asset, "icons/burger.png"));
-        ts := UI.default_text_settings();
-        ts.size = 0.35;
-        UI.text(rect, format_string("%", .{total_things_eaten}), ts);
     }
 
     ao_end :: proc(player: Player) {
@@ -1303,7 +1567,7 @@ Tree :: class : Component {
         // Apply jiggle rotation
         time_since_jiggle := get_time() - jiggle_time;
         if time_since_jiggle < 0.5 {
-            jiggle_amount := jitter(ease_t(time_since_jiggle, 0.5), 8);
+            jiggle_amount := Ease.jitter(Ease.T(time_since_jiggle, 0.5), 8);
             entity->set_local_rotation(jiggle_amount * 10);
         }
         else {
@@ -1625,6 +1889,8 @@ Food_Projectile :: class : Component {
     lifetime: float;
     damage: int;
 
+    team: Player_Team;
+
     spawn_time: float;
     owner: Entity;
     hit_radius: float;
@@ -1672,8 +1938,9 @@ Food_Projectile :: class : Component {
             foreach player: component_iterator(Player) {
                 if player.health.is_dead continue;
                 if alive(owner) && owner == player.entity continue;
+                if player.team == team continue;
                 if in_range(player.entity.world_position - entity.world_position, hit_radius) {
-                    player.health->take_damage(1);
+                    player->take_damage(1);
                     destroy_self = true;
                     break;
                 }
@@ -1695,7 +1962,7 @@ Food_Projectile :: class : Component {
     }
 }
 
-shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, owner: Entity, texture_path: string = "icons/burger.png", lifetime: float = 3.0) -> Entity {
+shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, team: Player_Team, owner: Entity, texture_path: string = "icons/burger.png", lifetime: float = 3.0) -> Entity {
     prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
     entity := instantiate(prefab);
     entity->set_local_position(spawn_position);
