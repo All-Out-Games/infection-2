@@ -1,0 +1,37 @@
+13
+545460846593
+5435542412741272 1765210487340952200
+{
+  "name": "Beacon Spawn",
+  "local_enabled": true,
+  "local_position": {
+    "X": -24.7223987579345703,
+    "Y": -25.6594619750976562
+  },
+  "local_rotation": 0,
+  "local_scale": {
+    "X": 2,
+    "Y": 2
+  },
+  "previous_sibling": "5435529366311054:1765210483907718500",
+  "next_sibling": "5435551279499050:1765210489674283800",
+  "parent": "5284264187309104:1765148460804393200"
+},
+{
+  "cid": 2,
+  "aoid": "5435542412921886:1765210487340999200",
+  "component_type": "Internal_Component",
+  "internal_component_type": "Beacon_Spawn_Point",
+  "data": {
+
+  }
+},
+{
+  "cid": 4,
+  "aoid": "5435542412963648:1765210487341010100",
+  "component_type": "Internal_Component",
+  "internal_component_type": "Sprite_Renderer",
+  "data": {
+    "texture": "food_items/apple.png"
+  }
+}

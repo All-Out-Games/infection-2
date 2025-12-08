@@ -30,7 +30,7 @@ all_zombie_spawns: List(Entity);
 g_game: struct {
     state: Game_State;
 
-    tasks: [3]Task;
+    tasks: [4]Task;
     current_task: Task;
     current_task_index: int;
 
@@ -38,6 +38,7 @@ g_game: struct {
     end_game_screen_timer: float;
 
     fuel_deposited: int;
+    beacons_restored: int;
 
     player_count_last_frame: int;
     round_countdown_timer: float;
@@ -87,6 +88,9 @@ ao_start :: proc() {
         all_zombie_spawns->append(spawn.entity);
     }
     foreach spawn: component_iterator(Fuel_Spawn_Point) {
+        spawn.entity->get_component(Sprite_Renderer).enabled = false;
+    }
+    foreach spawn: component_iterator(Beacon_Spawn_Point) {
         spawn.entity->get_component(Sprite_Renderer).enabled = false;
     }
 }
@@ -211,6 +215,43 @@ ao_update :: proc(dt: float) {
                     canister_entity->set_local_position(spawn_point.entity.world_position);
                 }
             }
+            {
+                // Destroy any existing spawned beacons
+                foreach beacon: component_iterator(Beacon) {
+                    destroy_entity(beacon.entity);
+                }
+
+                // Count available beacon spawn points
+                beacon_spawn_count := 0;
+                foreach spawn_point: component_iterator(Beacon_Spawn_Point) {
+                    beacon_spawn_count += 1;
+                }
+
+                // Collect all spawn points into an array
+                beacon_spawns := new(Beacon_Spawn_Point, beacon_spawn_count);
+                beacon_index := 0;
+                foreach spawn_point: component_iterator(Beacon_Spawn_Point) {
+                    beacon_spawns[beacon_index] = spawn_point;
+                    beacon_index += 1;
+                }
+
+                // Fisher-Yates shuffle to randomize spawn points
+                for i: 0..beacon_spawn_count-1 {
+                    j := rng_range_int(&server_rng, 0, beacon_spawn_count-1);
+                    temp := beacon_spawns[i];
+                    beacon_spawns[i] = beacon_spawns[j];
+                    beacon_spawns[j] = temp;
+                }
+
+                // Spawn beacons at the first REQUIRED_BEACONS spawn points
+                beacons_to_spawn := min(REQUIRED_BEACONS, beacon_spawn_count);
+                beacon_prefab := get_asset(Prefab_Asset, "Beacon Task.prefab");
+                for i: 0..beacons_to_spawn-1 {
+                    spawn_point := beacon_spawns[i];
+                    beacon_entity := instantiate(beacon_prefab);
+                    beacon_entity->set_local_position(spawn_point.entity.world_position);
+                }
+            }
             g_game.state = .WAITING_FOR_PLAYERS;
         }
         case .WAITING_FOR_PLAYERS: {
@@ -262,8 +303,9 @@ ao_update :: proc(dt: float) {
                     }
 
                     g_game.tasks[0] = .FUEL_CANISTERS;
-                    g_game.tasks[1] = .ALIGN_TAKEOFF;
-                    g_game.tasks[2] = .TAKEOFF;
+                    g_game.tasks[1] = .RESTORE_BEACONS;
+                    g_game.tasks[2] = .ALIGN_TAKEOFF;
+                    g_game.tasks[3] = .TAKEOFF;
                     g_game.current_task_index = 0;
                     g_game.current_task = g_game.tasks[g_game.current_task_index];
                 }
@@ -316,6 +358,11 @@ ao_update :: proc(dt: float) {
                             rect := begin_task_ui();
                             draw_task_title(&rect, "Collect Fuel Canisters");
                             draw_task_subtitle(&rect, "Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                        }
+                        case .RESTORE_BEACONS: {
+                            rect := begin_task_ui();
+                            draw_task_title(&rect, "Restore Beacons");
+                            draw_task_subtitle(&rect, "Beacons: % / %", .{g_game.beacons_restored, REQUIRED_BEACONS});
                         }
                         case .ALIGN_TAKEOFF: {
                             rect := begin_task_ui();
@@ -422,6 +469,7 @@ ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> b
         case Align_Takeoff_Station: return interactable.listener.(Align_Takeoff_Station)->can_use(player);
         case Takeoff_Station: return interactable.listener.(Takeoff_Station)->can_use(player);
         case Fuel_Canister: return interactable.listener.(Fuel_Canister)->can_use(player);
+        case Beacon: return interactable.listener.(Beacon)->can_use(player);
     }
     return true;
 }
@@ -429,6 +477,7 @@ ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> b
 ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
     if interactable.listener != null switch #object_type(interactable.listener) {
         case Sell_Zone: interactable.listener.(Sell_Zone)->on_interact(player);
+        case Beacon: interactable.listener.(Beacon)->on_interact(player);
         case Align_Takeoff_Station: interactable.listener.(Align_Takeoff_Station)->on_interact(player);
         case Takeoff_Station: interactable.listener.(Takeoff_Station)->on_interact(player);
         case Fuel_Canister: interactable.listener.(Fuel_Canister)->on_interact(player);
@@ -1651,6 +1700,13 @@ Player :: class : Player_Base {
                             }
                         }
                     }
+                    case .RESTORE_BEACONS: {
+                        foreach beacon: component_iterator(Beacon) {
+                            if beacon.state == .INACTIVE || (beacon.state == .RESTORING && beacon.survivor_nearby == false) {
+                                draw_tutorial_arrow(camera.position, camera.size, beacon.entity.world_position);
+                            }
+                        }
+                    }
                     case .ALIGN_TAKEOFF: {
                         foreach align: component_iterator(Align_Takeoff_Station) {
                             if !align.is_aligned {
@@ -2205,6 +2261,7 @@ Task :: enum {
     NONE;
 
     FUEL_CANISTERS;
+    RESTORE_BEACONS;
     ALIGN_TAKEOFF;
     TAKEOFF;
 }
@@ -2412,6 +2469,156 @@ drop_canister :: proc(using canister: Fuel_Canister, position: v2) {
     entity->set_local_position(position);
     is_picked_up = false;
     carrier = null;
+}
+
+//
+// Beacon Task
+//
+
+REQUIRED_BEACONS :: 3;
+BEACON_RESTORE_TIME :: 10.0;
+BEACON_PROXIMITY_RANGE :: 3.0;
+BEACON_DECAY_RATE :: 0.5; // Progress lost per second when no survivor nearby
+
+Beacon_Spawn_Point :: class : Component {
+    // Just a marker component to indicate a potential beacon spawn location
+    // Place these around the map in the editor
+}
+
+Beacon_State :: enum {
+    INACTIVE;    // Not yet interacted with
+    RESTORING;   // Being restored (survivors nearby)
+    RESTORED;    // Fully restored
+}
+
+Beacon :: class : Component {
+    interactable: Interactable @ao_serialize;
+    // sprite: Sprite_Renderer @ao_serialize;
+
+    state: Beacon_State;
+    restore_progress: float; // 0 to BEACON_RESTORE_TIME
+    survivor_nearby: bool;
+
+    ao_start :: proc(using this: Beacon) {
+        interactable.listener = this;
+        state = .INACTIVE;
+        restore_progress = 0;
+    }
+
+    ao_update :: proc(using this: Beacon, dt: float) {
+        if g_game.current_task != .RESTORE_BEACONS return;
+        if state == .RESTORED return;
+
+        // Check if any survivor is nearby
+        survivor_nearby = false;
+        foreach player: component_iterator(Player) {
+            if player.team != .SURVIVOR continue;
+            if player.health.is_dead continue;
+            if in_range(player.entity.world_position - entity.world_position, BEACON_PROXIMITY_RANGE) {
+                survivor_nearby = true;
+                break;
+            }
+        }
+
+        if state == .RESTORING {
+            if survivor_nearby {
+                // Progress increases when survivor nearby
+                restore_progress += dt;
+                if restore_progress >= BEACON_RESTORE_TIME {
+                    restore_progress = BEACON_RESTORE_TIME;
+                    state = .RESTORED;
+                    on_beacon_restored(this);
+                }
+            }
+            else {
+                // Progress decays when no survivor nearby
+                restore_progress -= dt * BEACON_DECAY_RATE;
+                if restore_progress <= 0 {
+                    restore_progress = 0;
+                    state = .INACTIVE;
+                }
+            }
+        }
+
+        // Update sprite tint based on state
+        // switch state {
+        //     case .INACTIVE: {
+        //         sprite.color = .{0.5, 0.5, 0.5, 1};
+        //     }
+        //     case .RESTORING: {
+        //         progress_t := restore_progress / BEACON_RESTORE_TIME;
+        //         sprite.color = lerp(v4.{1, 0.5, 0, 1}, .{0, 1, 0.5, 1}, progress_t);
+        //     }
+        //     case .RESTORED: {
+        //         sprite.color = .{0, 1, 0.5, 1};
+        //     }
+        // }
+    }
+
+    ao_late_update :: proc(using this: Beacon, dt: float) {
+        if g_game.current_task != .RESTORE_BEACONS return;
+        if state == .RESTORED return;
+
+        // Draw progress bar UI above beacon
+        if state == .RESTORING {
+            UI.push_world_draw_context();
+            defer UI.pop_draw_context();
+
+            UI.push_layer(100);
+            defer UI.pop_layer();
+
+            bar_width := 1.5;
+            bar_height := 0.2;
+            bar_y_offset := 1.5;
+
+            bar_pos := entity.world_position + v2.{0, bar_y_offset};
+            bar_bg_rect := Rect.{
+                .{bar_pos.x - bar_width/2, bar_pos.y - bar_height/2},
+                .{bar_pos.x + bar_width/2, bar_pos.y + bar_height/2}
+            };
+
+            // Background
+            UI.quad(bar_bg_rect, white_sprite, .{0.1, 0.1, 0.1, 0.8});
+
+            // Progress fill
+            progress_t := restore_progress / BEACON_RESTORE_TIME;
+            fill_rect := bar_bg_rect;
+            fill_rect.max.x = fill_rect.min.x + (fill_rect.max.x - fill_rect.min.x) * progress_t;
+
+            fill_color := v4.{1, 0, 0, 1};
+            if survivor_nearby {
+                fill_color = lerp(v4.{1, 1, 0, 1}, .{0, 1, 0, 1}, progress_t);
+            }
+            UI.quad(fill_rect, white_sprite, fill_color);
+        }
+    }
+
+    can_use :: proc(using this: Beacon, player: Player) -> bool {
+        return g_game.current_task == .RESTORE_BEACONS
+            && player.team == .SURVIVOR
+            && state == .INACTIVE;
+    }
+
+    on_interact :: proc(using this: Beacon, player: Player) {
+        state = .RESTORING;
+        player->add_notification("Stay near the beacon to restore it!");
+    }
+}
+
+on_beacon_restored :: proc(beacon: Beacon) {
+    g_game.beacons_restored += 1;
+
+    if g_game.beacons_restored >= REQUIRED_BEACONS {
+        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+            player->add_notification("All beacons restored!");
+        }
+        complete_current_task();
+    }
+    else {
+        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+            player->add_notification(format_string("Beacon restored! (% / %)", .{g_game.beacons_restored, REQUIRED_BEACONS}));
+        }
+    }
 }
 
 //
