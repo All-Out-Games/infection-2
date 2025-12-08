@@ -1383,7 +1383,7 @@ Death_Controller :: class : Controller_Base {
         {
             sfx := default_sfx_desc();
             sfx->set_position(player.entity.world_position);
-            sfx.volume = 0.75;
+            sfx.volume = 0.65;
             sfx.volume_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/death.wav"), sfx);
         }
