@@ -393,7 +393,7 @@ ao_update :: proc(dt: float) {
                             }
                             draw_task_subtitle(&rect, "[%] Takeoff initiated", .{x});
                             if takeoff.initiated {
-                                draw_big_game_text("Takeoff in %{.1} seconds...", .{takeoff.takeoff_timer});
+                                draw_small_game_text("Takeoff in %{.1} seconds...", .{takeoff.takeoff_timer});
                             }
                         }
                     }
@@ -2493,7 +2493,7 @@ Beacon_State :: enum {
 
 Beacon :: class : Component {
     interactable: Interactable @ao_serialize;
-    // sprite: Sprite_Renderer @ao_serialize;
+    sprite: Sprite_Renderer @ao_serialize;
 
     state: Beacon_State;
     restore_progress: float; // 0 to BEACON_RESTORE_TIME
@@ -2506,7 +2506,10 @@ Beacon :: class : Component {
     }
 
     ao_update :: proc(using this: Beacon, dt: float) {
-        if g_game.current_task != .RESTORE_BEACONS return;
+        if g_game.current_task != .RESTORE_BEACONS {
+            sprite.color.w = 0;
+            return;
+        }
         if state == .RESTORED return;
 
         // Check if any survivor is nearby
@@ -2541,18 +2544,18 @@ Beacon :: class : Component {
         }
 
         // Update sprite tint based on state
-        // switch state {
-        //     case .INACTIVE: {
-        //         sprite.color = .{0.5, 0.5, 0.5, 1};
-        //     }
-        //     case .RESTORING: {
-        //         progress_t := restore_progress / BEACON_RESTORE_TIME;
-        //         sprite.color = lerp(v4.{1, 0.5, 0, 1}, .{0, 1, 0.5, 1}, progress_t);
-        //     }
-        //     case .RESTORED: {
-        //         sprite.color = .{0, 1, 0.5, 1};
-        //     }
-        // }
+        switch state {
+            case .INACTIVE: {
+                sprite.color = .{0.5, 0.5, 0.5, 0.2};
+            }
+            case .RESTORING: {
+                progress_t := restore_progress / BEACON_RESTORE_TIME;
+                sprite.color = lerp(v4.{1, 0.5, 0, 0.2}, .{0, 1, 0.5, 0.2}, progress_t);
+            }
+            case .RESTORED: {
+                sprite.color = .{0, 1, 0.5, 0.2};
+            }
+        }
     }
 
     ao_late_update :: proc(using this: Beacon, dt: float) {

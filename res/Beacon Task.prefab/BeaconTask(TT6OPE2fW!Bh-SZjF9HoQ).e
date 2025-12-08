@@ -32,6 +32,7 @@
   "component_type": "Internal_Component",
   "internal_component_type": "Beacon",
   "data": {
-    "interactable": "5435616264073547:1765210506775301300"
+    "interactable": "5435616264073547:1765210506775301300",
+    "sprite": "5441680901490224:1765212102715114300"
   }
 }
