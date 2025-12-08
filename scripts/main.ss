@@ -748,9 +748,9 @@ Drop_Fuel_Ability :: class : Ability_Base {
 
 // Sprint ability - hold to move faster, uses stamina
 MAX_SPRINT_STAMINA :: 1.0;
-SPRINT_DRAIN_RATE :: 1.0;
-SPRINT_REGEN_RATE :: 0.5;
-SPRINT_SPEED_BONUS :: 1.15;
+SPRINT_DRAIN_RATE :: 0.5;
+SPRINT_REGEN_RATE :: 0.2;
+SPRINT_SPEED_BONUS :: 1.25;
 
 Sprint_Ability :: class : Ability_Base {
     on_init :: proc(ability: Sprint_Ability) {
@@ -1651,7 +1651,7 @@ Player :: class : Player_Base {
         defer UI.pop_z();
 
         // Position below the ammo bar
-        bar_pos := entity.world_position + v2.{0, 1.65};
+        bar_pos := entity.world_position + v2.{0, 1.6};
         bar_width := 0.6;
         bar_height := 0.12;
 
