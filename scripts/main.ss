@@ -1743,7 +1743,7 @@ Player :: class : Player_Base {
                 agent.movement_speed = 250;
             }
             case .SPECTATOR: {
-                agent.movement_speed = 400;
+                agent.movement_speed = 450;
             }
         }
 
