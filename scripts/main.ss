@@ -76,7 +76,7 @@ ao_before_scene_load :: proc() {
     Economy.register_currency("Coins", "icons/coin.png");
 
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
-    keybind_drop_fuel = Keybinds.register("Drop Fuel", .Q);
+    keybind_drop_fuel = Keybinds.register("Drop Fuel", .F);
 
     server_rng = rng_seed((get_real_time() * 1000000000).(u64));
 }
@@ -2324,6 +2324,11 @@ Align_Takeoff_Station :: class : Component {
     }
 
     on_interact :: proc(using this: Align_Takeoff_Station, player: Player) {
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(entity.world_position);
+            SFX.play(get_asset(SFX_Asset, "sfx/align_takeoff.wav"), sfx);
+        }
         is_aligned = true;
         if other.is_aligned {
             // both are aligned!
@@ -2497,12 +2502,26 @@ pickup_canister :: proc(using canister: Fuel_Canister, player: Player) {
     is_picked_up = true;
     carrier = player;
     player->add_notification("Bring the fuel canister to the ship!");
+    {
+        sfx := default_sfx_desc();
+        sfx->set_position(canister.entity.world_position);
+        sfx.volume_perturb = 0.1;
+        sfx.speed_perturb = 0.1;
+        SFX.play(get_asset(SFX_Asset, "sfx/pickup_fuel.wav"), sfx);
+    }
 }
 
 drop_canister :: proc(using canister: Fuel_Canister, position: v2) {
     entity->set_local_position(position);
     is_picked_up = false;
     carrier = null;
+    {
+        sfx := default_sfx_desc();
+        sfx->set_position(canister.entity.world_position);
+        sfx.volume_perturb = 0.1;
+        sfx.speed_perturb = 0.1;
+        SFX.play(get_asset(SFX_Asset, "sfx/drop_fuel.wav"), sfx);
+    }
 }
 
 //
@@ -2644,6 +2663,11 @@ Beacon :: class : Component {
 
 on_beacon_restored :: proc(beacon: Beacon) {
     g_game.beacons_restored += 1;
+    {
+        sfx := default_sfx_desc();
+        sfx->set_position(beacon.entity.world_position);
+        SFX.play(get_asset(SFX_Asset, "sfx/beacon_restore.wav"), sfx);
+    }
 
     if g_game.beacons_restored >= REQUIRED_BEACONS {
         foreach player: component_iterator(Player) if player.team == .SURVIVOR {
