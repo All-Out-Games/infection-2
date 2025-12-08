@@ -2333,6 +2333,13 @@ Fuel_Canister :: class : Component {
                 if g_game_manager.ship_navmesh->try_find_closest_point_on_navmesh(carrier.entity.world_position, &point_in_ship) {
                     if in_range(point_in_ship - carrier.entity.world_position, 0.1) {
                         g_game.fuel_deposited += 1;
+                        {
+                            sfx := default_sfx_desc();
+                            sfx->set_position(carrier.entity.world_position);
+                            sfx.volume_perturb = 0.2;
+                            sfx.speed_perturb = 0.1;
+                            SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
+                        }
 
                         // Check if task is complete
                         if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
