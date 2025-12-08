@@ -7,8 +7,10 @@ modal_bg_sprite: Texture_Asset;
 button_green:    Texture_Asset;
 button_red:      Texture_Asset;
 button_orange:   Texture_Asset;
+tutorial_arrow:  Texture_Asset;
 
 keybind_dodge_roll: Keybind;
+keybind_drop_fuel: Keybind;
 
 Game_State :: enum {
     RESET_MAP;
@@ -62,13 +64,15 @@ ao_before_scene_load :: proc() {
     button_green    = get_asset(Texture_Asset, "ui/button_large_green1.png");
     button_red      = get_asset(Texture_Asset, "ui/button_large_red1.png");
     button_orange   = get_asset(Texture_Asset, "ui/button_large_yellow2.png");
+    tutorial_arrow  = get_asset(Texture_Asset, "arrow.png");
 
     Economy.register_currency("Food", "icons/burger.png");
     Economy.register_currency("Coins", "icons/coin.png");
 
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
+    keybind_drop_fuel = Keybinds.register("Drop Fuel", .Q);
 
-    server_rng = rng_seed((get_time() * 1000000).(u64));
+    server_rng = rng_seed((get_real_time() * 1000000).(u64));
 }
 
 ao_start :: proc() {
@@ -89,6 +93,59 @@ draw_small_game_text :: proc(str: string, args: [^]any = .{}) {
     ts.size = 48;
     text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 75);
     UI.text(text_rect, ts, str, args);
+}
+
+begin_task_ui :: proc() -> Rect {
+    return UI.get_safe_screen_rect()->left_center_rect()->offset(20, 25);
+}
+
+draw_task_title :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
+    ts := UI.default_text_settings();
+    ts.size = 48;
+    ts.halign = .LEFT;
+    ts.valign = .CENTER;
+    text_rect := rect->cut_top(50);
+    UI.text(text_rect, ts, str, args);
+}
+
+draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
+    ts := UI.default_text_settings();
+    ts.size = 36;
+    ts.halign = .LEFT;
+    ts.valign = .CENTER;
+    text_rect := rect->cut_top(35);
+    UI.text(text_rect, ts, str, args);
+}
+
+draw_tutorial_arrow :: proc(camera_position: v2, camera_size: float, target_position: v2) {
+    UI.push_world_draw_context();
+    defer UI.pop_draw_context();
+    UI.push_layer(100);
+    defer UI.pop_layer();
+
+    max_distance := camera_size * 0.8;
+    offset := normalize_vector_to_radius(target_position - camera_position, max_distance) * max_distance;
+    arrow_position := camera_position + offset;
+    arrow_rect := Rect.{arrow_position, arrow_position}->grow(0.5);
+
+    rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
+        return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, .{0, 0, 1})->multiply(Matrix4.translate(-point)));
+    }
+
+    if length_squared(arrow_position - target_position) > 0.1 {
+        dir := normalize(offset);
+        rads := atan2(dir.y, dir.x);
+        UI.push_matrix(rotate_about_point(arrow_rect->center(), to_degrees(rads)));
+        defer UI.pop_matrix();
+        UI.quad(arrow_rect, tutorial_arrow);
+    }
+    else {
+        y := sin(2 * PI * get_time()) * 0.25;
+        arrow_rect = arrow_rect->offset(0, 1.5 + y);
+        UI.push_matrix(rotate_about_point(arrow_rect->center(), 270));
+        defer UI.pop_matrix();
+        UI.quad(arrow_rect, tutorial_arrow);
+    }
 }
 
 ao_update :: proc(dt: float) {
@@ -219,17 +276,46 @@ ao_update :: proc(dt: float) {
                     g_game.state = .END_GAME_SCREEN;
                 }
                 else {
+                    local_player := try_get_local_player();
+
                     // Draw current task objective
                     switch g_game.current_task {
                         case .FUEL_CANISTERS: {
-                            draw_big_game_text("Collect Fuel Canisters");
-                            draw_small_game_text("Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                            rect := begin_task_ui();
+                            draw_task_title(&rect, "Collect Fuel Canisters");
+                            draw_task_subtitle(&rect, "Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
                         }
                         case .ALIGN_TAKEOFF: {
-                            draw_big_game_text("Align Ship Systems");
+                            rect := begin_task_ui();
+                            draw_task_title(&rect, "Align Ship Systems");
+                            yaw_aligned   := " ";
+                            pitch_aligned := " ";
+                            foreach align: component_iterator(Align_Takeoff_Station) {
+                                switch align.axis {
+                                    case .Yaw:   if align.is_aligned { yaw_aligned   = "X"; }
+                                    case .Pitch: if align.is_aligned { pitch_aligned = "X"; }
+                                }
+                            }
+                            draw_task_subtitle(&rect, "[%] Yaw aligned",   .{yaw_aligned});
+                            draw_task_subtitle(&rect, "[%] Pitch aligned", .{pitch_aligned});
                         }
                         case .TAKEOFF: {
-                            // Takeoff_Station handles its own UI
+                            takeoff: Takeoff_Station;
+                            foreach c: component_iterator(Takeoff_Station) {
+                                takeoff = c;
+                                break;
+                            }
+
+                            rect := begin_task_ui();
+                            draw_task_title(&rect, "Take off!");
+                            x := " ";
+                            if takeoff.initiated {
+                                x = "X";
+                            }
+                            draw_task_subtitle(&rect, "[%] Takeoff initiated", .{x});
+                            if takeoff.initiated {
+                                draw_big_game_text("Takeoff in %{.1} seconds...", .{takeoff.takeoff_timer});
+                            }
                         }
                     }
                 }
@@ -305,6 +391,7 @@ Game_Manager :: class : Component {
     zombie_spawn:   Entity @ao_serialize;
     main_navmesh:   Navmesh @ao_serialize;
     ship_navmesh:   Navmesh @ao_serialize;
+    fuel_delivery_tutorial_arrow_point: Entity @ao_serialize;
 
     ao_start :: proc(using this: Game_Manager) {
         g_game_manager = this;
@@ -497,6 +584,28 @@ Shoot_Ability :: class : Ability_Base {
             if params.can_use {
                 ability.current_cooldown = 0.5;
                 shoot_projectile(player.entity.world_position, params.drag_direction * 15.0, 1, player.team, player.entity);
+            }
+        }
+    }
+}
+
+// Drop fuel canister ability - only shown when carrying fuel
+Drop_Fuel_Ability :: class : Ability_Base {
+    on_init :: proc(ability: Drop_Fuel_Ability) {
+        ability.name = "Drop";
+        ability.icon = get_asset(Texture_Asset, "icons/fuel.png");
+        ability.keybind_override = keybind_drop_fuel;
+    }
+
+    can_use :: proc(ability: Drop_Fuel_Ability, player: Player) -> bool {
+        return is_player_carrying_canister(player);
+    }
+
+    on_update :: proc(ability: Drop_Fuel_Ability, player: Player, params: Ability_Update_Params) {
+        if params.clicked && params.can_use {
+            canister := get_player_canister(player);
+            if canister != null {
+                drop_canister(canister, player.entity.world_position);
             }
         }
     }
@@ -1262,6 +1371,7 @@ Player :: class : Player_Base {
             register_ability(this, Shoot_Ability);
             register_ability(this, Dodge_Roll);
             register_ability(this, Slash_Ability);
+            register_ability(this, Drop_Fuel_Ability);
         }
     }
 
@@ -1284,309 +1394,311 @@ Player :: class : Player_Base {
         }
 
         if this->is_local_or_server() {
-            // Top UI - Currency Display
-            {
-                UI.push_layer(100);
-                defer UI.pop_layer();
-
-                // Food display (top left)
+            #if false {
+                // Top UI - Currency Display
                 {
-                    food_icon_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 60, 60, 0)->offset(20, -20);
+                    UI.push_layer(100);
+                    defer UI.pop_layer();
 
-                    food_icon := get_asset(Texture_Asset, "icons/burger.png");
-                    UI.quad(food_icon_rect, food_icon);
+                    // Food display (top left)
+                    {
+                        food_icon_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 60, 60, 0)->offset(20, -20);
 
-                    effect_t := Ease.T(get_time() - last_food_arrive_time, 0.5);
-                    food_ts := UI.default_text_settings();
-                    food_ts.size = lerp(44.0, 36, effect_t);
-                    food_ts.valign = .CENTER;
-                    food_ts.halign = .LEFT;
-                    food_ts.color = lerp(v4.{0, 1, 0, 1}, .{1, 1, 1, 1}, effect_t);
+                        food_icon := get_asset(Texture_Asset, "icons/burger.png");
+                        UI.quad(food_icon_rect, food_icon);
 
-                    text_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 200, 60, 0)->offset(90, -20);
+                        effect_t := Ease.T(get_time() - last_food_arrive_time, 0.5);
+                        food_ts := UI.default_text_settings();
+                        food_ts.size = lerp(44.0, 36, effect_t);
+                        food_ts.valign = .CENTER;
+                        food_ts.halign = .LEFT;
+                        food_ts.color = lerp(v4.{0, 1, 0, 1}, .{1, 1, 1, 1}, effect_t);
 
-                    food_amount := Economy.get_balance(this, "Food");
-                    max_food := get_max_food(this);
-                    UI.text(text_rect, food_ts, "%/%", .{food_amount, max_food});
+                        text_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 200, 60, 0)->offset(90, -20);
+
+                        food_amount := Economy.get_balance(this, "Food");
+                        max_food := get_max_food(this);
+                        UI.text(text_rect, food_ts, "%/%", .{food_amount, max_food});
+                    }
+
+                    // Coins display (to the right of food)
+                    {
+                        coin_icon_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 60, 60, 0)->offset(270, -20);
+
+                        coin_icon := get_asset(Texture_Asset, "icons/coin.png");
+                        UI.quad(coin_icon_rect, coin_icon);
+
+                        coin_effect_t := Ease.T(get_time() - last_coin_arrive_time, 0.5);
+                        coin_ts := UI.default_text_settings();
+                        coin_ts.size = lerp(44.0, 36, coin_effect_t);
+                        coin_ts.valign = .CENTER;
+                        coin_ts.halign = .LEFT;
+                        coin_ts.color = lerp(v4.{1, 0.843, 0, 1}, .{1, 1, 1, 1}, coin_effect_t); // Gold to white
+
+                        text_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 200, 60, 0)->offset(340, -20);
+
+                        coin_amount := Economy.get_balance(this, "Coins");
+                        UI.text(text_rect, coin_ts, "%", .{coin_amount});
+                    }
                 }
 
-                // Coins display (to the right of food)
+                // upgrade button
                 {
-                    coin_icon_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 60, 60, 0)->offset(270, -20);
-
-                    coin_icon := get_asset(Texture_Asset, "icons/coin.png");
-                    UI.quad(coin_icon_rect, coin_icon);
-
-                    coin_effect_t := Ease.T(get_time() - last_coin_arrive_time, 0.5);
-                    coin_ts := UI.default_text_settings();
-                    coin_ts.size = lerp(44.0, 36, coin_effect_t);
-                    coin_ts.valign = .CENTER;
-                    coin_ts.halign = .LEFT;
-                    coin_ts.color = lerp(v4.{1, 0.843, 0, 1}, .{1, 1, 1, 1}, coin_effect_t); // Gold to white
-
-                    text_rect := UI.get_safe_screen_rect()->subrect(0, 1, 0, 1)->grow(0, 200, 60, 0)->offset(340, -20);
-
-                    coin_amount := Economy.get_balance(this, "Coins");
-                    UI.text(text_rect, coin_ts, "%", .{coin_amount});
+                    ts := UI.default_text_settings();
+                    bs := UI.default_button_settings();
+                    bs.sprite = button_orange;
+                    bs.press_scaling = 1;
+                    rect := UI.get_safe_screen_rect()->subrect(0, 0.5, 0, 0.5)->offset(10, 5)->grow(75, 175, 0, 0);
+                    if UI.button(rect, bs, ts, "Upgrades").clicked {
+                        upgrade_menu_open = true;
+                        upgrade_menu_tab_index = 0;
+                    }
                 }
-            }
 
-            // upgrade button
-            {
-                ts := UI.default_text_settings();
-                bs := UI.default_button_settings();
-                bs.sprite = button_orange;
-                bs.press_scaling = 1;
-                rect := UI.get_safe_screen_rect()->subrect(0, 0.5, 0, 0.5)->offset(10, 5)->grow(75, 175, 0, 0);
-                if UI.button(rect, bs, ts, "Upgrades").clicked {
-                    upgrade_menu_open = true;
-                    upgrade_menu_tab_index = 0;
+                {
+                    stat_ts := UI.default_text_settings();
+                    stat_ts.size = 32;
+                    stat_ts.color = .{1, 1, 1, 1};
+                    stat_ts.valign = .TOP;
+                    stat_ts.halign = .LEFT;
+                    text_rect := UI.get_safe_screen_rect()->subrect(0, 0.5, 0, 0.5)->offset(10, 0);
+                    UI.text(text_rect, stat_ts, "Mouth: %", .{mouth_stat});
+                    text_rect = text_rect->offset(0, -30);
+                    UI.text(text_rect, stat_ts, "Stomach: %", .{stomach_stat});
+                    text_rect = text_rect->offset(0, -30);
+                    UI.text(text_rect, stat_ts, "Chew: %", .{chew_stat});
                 }
-            }
 
-            {
-                stat_ts := UI.default_text_settings();
-                stat_ts.size = 32;
-                stat_ts.color = .{1, 1, 1, 1};
-                stat_ts.valign = .TOP;
-                stat_ts.halign = .LEFT;
-                text_rect := UI.get_safe_screen_rect()->subrect(0, 0.5, 0, 0.5)->offset(10, 0);
-                UI.text(text_rect, stat_ts, "Mouth: %", .{mouth_stat});
-                text_rect = text_rect->offset(0, -30);
-                UI.text(text_rect, stat_ts, "Stomach: %", .{stomach_stat});
-                text_rect = text_rect->offset(0, -30);
-                UI.text(text_rect, stat_ts, "Chew: %", .{chew_stat});
-            }
+                if upgrade_menu_open {
+                    Grid_Layout :: struct {
+                        r: Rect;
+                        w: int;
+                        h: int;
+                        x: int;
+                        y: int;
+                        cell_w: float;
+                        cell_h: float;
+                        margin: float;
 
-            if upgrade_menu_open {
-                Grid_Layout :: struct {
-                    r: Rect;
-                    w: int;
-                    h: int;
-                    x: int;
-                    y: int;
-                    cell_w: float;
-                    cell_h: float;
-                    margin: float;
+                        next :: proc(using grid: ref Grid_Layout) -> Rect {
+                            x += 1;
+                            if x >= w {
+                                x = 0;
+                                y -= 1;
+                            }
 
-                    next :: proc(using grid: ref Grid_Layout) -> Rect {
-                        x += 1;
-                        if x >= w {
-                            x = 0;
-                            y -= 1;
+                            ox := margin + x.(float) * (cell_w + margin);
+                            oy := margin + y.(float) * (cell_h + margin);
+
+                            return .{
+                                .{ r.min.x + ox, r.min.y + oy },
+                                .{ r.min.x + ox + cell_w, r.min.y + oy + cell_h }
+                            };
                         }
+                    }
 
-                        ox := margin + x.(float) * (cell_w + margin);
-                        oy := margin + y.(float) * (cell_h + margin);
+                    make_grid_layout :: proc(rect: Rect, w: int, h: int, margin: float) -> Grid_Layout {
+                        scale := UI.get_current_scale_factor();
+                        m := margin * scale;
+
+                        full_w := rect.max.x - rect.min.x;
+                        full_h := rect.max.y - rect.min.y;
+
+                        cell_w := (full_w - (w + 1).(float) * m) / w.(float);
+                        cell_h := (full_h - (h + 1).(float) * m) / h.(float);
 
                         return .{
-                            .{ r.min.x + ox, r.min.y + oy },
-                            .{ r.min.x + ox + cell_w, r.min.y + oy + cell_h }
+                            rect,
+                            w,
+                            h,
+                            -1,
+                            h - 1,
+                            cell_w,
+                            cell_h,
+                            m
                         };
                     }
-                }
 
-                make_grid_layout :: proc(rect: Rect, w: int, h: int, margin: float) -> Grid_Layout {
-                    scale := UI.get_current_scale_factor();
-                    m := margin * scale;
+                    UI.push_id("upgrades");
+                    defer UI.pop_id();
 
-                    full_w := rect.max.x - rect.min.x;
-                    full_h := rect.max.y - rect.min.y;
+                    modal_bg_bs := UI.default_button_settings();
+                    modal_bg_bs.sprite = white_sprite;
+                    modal_bg_bs.color          = .{0, 0, 0, 0.8};
+                    modal_bg_bs.hovered_color  = .{0, 0, 0, 0.8};
+                    modal_bg_bs.pressed_color  = .{0, 0, 0, 0.8};
+                    modal_bg_bs.disabled_color = .{0, 0, 0, 0.8};
+                    if UI.button(UI.get_screen_rect(), modal_bg_bs, .{}, "").clicked {
+                        upgrade_menu_open = false;
+                    }
 
-                    cell_w := (full_w - (w + 1).(float) * m) / w.(float);
-                    cell_h := (full_h - (h + 1).(float) * m) / h.(float);
+                    tab_names := ([4]string).{"Eat", "Chop", "Fight", "???"};
+                    unlocked_tabs: [4]bool;
+                    unlock_strings: [4]string;
 
-                    return .{
-                        rect,
-                        w,
-                        h,
-                        -1,
-                        h - 1,
-                        cell_w,
-                        cell_h,
-                        m
-                    };
-                }
+                    modal_rect := UI.get_screen_rect()->subrect(0.5, 0.5, 0.5, 0.5)->grow(300, 500, 300, 500);
+                    tab_count := 4;
+                    tab_ts := UI.default_text_settings();
+                    tab_ts.offset = .{0, 25};
+                    tab_bs := UI.default_button_settings();
+                    tab_bs.press_scaling;
+                    tab_bs.sprite = modal_bg_sprite;
 
-                UI.push_id("upgrades");
-                defer UI.pop_id();
-
-                modal_bg_bs := UI.default_button_settings();
-                modal_bg_bs.sprite = white_sprite;
-                modal_bg_bs.color          = .{0, 0, 0, 0.8};
-                modal_bg_bs.hovered_color  = .{0, 0, 0, 0.8};
-                modal_bg_bs.pressed_color  = .{0, 0, 0, 0.8};
-                modal_bg_bs.disabled_color = .{0, 0, 0, 0.8};
-                if UI.button(UI.get_screen_rect(), modal_bg_bs, .{}, "").clicked {
-                    upgrade_menu_open = false;
-                }
-
-                tab_names := ([4]string).{"Eat", "Chop", "Fight", "???"};
-                unlocked_tabs: [4]bool;
-                unlock_strings: [4]string;
-
-                modal_rect := UI.get_screen_rect()->subrect(0.5, 0.5, 0.5, 0.5)->grow(300, 500, 300, 500);
-                tab_count := 4;
-                tab_ts := UI.default_text_settings();
-                tab_ts.offset = .{0, 25};
-                tab_bs := UI.default_button_settings();
-                tab_bs.press_scaling;
-                tab_bs.sprite = modal_bg_sprite;
-
-                for i: 0..tab_names.count-1 {
-                    tab_name := tab_names[i];
-                    switch tab_name {
-                        case "Eat": {
-                            // always unlocked
-                            unlocked_tabs[i] = true;
-                        }
-                        case "Chop": {
-                            if chew_stat >= 10 && mouth_stat >= 10 && stomach_stat >= 10 {
+                    for i: 0..tab_names.count-1 {
+                        tab_name := tab_names[i];
+                        switch tab_name {
+                            case "Eat": {
+                                // always unlocked
                                 unlocked_tabs[i] = true;
                             }
-                            else {
-                                unlock_strings[i] = "Level all Eat stats to 10 to unlock.";
-                            }
-                        }
-                        case: {
-                            unlock_strings[i] = "idk yet man";
-                        }
-                    }
-
-                    UI.push_id("tab%", .{i});
-                    defer UI.pop_id();
-
-                    tab_rect := modal_rect->subrect(0, 1, 0, 1)->grow(60, 200, 50, 0)->offset(50, 0)->offset(210 * i.(float), 0);
-                    if upgrade_menu_tab_index == i {
-                        tab_rect = tab_rect->offset(0, 25);
-                    }
-                    name_to_draw := tab_name;
-                    if !unlocked_tabs[i] {
-                        name_to_draw = "???";
-                    }
-                    if UI.button(tab_rect, tab_bs, tab_ts, name_to_draw).clicked {
-                        upgrade_menu_tab_index = i;
-                    }
-                }
-
-                UI.button(modal_rect, .{}, .{}, "bg");
-                UI.quad(modal_rect, modal_bg_sprite);
-
-                {
-                    draw_stat_row :: proc(grid: ref Grid_Layout, stat: ref int, name: string, desc: string, player: Player) -> bool {
-                        UI.push_id(name);
-                        defer UI.pop_id();
-
-                        rect := grid->next();
-                        UI.quad(rect, modal_bg_sprite, .{0.25, 0.25, 0.25, 1});
-
-                        title_rect := rect->subrect(0, 1, 0, 1)->offset(25, -25);
-                        ts := UI.default_text_settings();
-                        ts.size = 48;
-                        ts.halign = .LEFT;
-                        ts.valign = .TOP;
-                        UI.text(title_rect, ts, "%: %", .{name, stat ref});
-                        title_rect = title_rect->offset(0, -75);
-                        ts.size = 32;
-                        UI.text(title_rect, ts, desc);
-
-                        // Calculate upgrade cost
-                        upgrade_cost := (pow(1.25, stat ref.(float)) * 10).(s64);
-                        can_afford := Economy.can_withdraw_currency(player, "Coins", upgrade_cost);
-
-                        button_rect := rect->subrect(1, 0.5, 1, 0.5)->grow(50, 0, 50, 200)->offset(-10, 0);
-                        bs := UI.default_button_settings();
-                        if can_afford {
-                            bs.sprite = button_green;
-                        }
-                        else {
-                            bs.sprite = button_red;
-                        }
-                        bs.press_scaling = 1;
-                        result := false;
-
-                        upgrade := UI.begin_button(button_rect, bs, .{}, ""); {
-                            defer UI.end_button();
-
-                            if upgrade.clicked {
-                                if can_afford {
-                                    Economy.withdraw_currency(player, "Coins", upgrade_cost);
-                                    stat ref += 1;
-                                    result = true;
+                            case "Chop": {
+                                if chew_stat >= 10 && mouth_stat >= 10 && stomach_stat >= 10 {
+                                    unlocked_tabs[i] = true;
                                 }
                                 else {
-                                    Notifier.notify("Not enough coins!");
+                                    unlock_strings[i] = "Level all Eat stats to 10 to unlock.";
+                                }
+                            }
+                            case: {
+                                unlock_strings[i] = "idk yet man";
+                            }
+                        }
+
+                        UI.push_id("tab%", .{i});
+                        defer UI.pop_id();
+
+                        tab_rect := modal_rect->subrect(0, 1, 0, 1)->grow(60, 200, 50, 0)->offset(50, 0)->offset(210 * i.(float), 0);
+                        if upgrade_menu_tab_index == i {
+                            tab_rect = tab_rect->offset(0, 25);
+                        }
+                        name_to_draw := tab_name;
+                        if !unlocked_tabs[i] {
+                            name_to_draw = "???";
+                        }
+                        if UI.button(tab_rect, tab_bs, tab_ts, name_to_draw).clicked {
+                            upgrade_menu_tab_index = i;
+                        }
+                    }
+
+                    UI.button(modal_rect, .{}, .{}, "bg");
+                    UI.quad(modal_rect, modal_bg_sprite);
+
+                    {
+                        draw_stat_row :: proc(grid: ref Grid_Layout, stat: ref int, name: string, desc: string, player: Player) -> bool {
+                            UI.push_id(name);
+                            defer UI.pop_id();
+
+                            rect := grid->next();
+                            UI.quad(rect, modal_bg_sprite, .{0.25, 0.25, 0.25, 1});
+
+                            title_rect := rect->subrect(0, 1, 0, 1)->offset(25, -25);
+                            ts := UI.default_text_settings();
+                            ts.size = 48;
+                            ts.halign = .LEFT;
+                            ts.valign = .TOP;
+                            UI.text(title_rect, ts, "%: %", .{name, stat ref});
+                            title_rect = title_rect->offset(0, -75);
+                            ts.size = 32;
+                            UI.text(title_rect, ts, desc);
+
+                            // Calculate upgrade cost
+                            upgrade_cost := (pow(1.25, stat ref.(float)) * 10).(s64);
+                            can_afford := Economy.can_withdraw_currency(player, "Coins", upgrade_cost);
+
+                            button_rect := rect->subrect(1, 0.5, 1, 0.5)->grow(50, 0, 50, 200)->offset(-10, 0);
+                            bs := UI.default_button_settings();
+                            if can_afford {
+                                bs.sprite = button_green;
+                            }
+                            else {
+                                bs.sprite = button_red;
+                            }
+                            bs.press_scaling = 1;
+                            result := false;
+
+                            upgrade := UI.begin_button(button_rect, bs, .{}, ""); {
+                                defer UI.end_button();
+
+                                if upgrade.clicked {
+                                    if can_afford {
+                                        Economy.withdraw_currency(player, "Coins", upgrade_cost);
+                                        stat ref += 1;
+                                        result = true;
+                                    }
+                                    else {
+                                        Notifier.notify("Not enough coins!");
+                                    }
+                                }
+
+                                // Draw "Upgrade" text in top half
+                                {
+                                    top_text_rect := button_rect->offset(0, 25);
+                                    ts := UI.default_text_settings();
+                                    ts.size = 40;
+                                    UI.text(top_text_rect, ts, "Upgrade");
+
+                                    // Draw cost in bottom half
+                                    bottom_text_rect := button_rect->offset(0, -25);
+                                    ts.size = 36;
+                                    UI.text(bottom_text_rect, ts, "% coins", .{upgrade_cost});
                                 }
                             }
 
-                            // Draw "Upgrade" text in top half
-                            {
-                                top_text_rect := button_rect->offset(0, 25);
-                                ts := UI.default_text_settings();
-                                ts.size = 40;
-                                UI.text(top_text_rect, ts, "Upgrade");
-
-                                // Draw cost in bottom half
-                                bottom_text_rect := button_rect->offset(0, -25);
-                                ts.size = 36;
-                                UI.text(bottom_text_rect, ts, "% coins", .{upgrade_cost});
-                            }
+                            return result;
                         }
 
-                        return result;
+                        if !unlocked_tabs[upgrade_menu_tab_index] {
+                            ts := UI.default_text_settings();
+                            ts.size = 32;
+                            UI.text(modal_rect, ts, unlock_strings[upgrade_menu_tab_index]);
+                        }
+                        else {
+                            switch upgrade_menu_tab_index {
+                                case 0: {
+                                    // Eat
+                                    grid := make_grid_layout(modal_rect, 1, 3, 10);
+
+                                    if draw_stat_row(&grid, &mouth_stat,   "Mouth",   "Upgrade your mouth to eat bigger items.",   this) { Save.set_int(this, "mouth_level",   mouth_stat);   }
+                                    if draw_stat_row(&grid, &stomach_stat, "Stomach", "Upgrade your stomach to hold more food.",   this) { Save.set_int(this, "stomach_level", stomach_stat); }
+                                    if draw_stat_row(&grid, &chew_stat,    "Chew",    "Upgrade your chewing to eat items faster.", this) { Save.set_int(this, "chew_level",    chew_stat);    }
+                                }
+                                case 1: {
+                                    // Chop
+                                }
+                            }
+                        }
                     }
 
-                    if !unlocked_tabs[upgrade_menu_tab_index] {
+
+                    // Reset button below the window
+                    {
+                        reset_button_rect := modal_rect->subrect(0.5, 0, 0.5, 0)->grow(75, 150, 75, 150)->offset(0, -100);
+
+                        UI.push_id("reset_button");
+                        defer UI.pop_id();
+
+                        reset_bs := UI.default_button_settings();
+                        reset_bs.sprite = button_red;
+                        reset_bs.press_scaling = 1;
+
                         ts := UI.default_text_settings();
-                        ts.size = 32;
-                        UI.text(modal_rect, ts, unlock_strings[upgrade_menu_tab_index]);
-                    }
-                    else {
-                        switch upgrade_menu_tab_index {
-                            case 0: {
-                                // Eat
-                                grid := make_grid_layout(modal_rect, 1, 3, 10);
 
-                                if draw_stat_row(&grid, &mouth_stat,   "Mouth",   "Upgrade your mouth to eat bigger items.",   this) { Save.set_int(this, "mouth_level",   mouth_stat);   }
-                                if draw_stat_row(&grid, &stomach_stat, "Stomach", "Upgrade your stomach to hold more food.",   this) { Save.set_int(this, "stomach_level", stomach_stat); }
-                                if draw_stat_row(&grid, &chew_stat,    "Chew",    "Upgrade your chewing to eat items faster.", this) { Save.set_int(this, "chew_level",    chew_stat);    }
+                        if UI.button(reset_button_rect, reset_bs, ts, "Reset Save Data").clicked {
+                            reset_player_save :: proc(using this: Player) {
+                                mouth_stat         = 1; Save.set_int(this, "mouth_level",        1);
+                                stomach_stat       = 1; Save.set_int(this, "stomach_level",      1);
+                                chew_stat          = 1; Save.set_int(this, "chew_level",         1);
+                                total_things_eaten = 0; Save.set_int(this, "total_things_eaten", 0);
+
+                                // Reset currencies
+                                Economy.withdraw_currency(this, "Food",  Economy.get_balance(this, "Food"));
+                                Economy.withdraw_currency(this, "Coins", Economy.get_balance(this, "Coins"));
                             }
-                            case 1: {
-                                // Chop
-                            }
+
+                            reset_player_save(this);
+                            upgrade_menu_open = false;
+                            Notifier.notify("Save data reset!");
                         }
-                    }
-                }
-
-
-                // Reset button below the window
-                {
-                    reset_button_rect := modal_rect->subrect(0.5, 0, 0.5, 0)->grow(75, 150, 75, 150)->offset(0, -100);
-
-                    UI.push_id("reset_button");
-                    defer UI.pop_id();
-
-                    reset_bs := UI.default_button_settings();
-                    reset_bs.sprite = button_red;
-                    reset_bs.press_scaling = 1;
-
-                    ts := UI.default_text_settings();
-
-                    if UI.button(reset_button_rect, reset_bs, ts, "Reset Save Data").clicked {
-                        reset_player_save :: proc(using this: Player) {
-                            mouth_stat         = 1; Save.set_int(this, "mouth_level",        1);
-                            stomach_stat       = 1; Save.set_int(this, "stomach_level",      1);
-                            chew_stat          = 1; Save.set_int(this, "chew_level",         1);
-                            total_things_eaten = 0; Save.set_int(this, "total_things_eaten", 0);
-
-                            // Reset currencies
-                            Economy.withdraw_currency(this, "Food",  Economy.get_balance(this, "Food"));
-                            Economy.withdraw_currency(this, "Coins", Economy.get_balance(this, "Coins"));
-                        }
-
-                        reset_player_save(this);
-                        upgrade_menu_open = false;
-                        Notifier.notify("Save data reset!");
                     }
                 }
             }
@@ -1614,13 +1726,19 @@ Player :: class : Player_Base {
 
         if g_game.state == .GAMEPLAY {
             if this->is_local_or_server() {
-                switch team {
-                    case .SURVIVOR: {
-                        draw_ability_button(this, Shoot_Ability, 0);
-                        draw_ability_button(this, Dodge_Roll, 1);
-                    }
-                    case .ZOMBIE: {
-                        draw_ability_button(this, Slash_Ability, 0);
+                if is_player_carrying_canister(this) {
+                    // Only show drop fuel ability when carrying
+                    draw_ability_button(this, Drop_Fuel_Ability, 0);
+                }
+                else {
+                    switch team {
+                        case .SURVIVOR: {
+                            draw_ability_button(this, Shoot_Ability, 0);
+                            draw_ability_button(this, Dodge_Roll, 1);
+                        }
+                        case .ZOMBIE: {
+                            draw_ability_button(this, Slash_Ability, 0);
+                        }
                     }
                 }
             }
@@ -1631,7 +1749,42 @@ Player :: class : Player_Base {
             if !health.is_dead && this->will_draw_name() {
                 health->draw_health_bar(entity.world_position.y-0.001);
             }
+
+            if this->is_local() && team == .SURVIVOR {
+                switch g_game.current_task {
+                    case .FUEL_CANISTERS: {
+                        if is_player_carrying_canister(this) {
+                            draw_tutorial_arrow(camera.position, camera.size, g_game_manager.fuel_delivery_tutorial_arrow_point.world_position);
+                        }
+                        else {
+                            foreach fuel: component_iterator(Fuel_Canister) {
+                                if !fuel.is_picked_up {
+                                    draw_tutorial_arrow(camera.position, camera.size, fuel.entity.world_position);
+                                }
+                            }
+                        }
+                    }
+                    case .ALIGN_TAKEOFF: {
+                        foreach align: component_iterator(Align_Takeoff_Station) {
+                            if !align.is_aligned {
+                                draw_tutorial_arrow(camera.position, camera.size, align.entity.world_position);
+                            }
+                        }
+                    }
+                    case .TAKEOFF: {
+                        takeoff: Takeoff_Station;
+                        foreach c: component_iterator(Takeoff_Station) {
+                            takeoff = c;
+                            break;
+                        }
+                        if !takeoff.initiated {
+                            draw_tutorial_arrow(camera.position, camera.size, takeoff.entity.world_position);
+                        }
+                    }
+                }
+            }
         }
+
     }
 
     ao_end :: proc(player: Player) {
@@ -2210,7 +2363,6 @@ Takeoff_Station :: class : Component {
                     complete_current_task();
                 }
             }
-            draw_big_game_text("Takeoff in %{.1} seconds...", .{takeoff_timer});
         }
     }
 
