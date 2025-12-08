@@ -838,7 +838,7 @@ Dodge_Roll :: class : Ability_Base {
         }
 
         if params.can_use && activate {
-            ability.current_cooldown = 1.0;
+            ability.current_cooldown = 1.5;
             controller := new(Roll_Controller);
             controller.direction = params.drag_direction;
             set_controller(player, controller);
@@ -867,7 +867,7 @@ Roll_Controller :: class : Controller_Base {
     }
 
     controller_update :: proc(using this: Roll_Controller, dt: float) {
-        player.agent.velocity = direction * 10;
+        player.agent.velocity = direction * 8;
         if elapsed_time > 0.5 {
             end_controller(player, false);
         }
@@ -895,7 +895,7 @@ Slash_Ability :: class : Ability_Base {
     on_update :: proc(ability: Slash_Ability, player: Player, params: Ability_Update_Params) {
         if update_always_aiming_ability(player, &params).shoot {
             if params.can_use {
-                ability.current_cooldown = 0.5;
+                ability.current_cooldown = 0.6;
 
                 controller := new(Slash_Controller);
                 controller.direction = params.drag_direction;
