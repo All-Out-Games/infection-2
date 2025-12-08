@@ -5,8 +5,8 @@
   "name": "Feastable",
   "local_enabled": true,
   "local_position": {
-    "X": 1.1931581497192383,
-    "Y": -9.7994155883789062
+    "X": -73.4070968627929688,
+    "Y": -9.9742603302001953
   },
   "local_rotation": 0,
   "local_scale": {

@@ -9,11 +9,10 @@
   },
   "local_rotation": 0,
   "local_scale": {
-    "X": 1,
-    "Y": 1
+    "X": 0.2500000000000000,
+    "Y": 0.2500000000000000
   },
-  "previous_sibling": "1057676395896567:1763451142651547800",
-  "next_sibling": "3190820729980027:1764299197265305200"
+  "parent": "5284264187309104:1765148460804393200"
 },
 {
   "cid": 1,
@@ -21,6 +20,6 @@
   "component_type": "Internal_Component",
   "internal_component_type": "Navmesh",
   "data": {
-
+    "debug_rebuild_every_frame": true
   }
 }

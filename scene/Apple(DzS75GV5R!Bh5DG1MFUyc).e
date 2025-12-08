@@ -5,8 +5,8 @@
   "name": "Apple",
   "local_enabled": true,
   "local_position": {
-    "X": -9.1384143829345703,
-    "Y": -5.6862721443176270
+    "X": -83.7386703491210938,
+    "Y": -5.8611168861389160
   },
   "local_rotation": 0,
   "local_scale": {

@@ -5,8 +5,8 @@
   "name": "Duck",
   "local_enabled": true,
   "local_position": {
-    "X": 10.6307811737060547,
-    "Y": -4.8817324638366699
+    "X": -63.9694747924804688,
+    "Y": -5.0565772056579590
   },
   "local_rotation": 0,
   "local_scale": {

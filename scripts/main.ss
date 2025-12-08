@@ -13,6 +13,7 @@ keybind_dodge_roll: Keybind;
 Game_State :: enum {
     WAITING_FOR_PLAYERS;
     GAMEPLAY;
+    END_GAME_SCREEN;
 }
 
 Player_Team :: enum {
@@ -23,7 +24,24 @@ Player_Team :: enum {
 
 g_game: struct {
     state: Game_State;
+
+    tasks: [2]Task;
+    current_task: Task;
+    current_task_index: int;
+
+    winner: Player_Team;
+    end_game_screen_timer: float;
 };
+
+complete_current_task :: proc() {
+    g_game.current_task_index += 1;
+    if g_game.current_task_index < g_game.tasks.count {
+        g_game.current_task = g_game.tasks[g_game.current_task_index];
+    }
+    else {
+        g_game.current_task = .NONE;
+    }
+}
 
 server_rng: u64;
 
@@ -110,6 +128,11 @@ ao_update :: proc(dt: float) {
                         player := players[i];
                         respawn_player(player);
                     }
+
+                    g_game.tasks[0] = .ALIGN_TAKEOFF;
+                    g_game.tasks[1] = .TAKEOFF;
+                    g_game.current_task_index = 0;
+                    g_game.current_task = g_game.tasks[g_game.current_task_index];
                 }
             }
         }
@@ -127,6 +150,39 @@ ao_update :: proc(dt: float) {
                     respawn_player(player);
                 }
 
+                g_game.winner = .ZOMBIE;
+                g_game.state = .END_GAME_SCREEN;
+            }
+            else {
+                if g_game.current_task_index >= g_game.tasks.count {
+                    g_game.winner = .SURVIVOR;
+                    g_game.state = .END_GAME_SCREEN;
+                }
+            }
+        }
+        case .END_GAME_SCREEN: {
+            g_game.end_game_screen_timer += dt;
+            maybe_local := try_get_local_player();
+            if maybe_local != null && maybe_local.team != .SPECTATOR {
+                UI.push_layer(-1000);
+                defer UI.pop_layer();
+                if maybe_local.team != g_game.winner {
+                    UI.quad(UI.get_screen_rect(), white_sprite, .{1, 0, 0, 0.1});
+                }
+                else {
+                    UI.quad(UI.get_screen_rect(), white_sprite, .{0, 1, 0, 0.1});
+                }
+            }
+            switch g_game.winner {
+                case .SURVIVOR: {
+                    draw_big_game_text("Survivors win!");
+                }
+                case .ZOMBIE: {
+                    draw_big_game_text("Zombies win!");
+                }
+            }
+
+            if g_game.end_game_screen_timer >= 5.0 {
                 g_game = .{};
             }
         }
@@ -148,17 +204,19 @@ respawn_player :: proc(using player: Player) {
 }
 
 ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> bool {
-    listener_type := #object_type(interactable.listener);
-    switch listener_type {
+    if interactable.listener != null switch #object_type(interactable.listener) {
         case Sell_Zone: return interactable.listener.(Sell_Zone)->can_use(player);
+        case Align_Takeoff_Station: return interactable.listener.(Align_Takeoff_Station)->can_use(player);
+        case Takeoff_Station: return interactable.listener.(Takeoff_Station)->can_use(player);
     }
     return true;
 }
 
 ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
-    listener_type := #object_type(interactable.listener);
-    switch listener_type {
+    if interactable.listener != null switch #object_type(interactable.listener) {
         case Sell_Zone: interactable.listener.(Sell_Zone)->on_interact(player);
+        case Align_Takeoff_Station: interactable.listener.(Align_Takeoff_Station)->on_interact(player);
+        case Takeoff_Station: interactable.listener.(Takeoff_Station)->on_interact(player);
     }
 }
 
@@ -1973,6 +2031,107 @@ shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, team: Pl
     projectile.damage = damage;
     projectile.owner = owner;
     return entity;
+}
+
+//
+// Tasks
+//
+
+Task :: enum {
+    NONE;
+
+    ALIGN_TAKEOFF;
+    TAKEOFF;
+}
+
+Align_Takeoff_Station :: class : Component {
+    Axis :: enum {
+        Yaw;
+        Pitch;
+    }
+
+    interactable: Interactable @ao_serialize;
+
+    other: Align_Takeoff_Station @ao_serialize;
+
+    axis: Axis @ao_serialize;
+
+    is_aligned: bool;
+    locked_in: bool;
+    aligned_timer: float;
+
+    ao_start :: proc(using this: Align_Takeoff_Station) {
+        interactable.listener = this;
+    }
+
+    ao_update :: proc(using this: Align_Takeoff_Station, dt: float) {
+        if g_game.state != .GAMEPLAY return;
+        if g_game.current_task != .TAKEOFF return;
+        if is_aligned && !locked_in {
+            if aligned_timer > 0 {
+                aligned_timer -= dt;
+                if aligned_timer <= 0 {
+                    aligned_timer = 0;
+                    is_aligned = false;
+                    Notifier.notify(format_string("% alignment lost!", .{axis}));
+                }
+            }
+        }
+    }
+
+    can_use :: proc(using this: Align_Takeoff_Station, player: Player) -> bool {
+        return g_game.current_task == .ALIGN_TAKEOFF && player.team == .SURVIVOR && is_aligned == false;
+    }
+
+    on_interact :: proc(using this: Align_Takeoff_Station, player: Player) {
+        Notifier.notify(format_string("% axis aligned!", .{axis}));
+        is_aligned = true;
+        aligned_timer = 4;
+        if other.is_aligned {
+            // both are aligned!
+            locked_in = true;
+            other.locked_in = true;
+            Notifier.notify("Both axes aligned!");
+
+            complete_current_task();
+        }
+    }
+}
+
+Takeoff_Station :: class : Component {
+    interactable: Interactable @ao_serialize;
+
+    initiated: bool;
+    takeoff_timer: float;
+
+    ao_start :: proc(using this: Takeoff_Station) {
+        interactable.listener = this;
+    }
+
+    ao_update :: proc(using this: Takeoff_Station, dt: float) {
+        if g_game.state != .GAMEPLAY return;
+        if g_game.current_task != .TAKEOFF return;
+        if initiated {
+            if takeoff_timer > 0 {
+                takeoff_timer -= dt;
+                if takeoff_timer <= 0 {
+                    takeoff_timer = 0;
+                    complete_current_task();
+                }
+            }
+            draw_big_game_text("Takeoff in %{.1} seconds...", .{takeoff_timer});
+        }
+    }
+
+    can_use :: proc(using this: Takeoff_Station, player: Player) -> bool {
+        return g_game.current_task == .TAKEOFF && player.team == .SURVIVOR && !initiated;
+    }
+
+    on_interact :: proc(using this: Takeoff_Station, player: Player) {
+        Notifier.notify("Takeoff initiated!");
+        initiated = true;
+        takeoff_timer = 10;
+    }
 }
 
 //

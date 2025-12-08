@@ -5,7 +5,8 @@
   "name": "GameManager",
   "local_enabled": true,
   "local_position": {
-
+    "X": -74.6002578735351562,
+    "Y": -0.1748447418212891
   },
   "local_rotation": 0,
   "local_scale": {

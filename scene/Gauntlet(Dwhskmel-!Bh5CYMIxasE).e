@@ -5,8 +5,8 @@
   "name": "Gauntlet",
   "local_enabled": true,
   "local_position": {
-    "X": -11.9217834472656250,
-    "Y": -13.2578039169311523
+    "X": -86.5220413208007812,
+    "Y": -13.4326486587524414
   },
   "local_rotation": 0,
   "local_scale": {
