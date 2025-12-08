@@ -225,6 +225,9 @@ ao_update :: proc(dt: float) {
             else {
                 if g_game.player_count_last_frame < REQUIRED_PLAYERS {
                     g_game.round_countdown_timer = ROUND_COUNTDOWN_TIMER.(float);
+                    if Game.is_launched_from_editor() {
+                        g_game.round_countdown_timer = 1;
+                    }
                 }
                 else {
                     if g_game.player_count_last_frame != player_count {
@@ -270,17 +273,39 @@ ao_update :: proc(dt: float) {
                     survivors_left += 1;
                 }
             }
-            if survivors_left == 0 {
-                g_game.winner = .ZOMBIE;
+
+            end_game :: proc(winner: Player_Team) {
+                g_game.winner = winner;
                 g_game.state = .END_GAME_SCREEN;
-            }
-            else {
-                if g_game.current_task_index >= g_game.tasks.count {
-                    g_game.winner = .SURVIVOR;
-                    g_game.state = .END_GAME_SCREEN;
+                foreach player: component_iterator(Player) {
+                    if player.team == winner {
+                        if player.team == .SURVIVOR {
+                            player->add_notification("Survivors win!");
+                        }
+                        else {
+                            player->add_notification("Zombies win!");
+                        }
+                    }
+                    else {
+                        if player.team == .SURVIVOR {
+                            player->add_notification("Survivors lose!");
+                        }
+                        else {
+                            player->add_notification("Zombies lose!");
+                        }
+                    }
                 }
-                else {
-                    local_player := try_get_local_player();
+            }
+
+            switch {
+                case survivors_left == 0: {
+                    end_game(.ZOMBIE);
+                }
+                case g_game.current_task_index >= g_game.tasks.count: {
+                    end_game(.SURVIVOR);
+                }
+                case: {
+                    local_player := Game.try_get_local_player();
 
                     // Draw current task objective
                     switch g_game.current_task {
@@ -327,7 +352,7 @@ ao_update :: proc(dt: float) {
         }
         case .END_GAME_SCREEN: {
             g_game.end_game_screen_timer += dt;
-            maybe_local := try_get_local_player();
+            maybe_local := Game.try_get_local_player();
             if maybe_local != null && maybe_local.team != .SPECTATOR {
                 UI.push_layer(-1000);
                 defer UI.pop_layer();
@@ -336,14 +361,6 @@ ao_update :: proc(dt: float) {
                 }
                 else {
                     UI.quad(UI.get_screen_rect(), white_sprite, .{0, 1, 0, 0.1});
-                }
-            }
-            switch g_game.winner {
-                case .SURVIVOR: {
-                    draw_big_game_text("Survivors win!");
-                }
-                case .ZOMBIE: {
-                    draw_big_game_text("Zombies win!");
                 }
             }
 
@@ -621,7 +638,7 @@ Shoot_Ability :: class : Ability_Base {
         if update_always_aiming_ability(player, &params).shoot {
             if params.can_use {
                 ability.current_cooldown = 0.5;
-                shoot_projectile(player.entity.world_position, params.drag_direction * 15.0, 1, player.team, player.entity);
+                shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.75, player.team, player.entity);
             }
         }
     }
@@ -727,7 +744,6 @@ Roll_Controller :: class : Controller_Base {
         original_friction = player.agent.friction;
         player.agent.friction = 0;
         player->set_facing_right(direction.x > 0);
-        player.animator.instance.color_multiplier = .{1, 1, 1, 0.5};
     }
 
     controller_update :: proc(using this: Roll_Controller, dt: float) {
@@ -738,7 +754,6 @@ Roll_Controller :: class : Controller_Base {
     }
 
     controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
-        player.animator.instance.color_multiplier = .{1, 1, 1, 1};
         player.agent.friction = original_friction;
     }
 }
@@ -803,13 +818,14 @@ Slash_Controller :: class : Controller_Base {
         }
 
         player.agent.velocity = direction * 10;
-        if elapsed_time > 0.5 {
+        if elapsed_time > 0.3 {
             end_controller(player, false);
         }
     }
 
     controller_end :: proc(using this: Slash_Controller, interrupt: bool) {
         player.agent.friction = original_friction;
+        player->player_set_trigger("RESET");
     }
 }
 
@@ -1319,13 +1335,13 @@ make_finder :: proc($T: typeid, position: v2) -> Finder(T) {
 }
 
 Death_Controller :: class : Controller_Base {
-    controller_begin :: proc(using this: Roll_Controller) {
+    controller_begin :: proc(using this: Death_Controller) {
         freeze_player = true;
         player->add_name_invisibility_reason("death");
         player->player_set_trigger("death");
     }
 
-    controller_update :: proc(using this: Roll_Controller, dt: float) {
+    controller_update :: proc(using this: Death_Controller, dt: float) {
         if g_game.state == .GAMEPLAY {
             time_until_respawn := 5.0 - elapsed_time;
             if player->is_local() {
@@ -1337,7 +1353,7 @@ Death_Controller :: class : Controller_Base {
         }
     }
 
-    controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
+    controller_end :: proc(using this: Death_Controller, interrupt: bool) {
         player->remove_name_invisibility_reason("death");
         if player.team == .SURVIVOR {
             player.team = .ZOMBIE;
@@ -1396,23 +1412,6 @@ Player :: class : Player_Base {
         }
     }
 
-    update_notifications :: proc(using this: Player, dt: float) {
-        notification := first_notification;
-        if notification == null return;
-
-        notification.time += dt;
-        if notification.time > 3.0 {
-            first_notification = notification.next;
-            if first_notification == null {
-                last_notification = null;
-            }
-        }
-        notification = first_notification;
-        if notification == null return;
-
-        draw_big_game_text(notification.text);
-    }
-
     get_max_food :: proc(using this: Player) -> int {
         return 8 + (stomach_stat - 1) * 3;
     }
@@ -1467,14 +1466,14 @@ Player :: class : Player_Base {
         switch team {
             case .SURVIVOR: {
                 if is_player_carrying_canister(this) {
-                    agent.movement_speed = 175;
+                    agent.movement_speed = 150;
                 }
                 else {
-                    agent.movement_speed = 250;
+                    agent.movement_speed = 215;
                 }
             }
             case .ZOMBIE: {
-                agent.movement_speed = 325;
+                agent.movement_speed = 250;
             }
             case .SPECTATOR: {
                 agent.movement_speed = 400;
@@ -1873,7 +1872,20 @@ Player :: class : Player_Base {
             }
         }
 
-        this->update_notifications(dt);
+        if this->is_local() {
+            if first_notification != null {
+                first_notification.time += dt;
+                if first_notification.time > 3.0 {
+                    first_notification = first_notification.next;
+                    if first_notification == null {
+                        last_notification = null;
+                    }
+                }
+                if first_notification != null {
+                    draw_big_game_text(first_notification.text);
+                }
+            }
+        }
     }
 
     ao_end :: proc(player: Player) {
@@ -2352,7 +2364,7 @@ Food_Projectile :: class : Component {
     }
 }
 
-shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, team: Player_Team, owner: Entity, texture_path: string = "icons/burger.png", lifetime: float = 3.0) -> Entity {
+shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, lifetime: float, team: Player_Team, owner: Entity, texture_path: string = "icons/burger.png") -> Entity {
     prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
     entity := instantiate(prefab);
     entity->set_local_position(spawn_position);
