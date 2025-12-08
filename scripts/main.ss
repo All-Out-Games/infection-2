@@ -1780,8 +1780,14 @@ Player :: class : Player_Base {
     }
 
     ao_late_update :: proc(using this: Player, dt: float) {
-        // scroll := get_mouse_scroll(true);
-        // camera.size -= camera.size * scroll * dt;
+        if team == .SPECTATOR {
+            agent.lock_to_navmesh = false;
+            camera.size = 8;
+        }
+        else {
+            agent.lock_to_navmesh = true;
+            camera.size = 5;
+        }
 
         if this->is_local_or_server() {
             if g_game.state == .GAMEPLAY {
@@ -1804,6 +1810,7 @@ Player :: class : Player_Base {
             }
             else {
                 draw_ability_button(this, Dodge_Roll, 0);
+                draw_ability_button(this, Sprint_Ability, 4);
             }
         }
 
