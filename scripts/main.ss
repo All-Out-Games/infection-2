@@ -131,23 +131,24 @@ draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
     UI.text(text_rect, ts, str, args);
 }
 
-draw_tutorial_arrow :: proc(camera_position: v2, camera_size: float, target_position: v2) {
+draw_tutorial_arrow :: proc(player: Player, target_position: v2) {
     UI.push_world_draw_context();
     defer UI.pop_draw_context();
     UI.push_layer(100);
     defer UI.pop_layer();
 
+    camera_size := player.camera.size;
 
     max_distance := camera_size * 0.8;
-    offset_to_target := normalize_vector_to_radius(target_position - camera_position, max_distance) * max_distance;
-    arrow_position := camera_position + offset_to_target;
+    offset_to_target := normalize_vector_to_radius(target_position - player.entity.world_position, max_distance) * max_distance;
+    arrow_position := player.entity.world_position + offset_to_target;
     arrow_rect := Rect.{arrow_position, arrow_position}->grow(0.5);
 
-    mouse_position := get_mouse_world_position();
-    offset_to_mouse := normalize_vector_to_radius(mouse_position - arrow_position, 1.0);
-    mouse_fade_out := lerp(0.25, 1.0, length(offset_to_mouse));
+    aim_d := dot(player.last_aim_direction, normalize(target_position - player.entity.world_position));
+    fade_out_t := linear_step(0.85, 1.0, aim_d);
+    fade_out := lerp(1.0, 0.25, fade_out_t);
 
-    UI.push_color_multiplier(.{1, 1, 1, mouse_fade_out});
+    UI.push_color_multiplier(.{1, 1, 1, fade_out});
     defer UI.pop_color_multiplier();
 
     rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
@@ -680,6 +681,7 @@ update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_
     }
 
     if result.aim {
+        player.last_aim_direction = params.drag_direction;
         draw_thin_aiming_line(player.entity.world_position, params.drag_direction, 1.0 / player.camera.size * 4);
     }
 
@@ -1504,6 +1506,8 @@ Player :: class : Player_Base {
 
     active_ability: Ability_Base;
 
+    last_aim_direction: v2;
+
     notifications: List(Notification);
 
     // Ammo system
@@ -1720,12 +1724,12 @@ Player :: class : Player_Base {
                 switch g_game.current_task {
                     case .FUEL_CANISTERS: {
                         if is_player_carrying_canister(this) {
-                            draw_tutorial_arrow(camera.position, camera.size, g_game_manager.fuel_delivery_tutorial_arrow_point.world_position);
+                            draw_tutorial_arrow(this, g_game_manager.fuel_delivery_tutorial_arrow_point.world_position);
                         }
                         else {
                             foreach fuel: component_iterator(Fuel_Canister) {
                                 if !fuel.is_picked_up {
-                                    draw_tutorial_arrow(camera.position, camera.size, fuel.entity.world_position);
+                                    draw_tutorial_arrow(this, fuel.entity.world_position);
                                 }
                             }
                         }
@@ -1733,14 +1737,14 @@ Player :: class : Player_Base {
                     case .RESTORE_BEACONS: {
                         foreach beacon: component_iterator(Beacon) {
                             if beacon.state == .INACTIVE || (beacon.state == .RESTORING && beacon.survivor_nearby == false) {
-                                draw_tutorial_arrow(camera.position, camera.size, beacon.entity.world_position);
+                                draw_tutorial_arrow(this, beacon.entity.world_position);
                             }
                         }
                     }
                     case .ALIGN_TAKEOFF: {
                         foreach align: component_iterator(Align_Takeoff_Station) {
                             if !align.is_aligned {
-                                draw_tutorial_arrow(camera.position, camera.size, align.entity.world_position);
+                                draw_tutorial_arrow(this, align.entity.world_position);
                             }
                         }
                     }
@@ -1751,7 +1755,7 @@ Player :: class : Player_Base {
                             break;
                         }
                         if !takeoff.initiated {
-                            draw_tutorial_arrow(camera.position, camera.size, takeoff.entity.world_position);
+                            draw_tutorial_arrow(this, takeoff.entity.world_position);
                         }
                     }
                 }
