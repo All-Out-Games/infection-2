@@ -11,6 +11,7 @@ tutorial_arrow:  Texture_Asset;
 
 keybind_dodge_roll: Keybind;
 keybind_drop_fuel: Keybind;
+keybind_sprint: Keybind;
 
 Game_State :: enum {
     RESET_MAP;
@@ -77,6 +78,7 @@ ao_before_scene_load :: proc() {
 
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
     keybind_drop_fuel = Keybinds.register("Drop Fuel", .F);
+    keybind_sprint = Keybinds.register("Sprint", .LEFT_SHIFT);
 
     server_rng = rng_seed((get_real_time() * 1000000000).(u64));
 }
@@ -740,6 +742,38 @@ Drop_Fuel_Ability :: class : Ability_Base {
             if canister != null {
                 drop_canister(canister, player.entity.world_position);
             }
+        }
+    }
+}
+
+// Sprint ability - hold to move faster, uses stamina
+MAX_SPRINT_STAMINA :: 1.0;
+SPRINT_DRAIN_RATE :: 1.0;
+SPRINT_REGEN_RATE :: 0.5;
+SPRINT_SPEED_BONUS :: 1.15;
+
+Sprint_Ability :: class : Ability_Base {
+    on_init :: proc(ability: Sprint_Ability) {
+        ability.name = "Sprint";
+        ability.keybind_override = keybind_sprint;
+        ability.draw_but_dont_use_keybind = true;
+    }
+
+    can_use :: proc(ability: Sprint_Ability, player: Player) -> bool {
+        return player.team == .SURVIVOR && player.sprint_stamina > 0;
+    }
+
+    on_update :: proc(ability: Sprint_Ability, player: Player, params: Ability_Update_Params) {
+        if player.device_kind == .PC {
+            if Keybinds.get_keybind_held(player, keybind_sprint) {
+                params.held = true;
+            }
+        }
+        if params.held && player.sprint_stamina > 0 && player.team == .SURVIVOR {
+            player.is_sprinting = true;
+        }
+        else {
+            player.is_sprinting = false;
         }
     }
 }
@@ -1514,6 +1548,10 @@ Player :: class : Player_Base {
     current_ammo_float: float;
     current_ammo: int;
 
+    // Sprint system
+    sprint_stamina: float;
+    is_sprinting: bool;
+
     first_notification: Notification;
     last_notification: Notification;
 
@@ -1605,6 +1643,40 @@ Player :: class : Player_Base {
         UI.quad(no_ammo_rect, white_sprite, lerp(v4.{1, 0, 0, 1}, v4.{1, 0, 0, 0}, no_ammo_t));
     }
 
+    draw_stamina_bar :: proc(using this: Player) {
+        UI.push_world_draw_context();
+        defer UI.pop_draw_context();
+
+        UI.push_z(entity.world_position.y-0.001);
+        defer UI.pop_z();
+
+        // Position below the ammo bar
+        bar_pos := entity.world_position + v2.{0, 1.65};
+        bar_width := 0.6;
+        bar_height := 0.12;
+
+        bar_rect := Rect.{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
+
+        // Background
+        UI.quad(bar_rect, white_sprite, .{0.01, 0.01, 0.01, 1});
+        inner_bar := bar_rect->inset(0.02);
+        UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
+
+        // Stamina fill
+        stamina_t := sprint_stamina / MAX_SPRINT_STAMINA;
+        fill_rect := inner_bar->subrect(0, 0, stamina_t, 1);
+
+        // Color: yellow when full, orange when depleting
+        fill_color: v4;
+        if is_sprinting {
+            fill_color = lerp(v4.{1, 0.3, 0, 1}, .{1, 0.8, 0, 1}, stamina_t);
+        }
+        else {
+            fill_color = .{1, 0.8, 0, 1};
+        }
+        UI.quad(fill_rect, white_sprite, fill_color);
+    }
+
     ao_start :: proc(using this: Player) {
         agent.lock_to_navmesh = true;
         agent->set_navmesh_to_lock_to(g_game_manager.main_navmesh);
@@ -1638,7 +1710,11 @@ Player :: class : Player_Base {
             register_ability(this, Dodge_Roll);
             register_ability(this, Slash_Ability);
             register_ability(this, Drop_Fuel_Ability);
+            register_ability(this, Sprint_Ability);
         }
+
+        // Initialize sprint stamina
+        sprint_stamina = MAX_SPRINT_STAMINA;
     }
 
     ao_update :: proc(using this: Player, dt: float) {
@@ -1650,11 +1726,17 @@ Player :: class : Player_Base {
 
         switch team {
             case .SURVIVOR: {
+                base_speed: float;
                 if is_player_carrying_canister(this) {
                     agent.movement_speed = 150;
                 }
                 else {
                     agent.movement_speed = 215;
+                }
+
+                // Apply sprint speed bonus
+                if is_sprinting {
+                    agent.movement_speed *= SPRINT_SPEED_BONUS;
                 }
             }
             case .ZOMBIE: {
@@ -1663,6 +1745,18 @@ Player :: class : Player_Base {
             case .SPECTATOR: {
                 agent.movement_speed = 400;
             }
+        }
+
+        // Sprint stamina drain/regen
+        if is_sprinting {
+            sprint_stamina -= dt * SPRINT_DRAIN_RATE;
+            if sprint_stamina <= 0 {
+                sprint_stamina = 0;
+                is_sprinting = false;
+            }
+        }
+        else {
+            sprint_stamina = min(sprint_stamina + dt * SPRINT_REGEN_RATE, MAX_SPRINT_STAMINA);
         }
 
         // Ammo regeneration
@@ -1700,6 +1794,7 @@ Player :: class : Player_Base {
                         case .SURVIVOR: {
                             draw_ability_button(this, Shoot_Ability, 0);
                             draw_ability_button(this, Dodge_Roll, 1);
+                            draw_ability_button(this, Sprint_Ability, 4);
                         }
                         case .ZOMBIE: {
                             draw_ability_button(this, Slash_Ability, 0);
@@ -1718,6 +1813,7 @@ Player :: class : Player_Base {
 
             if team == .SURVIVOR && !health.is_dead && this->will_draw_name() {
                 this->draw_ammo_bar();
+                this->draw_stamina_bar();
             }
 
             if this->is_local() && team == .SURVIVOR {
