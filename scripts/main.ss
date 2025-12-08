@@ -11,6 +11,7 @@ button_orange:   Texture_Asset;
 keybind_dodge_roll: Keybind;
 
 Game_State :: enum {
+    RESET_MAP;
     WAITING_FOR_PLAYERS;
     GAMEPLAY;
     END_GAME_SCREEN;
@@ -84,6 +85,19 @@ draw_small_game_text :: proc(str: string, args: [^]any = .{}) {
 
 ao_update :: proc(dt: float) {
     switch g_game.state {
+        case .RESET_MAP: {
+            foreach player: component_iterator(Player) {
+                player.team = .SURVIVOR;
+            }
+            foreach takeoff: component_iterator(Takeoff_Station) {
+                takeoff.initiated = false;
+            }
+            foreach takeoff: component_iterator(Align_Takeoff_Station) {
+                takeoff.is_aligned = false;
+                takeoff.locked_in = false;
+            }
+            g_game.state = .WAITING_FOR_PLAYERS;
+        }
         case .WAITING_FOR_PLAYERS: {
             player_count := 0;
             foreach player: component_iterator(Player) {
