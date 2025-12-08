@@ -137,17 +137,25 @@ draw_tutorial_arrow :: proc(camera_position: v2, camera_size: float, target_posi
     UI.push_layer(100);
     defer UI.pop_layer();
 
+
     max_distance := camera_size * 0.8;
-    offset := normalize_vector_to_radius(target_position - camera_position, max_distance) * max_distance;
-    arrow_position := camera_position + offset;
+    offset_to_target := normalize_vector_to_radius(target_position - camera_position, max_distance) * max_distance;
+    arrow_position := camera_position + offset_to_target;
     arrow_rect := Rect.{arrow_position, arrow_position}->grow(0.5);
+
+    mouse_position := get_mouse_world_position();
+    offset_to_mouse := normalize_vector_to_radius(mouse_position - arrow_position, 1.0);
+    mouse_fade_out := lerp(0.25, 1.0, length(offset_to_mouse));
+
+    UI.push_color_multiplier(.{1, 1, 1, mouse_fade_out});
+    defer UI.pop_color_multiplier();
 
     rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
         return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, .{0, 0, 1})->multiply(Matrix4.translate(-point)));
     }
 
     if length_squared(arrow_position - target_position) > 0.1 {
-        dir := normalize(offset);
+        dir := normalize(offset_to_target);
         rads := atan2(dir.y, dir.x);
         UI.push_matrix(rotate_about_point(arrow_rect->center(), to_degrees(rads)));
         defer UI.pop_matrix();
