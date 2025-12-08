@@ -72,7 +72,7 @@ ao_before_scene_load :: proc() {
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
     keybind_drop_fuel = Keybinds.register("Drop Fuel", .Q);
 
-    server_rng = rng_seed((get_real_time() * 1000000).(u64));
+    server_rng = rng_seed((get_real_time() * 1000000000).(u64));
 }
 
 ao_start :: proc() {
@@ -152,7 +152,10 @@ ao_update :: proc(dt: float) {
     switch g_game.state {
         case .RESET_MAP: {
             foreach player: component_iterator(Player) {
+                player->end_controller(true);
+                player->remove_ghost_reason("spectator");
                 player.team = .SURVIVOR;
+                respawn_player(player);
             }
             foreach takeoff: component_iterator(Takeoff_Station) {
                 takeoff.initiated = false;
@@ -182,8 +185,8 @@ ao_update :: proc(dt: float) {
                 }
 
                 // Fisher-Yates shuffle to randomize spawn points
-                for i: spawn_point_count-1..1 {
-                    j := rng_range_int(&server_rng, 0, i);
+                for i: 0..spawn_point_count-1 {
+                    j := rng_range_int(&server_rng, 0, spawn_point_count-1);
                     temp := spawn_points[i];
                     spawn_points[i] = spawn_points[j];
                     spawn_points[j] = temp;
@@ -256,17 +259,11 @@ ao_update :: proc(dt: float) {
         case .GAMEPLAY: {
             survivors_left := 0;
             foreach player: component_iterator(Player) {
-                if player.team == .SURVIVOR {
+                if player.team == .SURVIVOR && player.health.is_dead == false {
                     survivors_left += 1;
                 }
             }
             if survivors_left == 0 {
-                foreach player: component_iterator(Player) {
-                    player->remove_ghost_reason("spectator");
-                    player.team = .SURVIVOR;
-                    respawn_player(player);
-                }
-
                 g_game.winner = .ZOMBIE;
                 g_game.state = .END_GAME_SCREEN;
             }
@@ -384,6 +381,11 @@ ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
         case Takeoff_Station: interactable.listener.(Takeoff_Station)->on_interact(player);
         case Fuel_Canister: interactable.listener.(Fuel_Canister)->on_interact(player);
     }
+}
+
+ao_can_use_ability :: proc(player: Player, ability: Ability_Base) -> bool {
+    if player.health.is_dead return false;
+    return true;
 }
 
 Game_Manager :: class : Component {
@@ -532,6 +534,10 @@ Always_Aiming_Ability_Data :: struct {
 }
 
 update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_Params) -> Always_Aiming_Ability_Data {
+    if player.health.is_dead {
+        return .{};
+    }
+
     result: Always_Aiming_Ability_Data;
     if params.held {
         if length(params.drag_offset) > 0.1 {
@@ -549,12 +555,12 @@ update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_
 
                 interact := UI.button(UI.get_screen_rect(), .{}, .{}, "");
 
-                if params.can_use {
-                    if interact.hovering {
-                        result.aim = true;
-                        params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
-                    }
+                if interact.hovering {
+                    result.aim = true;
+                    params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
+                }
 
+                if params.can_use {
                     if interact.active {
                         result.shoot = true;
                     }
@@ -626,6 +632,10 @@ Dodge_Roll :: class : Ability_Base {
     }
 
     on_update :: proc(ability: Dodge_Roll, player: Player, params: Ability_Update_Params) {
+        if player.health.is_dead {
+            return;
+        }
+
         aim := false;
         activate := false;
         if player.device_kind == .PC {
@@ -735,7 +745,7 @@ Slash_Controller :: class : Controller_Base {
 
     controller_begin :: proc(using this: Slash_Controller) {
         disable_movement_inputs = true;
-        player->player_set_trigger("dodge_roll");
+        player->player_set_trigger("attack");
         original_friction = player.agent.friction;
         player.agent.friction = 0;
         player->set_facing_right(direction.x > 0);
@@ -744,7 +754,7 @@ Slash_Controller :: class : Controller_Base {
     controller_update :: proc(using this: Slash_Controller, dt: float) {
         foreach other: component_iterator(Player) {
             if other.team == player.team continue;
-            if in_range(other.entity.world_position - player.entity.world_position, 0.4) {
+            if in_range(other.entity.world_position - player.entity.world_position, 0.5) {
                 already_hit := false;
                 for i: 0..already_hit_list.elements.count-1 {
                     if already_hit_list.elements[i] == other {
@@ -1284,12 +1294,14 @@ Death_Controller :: class : Controller_Base {
     }
 
     controller_update :: proc(using this: Roll_Controller, dt: float) {
-        time_until_respawn := 5.0 - elapsed_time;
-        if player->is_local() {
-            draw_big_game_text("Respawning in %s", .{time_until_respawn.(int) + 1});
-        }
-        if time_until_respawn <= 0 {
-            end_controller(player, false);
+        if g_game.state == .GAMEPLAY {
+            time_until_respawn := 5.0 - elapsed_time;
+            if player->is_local() {
+                draw_big_game_text("Respawning in %s", .{time_until_respawn.(int) + 1});
+            }
+            if time_until_respawn <= 0 {
+                end_controller(player, false);
+            }
         }
     }
 
@@ -1307,6 +1319,12 @@ Death_Controller :: class : Controller_Base {
 //
 // Player, mostly UI
 //
+
+Notification :: class {
+    time: float;
+    text: string;
+    next: Notification;
+}
 
 Player :: class : Player_Base {
     team: Player_Team;
@@ -1328,12 +1346,50 @@ Player :: class : Player_Base {
 
     active_ability: Ability_Base;
 
+    notifications: List(Notification);
+
+    first_notification: Notification;
+    last_notification: Notification;
+
+    add_notification :: proc(using this: Player, text: string) {
+        notification := new(Notification);
+        notification.text = text;
+        if first_notification == null {
+            first_notification = notification;
+            last_notification = notification;
+        }
+        else {
+            last_notification.next = notification;
+            last_notification = notification;
+        }
+    }
+
+    update_notifications :: proc(using this: Player, dt: float) {
+        notification := first_notification;
+        if notification == null return;
+
+        notification.time += dt;
+        if notification.time > 3.0 {
+            first_notification = notification.next;
+            if first_notification == null {
+                last_notification = null;
+            }
+        }
+        notification = first_notification;
+        if notification == null return;
+
+        draw_big_game_text(notification.text);
+    }
+
     get_max_food :: proc(using this: Player) -> int {
         return 8 + (stomach_stat - 1) * 3;
     }
 
     take_damage :: proc(using this: Player, damage: int) {
         if health.is_dead {
+            return;
+        }
+        if team == .SPECTATOR {
             return;
         }
         health->take_damage(damage);
@@ -1785,6 +1841,7 @@ Player :: class : Player_Base {
             }
         }
 
+        this->update_notifications(dt);
     }
 
     ao_end :: proc(player: Player) {
@@ -2201,7 +2258,7 @@ Food_Projectile :: class : Component {
     ao_start :: proc(using this: Food_Projectile) {
         spawn_time = get_time();
         if hit_radius == 0 {
-            hit_radius = 0.4;
+            hit_radius = 0.5;
         }
 
         rng := rng_seed(entity.id);
@@ -2317,7 +2374,9 @@ Align_Takeoff_Station :: class : Component {
                 if aligned_timer <= 0 {
                     aligned_timer = 0;
                     is_aligned = false;
-                    Notifier.notify(format_string("% alignment lost!", .{axis}));
+                    foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                        player->add_notification(format_string("% alignment lost!", .{axis}));
+                    }
                 }
             }
         }
@@ -2328,16 +2387,22 @@ Align_Takeoff_Station :: class : Component {
     }
 
     on_interact :: proc(using this: Align_Takeoff_Station, player: Player) {
-        Notifier.notify(format_string("% axis aligned!", .{axis}));
         is_aligned = true;
         aligned_timer = 4;
         if other.is_aligned {
             // both are aligned!
             locked_in = true;
             other.locked_in = true;
-            Notifier.notify("Both axes aligned!");
+            foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                player->add_notification("Both axes aligned!");
+            }
 
             complete_current_task();
+        }
+        else {
+            foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                player->add_notification(format_string("% axis aligned!", .{axis}));
+            }
         }
     }
 }
@@ -2371,7 +2436,7 @@ Takeoff_Station :: class : Component {
     }
 
     on_interact :: proc(using this: Takeoff_Station, player: Player) {
-        Notifier.notify("Takeoff initiated!");
+        player->add_notification("Takeoff initiated!");
         initiated = true;
         takeoff_timer = 10;
     }
@@ -2423,12 +2488,18 @@ Fuel_Canister :: class : Component {
                 if g_game_manager.ship_navmesh->try_find_closest_point_on_navmesh(carrier.entity.world_position, &point_in_ship) {
                     if in_range(point_in_ship - carrier.entity.world_position, 0.1) {
                         g_game.fuel_deposited += 1;
-                        Notifier.notify(format_string("Fuel deposited! (% / %)", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
 
                         // Check if task is complete
                         if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
-                            Notifier.notify("All fuel collected! Ship is ready!");
+                            foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                                player->add_notification("All fuel collected!");
+                            }
                             complete_current_task();
+                        }
+                        else {
+                            foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                                player->add_notification(format_string("Fuel deposited! (% / %)", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
+                            }
                         }
 
                         destroy_entity(entity);
@@ -2482,7 +2553,7 @@ get_player_canister :: proc(player: Player) -> Fuel_Canister {
 pickup_canister :: proc(using canister: Fuel_Canister, player: Player) {
     is_picked_up = true;
     carrier = player;
-    Notifier.notify("Picked up fuel canister! Bring it to the ship.");
+    player->add_notification("Bring the fuel canister to the ship!");
 }
 
 drop_canister :: proc(using canister: Fuel_Canister, position: v2) {
