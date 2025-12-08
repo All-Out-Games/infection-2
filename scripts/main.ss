@@ -55,7 +55,7 @@ complete_current_task :: proc() {
 
 server_rng: u64;
 
-ROUND_COUNTDOWN_TIMER                           :: 3;
+ROUND_COUNTDOWN_TIMER                           :: 10;
 ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
 
 g_game_manager: Game_Manager;
