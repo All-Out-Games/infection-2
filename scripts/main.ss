@@ -750,7 +750,7 @@ Drop_Fuel_Ability :: class : Ability_Base {
 MAX_SPRINT_STAMINA :: 1.0;
 SPRINT_DRAIN_RATE :: 0.5;
 SPRINT_REGEN_RATE :: 0.2;
-SPRINT_SPEED_BONUS :: 1.25;
+SPRINT_SPEED_BONUS :: 1.35;
 
 Sprint_Ability :: class : Ability_Base {
     on_init :: proc(ability: Sprint_Ability) {
