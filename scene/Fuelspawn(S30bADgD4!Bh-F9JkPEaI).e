@@ -5,8 +5,8 @@
   "name": "Fuel spawn",
   "local_enabled": true,
   "local_position": {
-    "X": -20.2615699768066406,
-    "Y": -13.3518619537353516
+    "X": -18.4819068908691406,
+    "Y": -13.9451847076416016
   },
   "local_rotation": 0,
   "local_scale": {
