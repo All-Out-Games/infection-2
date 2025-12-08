@@ -1,5 +1,14 @@
 [
   {
+    "id": "fuel_canister.png",
+    "texture": {
+      "pivot": [
+        0.0481060743331909,
+        -0.6330597400665283
+      ]
+    }
+  },
+  {
     "id": "map.png",
     "texture": {
       "resample_multiplier": 1

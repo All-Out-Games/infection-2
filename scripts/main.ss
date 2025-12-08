@@ -26,12 +26,14 @@ Player_Team :: enum {
 g_game: struct {
     state: Game_State;
 
-    tasks: [2]Task;
+    tasks: [3]Task;
     current_task: Task;
     current_task_index: int;
 
     winner: Player_Team;
     end_game_screen_timer: float;
+
+    fuel_deposited: int;
 };
 
 complete_current_task :: proc() {
@@ -46,7 +48,7 @@ complete_current_task :: proc() {
 
 server_rng: u64;
 
-ROUND_COUNTDOWN_TIMER                           :: 10;
+ROUND_COUNTDOWN_TIMER                           :: 3;
 ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
 
 player_count_last_frame: int;
@@ -54,7 +56,7 @@ round_countdown_timer: float;
 
 g_game_manager: Game_Manager;
 
-ao_start :: proc() {
+ao_before_scene_load :: proc() {
     white_sprite    = get_asset(Texture_Asset, "$AO/white.png");
     modal_bg_sprite = get_asset(Texture_Asset, "ui/modal_simple_white1.png");
     button_green    = get_asset(Texture_Asset, "ui/button_large_green1.png");
@@ -67,6 +69,12 @@ ao_start :: proc() {
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
 
     server_rng = rng_seed((get_time() * 1000000).(u64));
+}
+
+ao_start :: proc() {
+    foreach spawn: component_iterator(Fuel_Spawn_Point) {
+        spawn.entity->get_component(Sprite_Renderer).enabled = false;
+    }
 }
 
 draw_big_game_text :: proc(str: string, args: [^]any = .{}) {
@@ -95,6 +103,43 @@ ao_update :: proc(dt: float) {
             foreach takeoff: component_iterator(Align_Takeoff_Station) {
                 takeoff.is_aligned = false;
                 takeoff.locked_in = false;
+            }
+            {
+                // Destroy any existing spawned canisters
+                foreach fuel: component_iterator(Fuel_Canister) {
+                    destroy_entity(fuel.entity);
+                }
+
+                // Count available spawn points
+                spawn_point_count := 0;
+                foreach spawn_point: component_iterator(Fuel_Spawn_Point) {
+                    spawn_point_count += 1;
+                }
+
+                // Collect all spawn points into an array
+                spawn_points := new(Fuel_Spawn_Point, spawn_point_count);
+                spawn_index := 0;
+                foreach spawn_point: component_iterator(Fuel_Spawn_Point) {
+                    spawn_points[spawn_index] = spawn_point;
+                    spawn_index += 1;
+                }
+
+                // Fisher-Yates shuffle to randomize spawn points
+                for i: spawn_point_count-1..1 {
+                    j := rng_range_int(&server_rng, 0, i);
+                    temp := spawn_points[i];
+                    spawn_points[i] = spawn_points[j];
+                    spawn_points[j] = temp;
+                }
+
+                // Spawn canisters at the first REQUIRED_FUEL_CANISTERS spawn points
+                canisters_to_spawn := min(REQUIRED_FUEL_CANISTERS, spawn_point_count);
+                canister_prefab := get_asset(Prefab_Asset, "fuel_canister.prefab");
+                for i: 0..canisters_to_spawn-1 {
+                    spawn_point := spawn_points[i];
+                    canister_entity := instantiate(canister_prefab);
+                    canister_entity->set_local_position(spawn_point.entity.world_position);
+                }
             }
             g_game.state = .WAITING_FOR_PLAYERS;
         }
@@ -143,8 +188,9 @@ ao_update :: proc(dt: float) {
                         respawn_player(player);
                     }
 
-                    g_game.tasks[0] = .ALIGN_TAKEOFF;
-                    g_game.tasks[1] = .TAKEOFF;
+                    g_game.tasks[0] = .FUEL_CANISTERS;
+                    g_game.tasks[1] = .ALIGN_TAKEOFF;
+                    g_game.tasks[2] = .TAKEOFF;
                     g_game.current_task_index = 0;
                     g_game.current_task = g_game.tasks[g_game.current_task_index];
                 }
@@ -171,6 +217,21 @@ ao_update :: proc(dt: float) {
                 if g_game.current_task_index >= g_game.tasks.count {
                     g_game.winner = .SURVIVOR;
                     g_game.state = .END_GAME_SCREEN;
+                }
+                else {
+                    // Draw current task objective
+                    switch g_game.current_task {
+                        case .FUEL_CANISTERS: {
+                            draw_big_game_text("Collect Fuel Canisters");
+                            draw_small_game_text("Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                        }
+                        case .ALIGN_TAKEOFF: {
+                            draw_big_game_text("Align Ship Systems");
+                        }
+                        case .TAKEOFF: {
+                            // Takeoff_Station handles its own UI
+                        }
+                    }
                 }
             }
         }
@@ -218,10 +279,14 @@ respawn_player :: proc(using player: Player) {
 }
 
 ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> bool {
+    if player.health.is_dead {
+        return false;
+    }
     if interactable.listener != null switch #object_type(interactable.listener) {
         case Sell_Zone: return interactable.listener.(Sell_Zone)->can_use(player);
         case Align_Takeoff_Station: return interactable.listener.(Align_Takeoff_Station)->can_use(player);
         case Takeoff_Station: return interactable.listener.(Takeoff_Station)->can_use(player);
+        case Fuel_Canister: return interactable.listener.(Fuel_Canister)->can_use(player);
     }
     return true;
 }
@@ -231,12 +296,15 @@ ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
         case Sell_Zone: interactable.listener.(Sell_Zone)->on_interact(player);
         case Align_Takeoff_Station: interactable.listener.(Align_Takeoff_Station)->on_interact(player);
         case Takeoff_Station: interactable.listener.(Takeoff_Station)->on_interact(player);
+        case Fuel_Canister: interactable.listener.(Fuel_Canister)->on_interact(player);
     }
 }
 
 Game_Manager :: class : Component {
     survivor_spawn: Entity @ao_serialize;
     zombie_spawn:   Entity @ao_serialize;
+    main_navmesh:   Navmesh @ao_serialize;
+    ship_navmesh:   Navmesh @ao_serialize;
 
     ao_start :: proc(using this: Game_Manager) {
         g_game_manager = this;
@@ -1167,6 +1235,9 @@ Player :: class : Player_Base {
     }
 
     ao_start :: proc(using this: Player) {
+        agent.lock_to_navmesh = true;
+        agent->set_navmesh_to_lock_to(g_game_manager.main_navmesh);
+
         switch g_game.state {
             case .GAMEPLAY: {
                 team = .SPECTATOR;
@@ -1197,7 +1268,12 @@ Player :: class : Player_Base {
     ao_update :: proc(using this: Player, dt: float) {
         switch team {
             case .SURVIVOR: {
-                agent.movement_speed = 250;
+                if is_player_carrying_canister(this) {
+                    agent.movement_speed = 175;
+                }
+                else {
+                    agent.movement_speed = 250;
+                }
             }
             case .ZOMBIE: {
                 agent.movement_speed = 325;
@@ -2054,6 +2130,7 @@ shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, team: Pl
 Task :: enum {
     NONE;
 
+    FUEL_CANISTERS;
     ALIGN_TAKEOFF;
     TAKEOFF;
 }
@@ -2146,6 +2223,120 @@ Takeoff_Station :: class : Component {
         initiated = true;
         takeoff_timer = 10;
     }
+}
+
+//
+// Fuel Canister Task
+//
+
+REQUIRED_FUEL_CANISTERS :: 3;
+
+Fuel_Spawn_Point :: class : Component {
+    // Just a marker component to indicate a potential fuel spawn location
+    // Place these around the map in the editor
+}
+
+Fuel_Canister :: class : Component {
+    fuel_sprite: Sprite_Renderer @ao_serialize;
+    shadow_sprite: Sprite_Renderer @ao_serialize;
+    interactable: Interactable @ao_serialize;
+
+    is_picked_up: bool;
+    carrier: Player;
+    last_carrier_position: v2;
+    shadow_scale: v2;
+
+    ao_start :: proc(using this: Fuel_Canister) {
+        interactable.listener = this;
+        shadow_scale = shadow_sprite.entity.local_scale;
+    }
+
+    ao_late_update :: proc(using this: Fuel_Canister, dt: float) {
+        if is_picked_up && carrier != null {
+            if alive(carrier) {
+                last_carrier_position = carrier.entity.world_position;
+            }
+            if !alive(carrier) || carrier.health.is_dead {
+                // Carrier died or disconnected, drop the canister
+                drop_canister(this, last_carrier_position);
+            }
+            else {
+                // Follow the carrier
+                vector := normalize_vector_to_radius(entity.local_position - carrier.entity.local_position, 1);
+                target_position := carrier.entity.local_position + vector;
+                new_position := lerp(entity.local_position, target_position, 0.25);
+                entity->set_local_position(new_position);
+
+                point_in_ship: v2;
+                if g_game_manager.ship_navmesh->try_find_closest_point_on_navmesh(carrier.entity.world_position, &point_in_ship) {
+                    if in_range(point_in_ship - carrier.entity.world_position, 0.1) {
+                        g_game.fuel_deposited += 1;
+                        Notifier.notify(format_string("Fuel deposited! (% / %)", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
+
+                        // Check if task is complete
+                        if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
+                            Notifier.notify("All fuel collected! Ship is ready!");
+                            complete_current_task();
+                        }
+
+                        destroy_entity(entity);
+                    }
+                }
+            }
+        }
+
+        fuel_hover_position := v2.{0, 0};
+        new_shadow_scale := shadow_scale;
+        if is_picked_up {
+            t := PI * get_time();
+            fuel_hover_position.y = 0.4 + sin(t) * 0.2;
+            new_shadow_scale = shadow_scale / (1.0 + fuel_hover_position.y);
+        }
+        fuel_sprite.entity->set_local_position(fuel_hover_position);
+        fuel_sprite.depth_offset = -fuel_hover_position.y;
+        shadow_sprite.entity->set_local_scale(new_shadow_scale);
+    }
+
+    can_use :: proc(using this: Fuel_Canister, player: Player) -> bool {
+        return g_game.current_task == .FUEL_CANISTERS
+            && player.team == .SURVIVOR
+            && !is_picked_up
+            && !is_player_carrying_canister(player);
+    }
+
+    on_interact :: proc(using this: Fuel_Canister, player: Player) {
+        pickup_canister(this, player);
+    }
+}
+
+is_player_carrying_canister :: proc(player: Player) -> bool {
+    foreach canister: component_iterator(Fuel_Canister) {
+        if canister.carrier == player {
+            return true;
+        }
+    }
+    return false;
+}
+
+get_player_canister :: proc(player: Player) -> Fuel_Canister {
+    foreach canister: component_iterator(Fuel_Canister) {
+        if canister.carrier == player {
+            return canister;
+        }
+    }
+    return null;
+}
+
+pickup_canister :: proc(using canister: Fuel_Canister, player: Player) {
+    is_picked_up = true;
+    carrier = player;
+    Notifier.notify("Picked up fuel canister! Bring it to the ship.");
+}
+
+drop_canister :: proc(using canister: Fuel_Canister, position: v2) {
+    entity->set_local_position(position);
+    is_picked_up = false;
+    carrier = null;
 }
 
 //
