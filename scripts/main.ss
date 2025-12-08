@@ -58,6 +58,9 @@ server_rng: u64;
 ROUND_COUNTDOWN_TIMER                           :: 10;
 ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
 
+MAX_AMMO        :: 3;
+AMMO_PER_SECOND :: 0.5;
+
 g_game_manager: Game_Manager;
 
 ao_before_scene_load :: proc() {
@@ -442,6 +445,7 @@ Game_Manager :: class : Component {
     zombie_spawn:   Entity @ao_serialize;
     main_navmesh:   Navmesh @ao_serialize;
     ship_navmesh:   Navmesh @ao_serialize;
+    bullet_navmesh: Navmesh @ao_serialize;
     fuel_delivery_tutorial_arrow_point: Entity @ao_serialize;
 
     ao_start :: proc(using this: Game_Manager) {
@@ -635,10 +639,23 @@ Shoot_Ability :: class : Ability_Base {
     }
 
     on_update :: proc(ability: Shoot_Ability, player: Player, params: Ability_Update_Params) {
-        if update_always_aiming_ability(player, &params).shoot {
-            if params.can_use {
+        aiming := update_always_aiming_ability(player, &params);
+        if params.can_use {
+            if aiming.shoot {
                 ability.current_cooldown = 0.5;
-                shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.75, player.team, player.entity);
+                sfx := default_sfx_desc();
+                sfx->set_position(player.entity.local_position);
+                sfx.volume_perturb = 0.2;
+                sfx.speed_perturb = 0.1;
+                if player.current_ammo > 0 {
+                    player.current_ammo -= 1;
+                    player.current_ammo_float -= 1;
+                    shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.75, player.team, player.entity);
+                    SFX.play(get_asset(SFX_Asset, "sfx/shoot.wav"), sfx);
+                }
+                else {
+                    SFX.play(get_asset(SFX_Asset, "sfx/no_ammo.wav"), sfx);
+                }
             }
         }
     }
@@ -739,6 +756,14 @@ Roll_Controller :: class : Controller_Base {
     original_friction: float;
 
     controller_begin :: proc(using this: Roll_Controller) {
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(player.entity.world_position);
+            sfx.volume = 0.5;
+            sfx.volume_perturb = 0.1;
+            sfx.speed_perturb = 0.1;
+            SFX.play(get_asset(SFX_Asset, "sfx/dodge_roll.wav"), sfx);
+        }
         disable_movement_inputs = true;
         player->player_set_trigger("dodge_roll");
         original_friction = player.agent.friction;
@@ -796,6 +821,14 @@ Slash_Controller :: class : Controller_Base {
         original_friction = player.agent.friction;
         player.agent.friction = 0;
         player->set_facing_right(direction.x > 0);
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(player.entity.world_position);
+            sfx.volume = 0.75;
+            sfx.volume_perturb = 0.1;
+            sfx.speed_perturb = 0.2;
+            SFX.play(get_asset(SFX_Asset, "sfx/slash.wav"), sfx);
+        }
     }
 
     controller_update :: proc(using this: Slash_Controller, dt: float) {
@@ -814,6 +847,14 @@ Slash_Controller :: class : Controller_Base {
                 }
                 other->take_damage(1);
                 already_hit_list->append(other);
+                {
+                    sfx := default_sfx_desc();
+                    sfx->set_position(other.entity.world_position);
+                    sfx.volume = 0.75;
+                    sfx.volume_perturb = 0.1;
+                    sfx.speed_perturb = 0.2;
+                    SFX.play(get_asset(SFX_Asset, "sfx/stabbed.wav"), sfx);
+                }
             }
         }
 
@@ -1339,6 +1380,13 @@ Death_Controller :: class : Controller_Base {
         freeze_player = true;
         player->add_name_invisibility_reason("death");
         player->player_set_trigger("death");
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(player.entity.world_position);
+            sfx.volume = 0.75;
+            sfx.volume_perturb = 0.1;
+            SFX.play(get_asset(SFX_Asset, "sfx/death.wav"), sfx);
+        }
     }
 
     controller_update :: proc(using this: Death_Controller, dt: float) {
@@ -1396,6 +1444,10 @@ Player :: class : Player_Base {
 
     notifications: List(Notification);
 
+    // Ammo system
+    current_ammo_float: float;
+    current_ammo: int;
+
     first_notification: Notification;
     last_notification: Notification;
 
@@ -1430,6 +1482,46 @@ Player :: class : Player_Base {
         }
     }
 
+    draw_ammo_bar :: proc(using this: Player) {
+        UI.push_world_draw_context();
+        defer UI.pop_draw_context();
+
+        UI.push_z(entity.world_position.y-0.001);
+        defer UI.pop_z();
+
+        bar_pos := entity.world_position + v2.{0, 1.75};
+        bar_width := 0.8;
+        bar_height := 0.2;
+        segment_gap := 0.04;
+
+        // Background bar
+        bar_rect := Rect.{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
+        UI.quad(bar_rect, white_sprite, .{0.01, 0.01, 0.01, 1});
+        inner_bar := bar_rect->inset(0.04);
+        UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
+
+        full_ammo_t := current_ammo_float / MAX_AMMO.(float);
+        UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, .{0.1, 0.4, 0.4, 1});
+
+        // Calculate segment dimensions
+        segment_width := inner_bar->width() / MAX_AMMO.(float);
+
+        // Draw each segment
+        step_size := inner_bar->width() / MAX_AMMO.(float);
+        base_segment_rect := inner_bar->left_rect()->grow_unscaled(0, segment_width, 0, 0);
+        base_notch_rect   := inner_bar->left_rect()->grow(0, segment_gap, 0, segment_gap);
+        for i: 0..MAX_AMMO-1 {
+            if i < current_ammo {
+                segment_rect := base_segment_rect->offset_unscaled(segment_width * i.(float), 0);
+                UI.quad(segment_rect, white_sprite, .{0.2, 0.9, 0.9, 1});
+            }
+        }
+        for i: 0..MAX_AMMO-2 {
+            notch_rect := base_notch_rect->offset_unscaled(segment_width * (i+1).(float), 0);
+            UI.quad(notch_rect, white_sprite, .{0.2, 0.01, 0.01, 1});
+        }
+    }
+
     ao_start :: proc(using this: Player) {
         agent.lock_to_navmesh = true;
         agent->set_navmesh_to_lock_to(g_game_manager.main_navmesh);
@@ -1452,6 +1544,10 @@ Player :: class : Player_Base {
         health = entity->add_component(Health_Component);
         health->set_max_health(1, true);
         health.health_bar_offset = .{0, 1.75};
+
+        // Initialize ammo system
+        current_ammo = 0;
+        current_ammo_float = 0;
 
         {
             register_ability(this, Interact_Ability);
@@ -1485,6 +1581,10 @@ Player :: class : Player_Base {
                 agent.movement_speed = 400;
             }
         }
+
+        // Ammo regeneration
+        current_ammo_float = min(current_ammo_float + dt * AMMO_PER_SECOND, MAX_AMMO.(float));
+        current_ammo = current_ammo_float.(int);
 
         {
             name_color := v4.{1, 1, 1, 1};
@@ -1533,8 +1633,8 @@ Player :: class : Player_Base {
             UI.push_world_draw_context();
             defer UI.pop_draw_context();
 
-            if !health.is_dead && this->will_draw_name() {
-                health->draw_health_bar(entity.world_position.y-0.001);
+            if team == .SURVIVOR && !health.is_dead && this->will_draw_name() {
+                this->draw_ammo_bar();
             }
 
             if this->is_local() && team == .SURVIVOR {
@@ -2044,12 +2144,32 @@ Food_Projectile :: class : Component {
                 if in_range(player.entity.world_position - entity.world_position, hit_radius) {
                     player->take_damage(1);
                     destroy_self = true;
+                    {
+                        sfx := default_sfx_desc();
+                        sfx->set_position(player.entity.world_position);
+                        sfx.volume = 0.75;
+                        sfx.volume_perturb = 0.1;
+                        sfx.speed_perturb = 0.2;
+                        SFX.play(get_asset(SFX_Asset, "sfx/stabbed.wav"), sfx);
+                    }
                     break;
                 }
             }
         }
+
         if time_alive >= lifetime {
             destroy_self = true;
+        }
+
+        if !destroy_self {
+            point: v2;
+            // todo(josh): this crashes!!!:
+            // if Game_Manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
+            if g_game_manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
+                if !in_range(point - entity.world_position, 0.01) {
+                    destroy_self = true;
+                }
+            }
         }
 
         if destroy_self {
