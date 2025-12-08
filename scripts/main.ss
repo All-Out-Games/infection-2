@@ -700,9 +700,11 @@ Shoot_Ability :: class : Ability_Base {
                     player.current_ammo -= 1;
                     player.current_ammo_float -= 1;
                     shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.75, player.team, player.entity);
+                    player.time_last_shot[player.current_ammo] = get_time();
                     SFX.play(get_asset(SFX_Asset, "sfx/shoot.wav"), sfx);
                 }
                 else {
+                    player.last_failed_to_shoot_time = get_time();
                     SFX.play(get_asset(SFX_Asset, "sfx/no_ammo.wav"), sfx);
                 }
             }
@@ -1485,6 +1487,9 @@ Player :: class : Player_Base {
 
     upgrade_menu_open: bool;
 
+    time_last_shot: [MAX_AMMO]float;
+    last_failed_to_shoot_time: float;
+
     upgrade_menu_tab_index: int;
 
     health: Health_Component;
@@ -1541,34 +1546,51 @@ Player :: class : Player_Base {
         bar_pos := entity.world_position + v2.{0, 1.75};
         bar_width := 0.8;
         bar_height := 0.2;
-        segment_gap := 0.04;
+        segment_gap := 0.02;
+
+        bar_rect := Rect.{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
 
         // Background bar
-        bar_rect := Rect.{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
-        UI.quad(bar_rect, white_sprite, .{0.01, 0.01, 0.01, 1});
-        inner_bar := bar_rect->inset(0.04);
-        UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
+        {
+            jitter := Ease.jitter(Ease.T(get_time() - last_failed_to_shoot_time, 0.5), 8);
 
-        full_ammo_t := current_ammo_float / MAX_AMMO.(float);
-        UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, .{0.1, 0.4, 0.4, 1});
+            bar_rect_jitter := bar_rect->offset(jitter * 0.15, 0);
 
-        // Calculate segment dimensions
-        segment_width := inner_bar->width() / MAX_AMMO.(float);
+            UI.quad(bar_rect_jitter, white_sprite, .{0.01, 0.01, 0.01, 1});
+            inner_bar := bar_rect_jitter->inset(0.04);
+            UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
 
-        // Draw each segment
-        step_size := inner_bar->width() / MAX_AMMO.(float);
-        base_segment_rect := inner_bar->left_rect()->grow_unscaled(0, segment_width, 0, 0);
-        base_notch_rect   := inner_bar->left_rect()->grow(0, segment_gap, 0, segment_gap);
-        for i: 0..MAX_AMMO-1 {
-            if i < current_ammo {
+            // fill bar
+            full_ammo_t := current_ammo_float / MAX_AMMO.(float);
+            UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, .{0.1, 0.4, 0.4, 1});
+
+            // Calculate segment dimensions
+            segment_width := inner_bar->width() / MAX_AMMO.(float);
+
+            // Draw each segment
+            step_size := inner_bar->width() / MAX_AMMO.(float);
+            base_segment_rect := inner_bar->left_rect()->grow_unscaled(0, segment_width, 0, 0);
+            base_notch_rect   := inner_bar->left_rect()->grow(0, segment_gap, 0, segment_gap);
+            for i: 0..MAX_AMMO-1 {
                 segment_rect := base_segment_rect->offset_unscaled(segment_width * i.(float), 0);
-                UI.quad(segment_rect, white_sprite, .{0.2, 0.9, 0.9, 1});
+                if i < current_ammo {
+                    UI.quad(segment_rect, white_sprite, .{0.2, 0.9, 0.9, 1});
+                }
+
+                shoot_t := Ease.out_quart(Ease.T(get_time() - time_last_shot[i], 0.35));
+                no_ammo_rect := segment_rect->grow(0.2 * shoot_t);
+                UI.quad(no_ammo_rect, white_sprite, lerp(v4.{0, 1, 0, 1}, v4.{0, 1, 0, 0}, shoot_t));
+            }
+            for i: 0..MAX_AMMO-2 {
+                notch_rect := base_notch_rect->offset_unscaled(segment_width * (i+1).(float), 0);
+                UI.quad(notch_rect, white_sprite, .{0.2, 0.01, 0.01, 1});
             }
         }
-        for i: 0..MAX_AMMO-2 {
-            notch_rect := base_notch_rect->offset_unscaled(segment_width * (i+1).(float), 0);
-            UI.quad(notch_rect, white_sprite, .{0.2, 0.01, 0.01, 1});
-        }
+
+        // No ammo indicator
+        no_ammo_t := Ease.out_quart(Ease.T(get_time() - last_failed_to_shoot_time, 0.35));
+        no_ammo_rect := bar_rect->grow(0.2 * no_ammo_t);
+        UI.quad(no_ammo_rect, white_sprite, lerp(v4.{1, 0, 0, 1}, v4.{1, 0, 0, 0}, no_ammo_t));
     }
 
     ao_start :: proc(using this: Player) {
