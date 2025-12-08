@@ -25,6 +25,8 @@ Player_Team :: enum {
     SPECTATOR;
 }
 
+all_zombie_spawns: List(Entity);
+
 g_game: struct {
     state: Game_State;
 
@@ -36,6 +38,9 @@ g_game: struct {
     end_game_screen_timer: float;
 
     fuel_deposited: int;
+
+    player_count_last_frame: int;
+    round_countdown_timer: float;
 };
 
 complete_current_task :: proc() {
@@ -52,9 +57,6 @@ server_rng: u64;
 
 ROUND_COUNTDOWN_TIMER                           :: 3;
 ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
-
-player_count_last_frame: int;
-round_countdown_timer: float;
 
 g_game_manager: Game_Manager;
 
@@ -75,7 +77,12 @@ ao_before_scene_load :: proc() {
     server_rng = rng_seed((get_real_time() * 1000000000).(u64));
 }
 
+Zombie_Spawn_Point :: class : Component { }
+
 ao_start :: proc() {
+    foreach spawn: component_iterator(Zombie_Spawn_Point) {
+        all_zombie_spawns->append(spawn.entity);
+    }
     foreach spawn: component_iterator(Fuel_Spawn_Point) {
         spawn.entity->get_component(Sprite_Renderer).enabled = false;
     }
@@ -208,7 +215,7 @@ ao_update :: proc(dt: float) {
             foreach player: component_iterator(Player) {
                 player_count += 1;
             }
-            defer player_count_last_frame = player_count;
+            defer g_game.player_count_last_frame = player_count;
 
             REQUIRED_PLAYERS :: 3;
             if player_count < REQUIRED_PLAYERS {
@@ -216,21 +223,21 @@ ao_update :: proc(dt: float) {
                 draw_small_game_text("% / %", .{player_count, REQUIRED_PLAYERS});
             }
             else {
-                if player_count_last_frame < REQUIRED_PLAYERS {
-                    round_countdown_timer = ROUND_COUNTDOWN_TIMER.(float);
+                if g_game.player_count_last_frame < REQUIRED_PLAYERS {
+                    g_game.round_countdown_timer = ROUND_COUNTDOWN_TIMER.(float);
                 }
                 else {
-                    if player_count_last_frame != player_count {
-                        round_countdown_timer = max(round_countdown_timer, ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES.(float));
+                    if g_game.player_count_last_frame != player_count {
+                        g_game.round_countdown_timer = max(g_game.round_countdown_timer, ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES.(float));
                     }
                 }
-                round_countdown_timer -= dt;
+                g_game.round_countdown_timer -= dt;
 
-                draw_big_game_text("Starting round in %s...", .{round_countdown_timer.(int) + 1});
+                draw_big_game_text("Starting round in %s...", .{g_game.round_countdown_timer.(int) + 1});
                 draw_small_game_text("% players", .{player_count});
 
-                if round_countdown_timer <= 0 {
-                    round_countdown_timer = 0;
+                if g_game.round_countdown_timer <= 0 {
+                    g_game.round_countdown_timer = 0;
                     players := new(Player, player_count);
                     player_index := 0;
                     foreach player: component_iterator(Player) {
@@ -353,10 +360,35 @@ respawn_player :: proc(using player: Player) {
 
     switch team {
         case .SURVIVOR: {
-            player.entity->set_local_position(g_game_manager.survivor_spawn.world_position);
+            offset := v2.{rng_range_float(&server_rng, -3.5, 3.5), rng_range_float(&server_rng, -2, 2)};
+            player.entity->set_local_position(g_game_manager.survivor_spawn.world_position + offset);
         }
         case .ZOMBIE: {
-            player.entity->set_local_position(g_game_manager.zombie_spawn.world_position);
+            valid_spawns: List(Entity);
+            for i: 0..all_zombie_spawns.elements.count-1 {
+                spawn := all_zombie_spawns.elements[i];
+                spawn_ok := true;
+                foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                    if in_range(spawn.world_position - player.entity.world_position, 10) {
+                        spawn_ok = false;
+                        break;
+                    }
+                }
+                if spawn_ok {
+                    valid_spawns->append(spawn);
+                }
+            }
+
+            if valid_spawns.elements.count > 0 {
+                index := rng_range_int(&server_rng, 0, valid_spawns.elements.count-1);
+                spawn := valid_spawns.elements[index];
+                player.entity->set_local_position(spawn.world_position);
+            }
+            else {
+                index := rng_range_int(&server_rng, 0, all_zombie_spawns.elements.count-1);
+                spawn := all_zombie_spawns.elements[index];
+                player.entity->set_local_position(spawn.world_position);
+            }
         }
     }
 }
@@ -718,7 +750,7 @@ Slash_Ability :: class : Ability_Base {
         ability.name = "Slash";
         // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
         ability.is_aimed_ability = true;
-        ability.keybind_override = keybind_dodge_roll;
+        ability.disable_keybind = true;
     }
 
     can_use :: proc(ability: Slash_Ability, player: Player) -> bool {
