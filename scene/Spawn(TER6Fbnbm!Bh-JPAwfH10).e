@@ -10,8 +10,8 @@
   },
   "local_rotation": 0,
   "local_scale": {
-    "X": 1,
-    "Y": 1
+    "X": 0.2500000000000000,
+    "Y": 0.2500000000000000
   },
   "previous_sibling": "5366319263760900:1765170054010086100",
   "next_sibling": "5366854753250657:1765170194926836500",
@@ -24,5 +24,19 @@
   "internal_component_type": "Zombie_Spawn_Point",
   "data": {
 
+  }
+},
+{
+  "cid": 2,
+  "aoid": "5984054157914894:1765407424888935300",
+  "component_type": "Internal_Component",
+  "internal_component_type": "Sprite_Renderer",
+  "data": {
+    "texture": "$AO/circle.png",
+    "tint": {
+      "Y": 0,
+      "Z": 0
+    },
+    "editor_only": true
   }
 }

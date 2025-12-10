@@ -32,6 +32,7 @@
   "component_type": "Internal_Component",
   "internal_component_type": "Sprite_Renderer",
   "data": {
-    "texture": "fuel_canister.png"
+    "texture": "fuel_canister.png",
+    "editor_only": true
   }
 }

@@ -93,12 +93,6 @@ ao_start :: proc() {
     foreach spawn: component_iterator(Zombie_Spawn_Point) {
         all_zombie_spawns->append(spawn.entity);
     }
-    foreach spawn: component_iterator(Fuel_Spawn_Point) {
-        spawn.entity->get_component(Sprite_Renderer).enabled = false;
-    }
-    foreach spawn: component_iterator(Beacon_Spawn_Point) {
-        spawn.entity->get_component(Sprite_Renderer).enabled = false;
-    }
 }
 
 draw_big_game_text :: proc(str: string, args: [^]any = .{}) {

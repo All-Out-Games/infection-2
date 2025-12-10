@@ -10,8 +10,8 @@
   },
   "local_rotation": 0,
   "local_scale": {
-    "X": 2,
-    "Y": 2
+    "X": 0.2500000000000000,
+    "Y": 0.2500000000000000
   },
   "previous_sibling": "5253698141660919:1765140417195877000",
   "next_sibling": "5435529366311054:1765210483907718500",
@@ -32,6 +32,10 @@
   "component_type": "Internal_Component",
   "internal_component_type": "Sprite_Renderer",
   "data": {
-    "texture": "food_items/apple.png"
+    "texture": "$AO/circle.png",
+    "tint": {
+      "X": 0
+    },
+    "editor_only": true
   }
 }
