@@ -9,6 +9,8 @@ button_red:      Texture_Asset;
 button_orange:   Texture_Asset;
 tutorial_arrow:  Texture_Asset;
 
+dust_spine: Spine_Asset;
+
 keybind_dodge_roll: Keybind;
 keybind_drop_fuel: Keybind;
 keybind_sprint: Keybind;
@@ -72,6 +74,8 @@ ao_before_scene_load :: proc() {
     button_red      = get_asset(Texture_Asset, "ui/button_large_red1.png");
     button_orange   = get_asset(Texture_Asset, "ui/button_large_yellow2.png");
     tutorial_arrow  = get_asset(Texture_Asset, "arrow.png");
+
+    dust_spine      = get_asset(Spine_Asset, "rigs/dust_running_spine/dust_running.spine");
 
     Economy.register_currency("Food", "icons/burger.png");
     Economy.register_currency("Coins", "icons/coin.png");
@@ -188,6 +192,15 @@ draw_tutorial_arrow :: proc(player: Player, target_position: v2, options: Tutori
             UI.quad(arrow_rect, tutorial_arrow);
         }
     }
+}
+
+draw_rect_grow_fade_out_effect :: proc(rect: Rect, time: float, color: v4) {
+    effect_t := Ease.out_quart(Ease.T(time, 0.35));
+    if effect_t >= 1 return;
+    growth := min(rect->width() * 0.5, rect->height() * 0.5) * effect_t;
+    effect_rect := rect->grow_unscaled(growth, growth, growth, growth);
+    color.w = 1 - effect_t;
+    UI.quad(effect_rect, white_sprite, color);
 }
 
 ao_update :: proc(dt: float) {
@@ -764,7 +777,6 @@ Drop_Fuel_Ability :: class : Ability_Base {
 }
 
 // Sprint ability - hold to move faster, uses stamina
-MAX_SPRINT_STAMINA :: 1.0;
 SPRINT_DRAIN_RATE :: 0.5;
 SPRINT_REGEN_RATE :: 0.2;
 SPRINT_SPEED_BONUS :: 1.35;
@@ -786,7 +798,7 @@ Sprint_Ability :: class : Ability_Base {
                 params.held = true;
             }
         }
-        if params.held && player.sprint_stamina > 0 && player.team == .SURVIVOR {
+        if params.held && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
             player.is_sprinting = true;
         }
         else {
@@ -1567,10 +1579,17 @@ Player :: class : Player_Base {
 
     // Sprint system
     sprint_stamina: float;
+    sprite_dust_timer: float;
     is_sprinting: bool;
+    sprint_exhausted: bool;
+    dust_serial: u64;
+    last_exhaust_recover_time: float;
+    last_exhaust_time: float;
 
     first_notification: Notification;
     last_notification: Notification;
+
+    running_state: State_Machine_State;
 
     add_notification :: proc(using this: Player, text: string) {
         notification := new(Notification);
@@ -1644,9 +1663,9 @@ Player :: class : Player_Base {
                     UI.quad(segment_rect, white_sprite, .{0.2, 0.9, 0.9, 1});
                 }
 
-                shoot_t := Ease.out_quart(Ease.T(get_time() - time_last_shot[i], 0.35));
-                no_ammo_rect := segment_rect->grow(0.2 * shoot_t);
-                UI.quad(no_ammo_rect, white_sprite, lerp(v4.{0, 1, 0, 1}, v4.{0, 1, 0, 0}, shoot_t));
+                UI.push_layer_relative(1);
+                defer UI.pop_layer();
+                draw_rect_grow_fade_out_effect(segment_rect, get_time() - time_last_shot[i], .{0, 1, 0, 1});
             }
             for i: 0..MAX_AMMO-2 {
                 notch_rect := base_notch_rect->offset_unscaled(segment_width * (i+1).(float), 0);
@@ -1680,18 +1699,33 @@ Player :: class : Player_Base {
         UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
 
         // Stamina fill
-        stamina_t := sprint_stamina / MAX_SPRINT_STAMINA;
-        fill_rect := inner_bar->subrect(0, 0, stamina_t, 1);
+        fill_rect := inner_bar->subrect(0, 0, sprint_stamina, 1);
 
         // Color: yellow when full, orange when depleting
         fill_color: v4;
-        if is_sprinting {
-            fill_color = lerp(v4.{1, 0.3, 0, 1}, .{1, 0.8, 0, 1}, stamina_t);
+        if sprint_exhausted {
+            fill_color = .{1, 0, 0, 1};
         }
         else {
-            fill_color = .{1, 0.8, 0, 1};
+            if is_sprinting {
+                fill_color = lerp(v4.{1, 0.3, 0, 1}, .{1, 0.8, 0, 1}, sprint_stamina);
+            }
+            else {
+                fill_color = lerp(v4.{1, 0.3, 0, 1}, .{0.3, 1, 0, 1}, sprint_stamina);
+            }
         }
         UI.quad(fill_rect, white_sprite, fill_color);
+
+        UI.push_layer_relative(1);
+        defer UI.pop_layer();
+
+        if sprint_exhausted {
+            time_since_exhaust := (get_time() - last_exhaust_time) * 0.5;
+            exhaust_time_loop := time_since_exhaust % 0.5;
+            draw_rect_grow_fade_out_effect(bar_rect, exhaust_time_loop,  .{1, 0, 0, 1});
+        }
+        time_since_recover := (get_time() - last_exhaust_recover_time) * 0.5;
+        draw_rect_grow_fade_out_effect(bar_rect, time_since_recover, .{0, 1, 0, 1});
     }
 
     ao_start :: proc(using this: Player) {
@@ -1731,7 +1765,13 @@ Player :: class : Player_Base {
         }
 
         // Initialize sprint stamina
-        sprint_stamina = MAX_SPRINT_STAMINA;
+        sprint_stamina = 1;
+
+        {
+            layer := animator.instance.state_machine->try_get_layer("main");
+            running_state = layer->try_get_state("Run_Fast");
+            assert(running_state != null, "failed to find running state");
+        }
     }
 
     ao_update :: proc(using this: Player, dt: float) {
@@ -1765,15 +1805,41 @@ Player :: class : Player_Base {
         }
 
         // Sprint stamina drain/regen
+        sprite_dust_timer = max(0.0, sprite_dust_timer - dt);
         if is_sprinting {
-            sprint_stamina -= dt * SPRINT_DRAIN_RATE;
-            if sprint_stamina <= 0 {
-                sprint_stamina = 0;
-                is_sprinting = false;
+            if sprite_dust_timer <= 0 {
+                sprite_dust_timer = 0.15;
+                dust_serial += 1;
+                dust_rng := rng_seed(dust_serial);
+                e := create_entity();
+                e->set_local_position(entity.world_position);
+                e->set_local_scale(entity.local_scale * 1.5);
+                animator := e->add_component(Spine_Animator);
+                brightness := rng_range_float(&dust_rng, 0.5, 1);
+                animator.instance.color_multiplier = .{brightness, brightness, brightness, 0.5};
+                animator.instance->set_skeleton(dust_spine);
+                animator.instance->set_animation("running_dust_poof", false, 0, 1);
+                e->queue_for_destruction(0.5);
+            }
+
+            running_state.speed = SPRINT_SPEED_BONUS;
+            if g_game.state == .GAMEPLAY { // no stamina in lobby
+                sprint_stamina -= dt * SPRINT_DRAIN_RATE;
+                if sprint_stamina <= 0 {
+                    sprint_stamina = 0;
+                    is_sprinting = false;
+                    sprint_exhausted = true;
+                    last_exhaust_time = get_time();
+                }
             }
         }
         else {
-            sprint_stamina = min(sprint_stamina + dt * SPRINT_REGEN_RATE, MAX_SPRINT_STAMINA);
+            running_state.speed = 1;
+            sprint_stamina = min(1.0, sprint_stamina + dt * SPRINT_REGEN_RATE);
+            if sprint_exhausted && sprint_stamina >= 1 {
+                sprint_exhausted = false;
+                last_exhaust_recover_time = get_time();
+            }
         }
 
         // Ammo regeneration
