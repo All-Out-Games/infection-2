@@ -388,47 +388,65 @@ ao_update :: proc(dt: float) {
                     local_player := Game.try_get_local_player();
 
                     // Draw current task objective
-                    switch g_game.current_task {
-                        case .FUEL_CANISTERS: {
-                            rect := begin_task_ui();
-                            draw_task_title(&rect, "Collect Fuel Canisters");
-                            draw_task_subtitle(&rect, "Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
-                        }
-                        case .RESTORE_BEACONS: {
-                            rect := begin_task_ui();
-                            draw_task_title(&rect, "Restore Beacons");
-                            draw_task_subtitle(&rect, "Beacons: % / %", .{g_game.beacons_restored, REQUIRED_BEACONS});
-                        }
-                        case .ALIGN_TAKEOFF: {
-                            rect := begin_task_ui();
-                            draw_task_title(&rect, "Align Ship Systems");
-                            yaw_aligned   := " ";
-                            pitch_aligned := " ";
-                            foreach align: component_iterator(Align_Takeoff_Station) {
-                                switch align.axis {
-                                    case .Yaw:   if align.is_aligned { yaw_aligned   = "X"; }
-                                    case .Pitch: if align.is_aligned { pitch_aligned = "X"; }
+                    if local_player != null {
+                        switch local_player.team {
+                            case .ZOMBIE: {
+                                survivors_left := 0;
+                                foreach player: component_iterator(Player) {
+                                    if player.team == .SURVIVOR && player.health.is_dead == false {
+                                        survivors_left += 1;
+                                    }
                                 }
-                            }
-                            draw_task_subtitle(&rect, "[%] Yaw aligned",   .{yaw_aligned});
-                            draw_task_subtitle(&rect, "[%] Pitch aligned", .{pitch_aligned});
-                        }
-                        case .TAKEOFF: {
-                            takeoff: Takeoff_Station;
-                            foreach c: component_iterator(Takeoff_Station) {
-                                takeoff = c;
-                                break;
-                            }
 
-                            rect := begin_task_ui();
-                            draw_task_title(&rect, "Take off!");
-                            x := " ";
-                            if takeoff.initiated {
-                                x = "X";
+                                rect := begin_task_ui();
+                                draw_task_title(&rect, "Eliminate all Survivors");
+                                draw_task_subtitle(&rect, "Survivors left: %", .{survivors_left});
                             }
-                            draw_task_subtitle(&rect, "[%] Takeoff initiated", .{x});
-                            if takeoff.initiated {
-                                draw_small_game_text("Takeoff in %{.1} seconds...", .{takeoff.takeoff_timer});
+                            case .SURVIVOR: {
+                                switch g_game.current_task {
+                                    case .FUEL_CANISTERS: {
+                                        rect := begin_task_ui();
+                                        draw_task_title(&rect, "Collect Fuel Canisters");
+                                        draw_task_subtitle(&rect, "Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                                    }
+                                    case .RESTORE_BEACONS: {
+                                        rect := begin_task_ui();
+                                        draw_task_title(&rect, "Restore Beacons");
+                                        draw_task_subtitle(&rect, "Beacons: % / %", .{g_game.beacons_restored, REQUIRED_BEACONS});
+                                    }
+                                    case .ALIGN_TAKEOFF: {
+                                        rect := begin_task_ui();
+                                        draw_task_title(&rect, "Align Ship Systems");
+                                        yaw_aligned   := " ";
+                                        pitch_aligned := " ";
+                                        foreach align: component_iterator(Align_Takeoff_Station) {
+                                            switch align.axis {
+                                                case .Yaw:   if align.is_aligned { yaw_aligned   = "X"; }
+                                                case .Pitch: if align.is_aligned { pitch_aligned = "X"; }
+                                            }
+                                        }
+                                        draw_task_subtitle(&rect, "[%] Yaw aligned",   .{yaw_aligned});
+                                        draw_task_subtitle(&rect, "[%] Pitch aligned", .{pitch_aligned});
+                                    }
+                                    case .TAKEOFF: {
+                                        takeoff: Takeoff_Station;
+                                        foreach c: component_iterator(Takeoff_Station) {
+                                            takeoff = c;
+                                            break;
+                                        }
+
+                                        rect := begin_task_ui();
+                                        draw_task_title(&rect, "Take off!");
+                                        x := " ";
+                                        if takeoff.initiated {
+                                            x = "X";
+                                        }
+                                        draw_task_subtitle(&rect, "[%] Takeoff initiated", .{x});
+                                        if takeoff.initiated {
+                                            draw_small_game_text("Takeoff in %{.1} seconds...", .{takeoff.takeoff_timer});
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -952,7 +970,7 @@ Slash_Controller :: class : Controller_Base {
     controller_update :: proc(using this: Slash_Controller, dt: float) {
         foreach other: component_iterator(Player) {
             if other.team == player.team continue;
-            if in_range(other.entity.world_position - player.entity.world_position, 0.5) {
+            if in_range(other.entity.world_position - player.entity.world_position, 0.75) {
                 already_hit := false;
                 for i: 0..already_hit_list.elements.count-1 {
                     if already_hit_list.elements[i] == other {
@@ -2390,7 +2408,7 @@ Food_Projectile :: class : Component {
     ao_start :: proc(using this: Food_Projectile) {
         spawn_time = get_time();
         if hit_radius == 0 {
-            hit_radius = 0.5;
+            hit_radius = 0.75;
         }
 
         rng := rng_seed(entity.id);
