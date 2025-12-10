@@ -133,43 +133,60 @@ draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
     UI.text(text_rect, ts, str, args);
 }
 
-draw_tutorial_arrow :: proc(player: Player, target_position: v2) {
+rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
+    return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, .{0, 0, 1})->multiply(Matrix4.translate(-point)));
+}
+
+Tutorial_Arrow_Options :: struct {
+    inv_alpha_multiplier: float;
+    far: bool;
+    near: bool;
+}
+
+default_tutorial_arrow_options :: proc() -> Tutorial_Arrow_Options {
+    result: Tutorial_Arrow_Options;
+    result.far  = true;
+    result.near = true;
+    return result;
+}
+
+draw_tutorial_arrow :: proc(player: Player, target_position: v2, options: Tutorial_Arrow_Options) {
     UI.push_world_draw_context();
     defer UI.pop_draw_context();
+
     UI.push_layer(100);
     defer UI.pop_layer();
 
-    camera_size := player.camera.size;
-
-    max_distance := camera_size * 0.8;
+    max_distance := player.camera.size * 0.8;
     offset_to_target := normalize_vector_to_radius(target_position - player.entity.world_position, max_distance) * max_distance;
     arrow_position := player.entity.world_position + offset_to_target;
     arrow_rect := Rect.{arrow_position, arrow_position}->grow(0.5);
 
     aim_d := dot(player.last_aim_direction, normalize(target_position - player.entity.world_position));
-    fade_out_t := linear_step(0.85, 1.0, aim_d);
-    fade_out := lerp(1.0, 0.25, fade_out_t);
+    alpha_t := linear_step(0.85, 1.0, aim_d);
+    alpha := lerp(1.0, 0.25, alpha_t);
+    alpha *= 1 - options.inv_alpha_multiplier;
 
-    UI.push_color_multiplier(.{1, 1, 1, fade_out});
+    UI.push_color_multiplier(.{1, 1, 1, alpha});
     defer UI.pop_color_multiplier();
 
-    rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
-        return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, .{0, 0, 1})->multiply(Matrix4.translate(-point)));
-    }
-
     if length_squared(arrow_position - target_position) > 0.1 {
-        dir := normalize(offset_to_target);
-        rads := atan2(dir.y, dir.x);
-        UI.push_matrix(rotate_about_point(arrow_rect->center(), to_degrees(rads)));
-        defer UI.pop_matrix();
-        UI.quad(arrow_rect, tutorial_arrow);
+        if options.far {
+            dir := normalize(offset_to_target);
+            rads := atan2(dir.y, dir.x);
+            UI.push_matrix(rotate_about_point(arrow_rect->center(), to_degrees(rads)));
+            defer UI.pop_matrix();
+            UI.quad(arrow_rect, tutorial_arrow);
+        }
     }
     else {
-        y := sin(2 * PI * get_time()) * 0.25;
-        arrow_rect = arrow_rect->offset(0, 1.5 + y);
-        UI.push_matrix(rotate_about_point(arrow_rect->center(), 270));
-        defer UI.pop_matrix();
-        UI.quad(arrow_rect, tutorial_arrow);
+        if options.near {
+            y := sin(2 * PI * get_time()) * 0.25;
+            arrow_rect = arrow_rect->offset(0, 1.5 + y);
+            UI.push_matrix(rotate_about_point(arrow_rect->center(), 270));
+            defer UI.pop_matrix();
+            UI.quad(arrow_rect, tutorial_arrow);
+        }
     }
 }
 
@@ -1823,42 +1840,60 @@ Player :: class : Player_Base {
                 this->draw_stamina_bar();
             }
 
-            if this->is_local() && team == .SURVIVOR {
-                switch g_game.current_task {
-                    case .FUEL_CANISTERS: {
-                        if is_player_carrying_canister(this) {
-                            draw_tutorial_arrow(this, g_game_manager.fuel_delivery_tutorial_arrow_point.world_position);
-                        }
-                        else {
-                            foreach fuel: component_iterator(Fuel_Canister) {
-                                if !fuel.is_picked_up {
-                                    draw_tutorial_arrow(this, fuel.entity.world_position);
+            if this->is_local() {
+                switch team {
+                    case .SURVIVOR: {
+                        tutorial_arrow_options := default_tutorial_arrow_options();
+
+                        switch g_game.current_task {
+                            case .FUEL_CANISTERS: {
+                                if is_player_carrying_canister(this) {
+                                    draw_tutorial_arrow(this, g_game_manager.fuel_delivery_tutorial_arrow_point.world_position, tutorial_arrow_options);
+                                }
+                                else {
+                                    foreach fuel: component_iterator(Fuel_Canister) {
+                                        if !fuel.is_picked_up {
+                                            draw_tutorial_arrow(this, fuel.entity.world_position, tutorial_arrow_options);
+                                        }
+                                    }
+                                }
+                            }
+                            case .RESTORE_BEACONS: {
+                                foreach beacon: component_iterator(Beacon) {
+                                    if beacon.state == .INACTIVE || (beacon.state == .RESTORING && beacon.survivor_nearby == false) {
+                                        draw_tutorial_arrow(this, beacon.entity.world_position, tutorial_arrow_options);
+                                    }
+                                }
+                            }
+                            case .ALIGN_TAKEOFF: {
+                                foreach align: component_iterator(Align_Takeoff_Station) {
+                                    if !align.is_aligned {
+                                        draw_tutorial_arrow(this, align.entity.world_position, tutorial_arrow_options);
+                                    }
+                                }
+                            }
+                            case .TAKEOFF: {
+                                takeoff: Takeoff_Station;
+                                foreach c: component_iterator(Takeoff_Station) {
+                                    takeoff = c;
+                                    break;
+                                }
+                                if !takeoff.initiated {
+                                    draw_tutorial_arrow(this, takeoff.entity.world_position, tutorial_arrow_options);
                                 }
                             }
                         }
                     }
-                    case .RESTORE_BEACONS: {
-                        foreach beacon: component_iterator(Beacon) {
-                            if beacon.state == .INACTIVE || (beacon.state == .RESTORING && beacon.survivor_nearby == false) {
-                                draw_tutorial_arrow(this, beacon.entity.world_position);
+                    case .ZOMBIE: {
+                        survivor_hint_options := default_tutorial_arrow_options();
+                        survivor_hint_options.near = false;
+                        foreach other: component_iterator(Player) if other.team == .SURVIVOR && !other.health.is_dead {
+                            distance := length(other.entity.world_position - entity.world_position);
+                            inv_alpha := linear_step(0, 20, distance);
+                            survivor_hint_options.inv_alpha_multiplier = inv_alpha;
+                            if inv_alpha < 1 {
+                                draw_tutorial_arrow(this, other.entity.world_position, survivor_hint_options);
                             }
-                        }
-                    }
-                    case .ALIGN_TAKEOFF: {
-                        foreach align: component_iterator(Align_Takeoff_Station) {
-                            if !align.is_aligned {
-                                draw_tutorial_arrow(this, align.entity.world_position);
-                            }
-                        }
-                    }
-                    case .TAKEOFF: {
-                        takeoff: Takeoff_Station;
-                        foreach c: component_iterator(Takeoff_Station) {
-                            takeoff = c;
-                            break;
-                        }
-                        if !takeoff.initiated {
-                            draw_tutorial_arrow(this, takeoff.entity.world_position);
                         }
                     }
                 }
