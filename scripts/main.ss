@@ -1648,7 +1648,7 @@ Player :: class : Player_Base {
 
             // fill bar
             full_ammo_t := current_ammo_float / MAX_AMMO.(float);
-            UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, .{0.1, 0.4, 0.4, 1});
+            UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, .{0.4, 0.4, 0.1, 1});
 
             // Calculate segment dimensions
             segment_width := inner_bar->width() / MAX_AMMO.(float);
