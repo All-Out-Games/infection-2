@@ -694,7 +694,7 @@ update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_
     }
 
     result: Always_Aiming_Ability_Data;
-    if params.held {
+    if params.active {
         if length(params.drag_offset) > 0.1 {
             result.aim = true;
             result.shoot = true;
@@ -807,10 +807,10 @@ Sprint_Ability :: class : Ability_Base {
     on_update :: proc(ability: Sprint_Ability, player: Player, params: Ability_Update_Params) {
         if player.device_kind == .PC {
             if Keybinds.get_keybind_held(player, keybind_sprint) {
-                params.held = true;
+                params.active = true;
             }
         }
-        if params.held && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
+        if params.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
             player.is_sprinting = true;
         }
         else {
@@ -866,10 +866,10 @@ Dodge_Roll :: class : Ability_Base {
             }
         }
         else {
-            if params.held {
+            if params.active {
                 aim = true;
             }
-            if params.up {
+            if params.clicked {
                 activate = true;
             }
         }
@@ -1828,7 +1828,7 @@ Player :: class : Player_Base {
                 e->set_local_scale(entity.local_scale * 1.5);
                 animator := e->add_component(Spine_Animator);
                 brightness := rng_range_float(&dust_rng, 0.5, 1);
-                animator.instance.color_multiplier = .{brightness, brightness, brightness, 0.5};
+                animator.instance.color_multiplier = .{brightness, brightness, brightness, 0.25};
                 animator.instance->set_skeleton(dust_spine);
                 animator.instance->set_animation("running_dust_poof", false, 0, 1);
                 e->queue_for_destruction(0.5);
