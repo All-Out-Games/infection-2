@@ -32,6 +32,7 @@
   "data": {
     "text": "Pick up fuel",
     "hold_text": "Picking up fuel...",
+    "radius": 1,
     "required_hold_time": 0.5000000000000000
   }
 }

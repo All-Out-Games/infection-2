@@ -1,0 +1,50 @@
+53865fa2599ba069.png
+	size: 1176, 1176
+	filter: Linear, Linear
+Imposter Boat/Boat Body
+	bounds: 2, 795, 708, 378
+Imposter Boat/boat blink
+	bounds: 712, 467, 706, 376
+	rotate: 90
+Waves+Splashes/Drop 1
+	bounds: 1072, 306, 159, 33
+	offsets: 1, 1, 161, 35
+	rotate: 90
+Waves+Splashes/Drop 2
+	bounds: 621, 531, 76, 21
+	offsets: 1, 1, 78, 23
+Waves+Splashes/Drop 3
+	bounds: 621, 512, 37, 17
+	offsets: 1, 1, 39, 19
+Waves+Splashes/Splash 1/Back 3
+	bounds: 612, 2, 217, 237
+	offsets: 1, 1, 219, 239
+	rotate: 90
+Waves+Splashes/Splash 1/Front 3
+	bounds: 2, 5, 298, 224
+	offsets: 1, 1, 301, 226
+Waves+Splashes/Splash 2/Back 2
+	bounds: 306, 416, 377, 313
+	offsets: 1, 1, 379, 315
+	rotate: 90
+Waves+Splashes/Splash 2/Front 2
+	bounds: 621, 221, 449, 244
+	offsets: 1, 1, 452, 246
+Waves+Splashes/Splash 3/Back
+	bounds: 306, 24, 390, 304
+	offsets: 1, 1, 392, 306
+	rotate: 90
+Waves+Splashes/Splash 3/Front
+	bounds: 2, 231, 562, 302
+	offsets: 1, 1, 564, 304
+	rotate: 90
+Waves+Splashes/Wave 1
+	bounds: 851, 122, 316, 97
+	offsets: 1, 1, 320, 99
+Waves+Splashes/Wave 2
+	bounds: 851, 26, 290, 94
+	offsets: 1, 1, 292, 96
+Waves+Splashes/Wave 3
+	bounds: 621, 554, 239, 86
+	offsets: 1, 1, 241, 88
+	rotate: 90

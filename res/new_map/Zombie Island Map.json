@@ -1,0 +1,228 @@
+{ "skeleton": { "images": "C:/Kat/trabajo/DJ_DoubleJump/Nightmare/images/map2/" },
+"bones": [
+	{ "name": "root" }
+],
+"slots": [
+	{ "name": "Island Base", "bone": "root", "attachment": "Island Base" },
+	{ "name": "Powerplant towers", "bone": "root", "attachment": "Powerplant towers" },
+	{ "name": "Powerplant fencing/Powerplant fence piece short 1", "bone": "root", "attachment": "Powerplant fencing/Powerplant fence piece short 1" },
+	{ "name": "Powerplant fencing/Powerplant fence side R2", "bone": "root", "attachment": "Powerplant fencing/Powerplant fence side R2" },
+	{ "name": "Powerplant fencing/Powerplant fence side R1", "bone": "root", "attachment": "Powerplant fencing/Powerplant fence side R1" },
+	{ "name": "Powerplant fencing/Powerplant fence piece short 2", "bone": "root", "attachment": "Powerplant fencing/Powerplant fence piece short 2" },
+	{ "name": "Powerplant fencing/Powerplant fence piece", "bone": "root", "attachment": "Powerplant fencing/Powerplant fence piece" },
+	{ "name": "Trees and Grass/Pine", "bone": "root" },
+	{ "name": "Trees and Grass/Pine fallen", "bone": "root" },
+	{ "name": "Trees and Grass/Tree", "bone": "root" },
+	{ "name": "Trees and Grass/grass", "bone": "root" },
+	{ "name": "Base Fencing/Base fence TOP", "bone": "root", "attachment": "Base Fencing/Base fence TOP" },
+	{ "name": "Base Fencing/Base fence side R", "bone": "root", "attachment": "Base Fencing/Base fence side R" },
+	{ "name": "Base Fencing/Base fence side L", "bone": "root", "attachment": "Base Fencing/Base fence side L" },
+	{ "name": "Base Fencing/Base fence BOTTOM", "bone": "root", "attachment": "Base Fencing/Base fence BOTTOM" },
+	{ "name": "boat", "bone": "root", "attachment": "boat" },
+	{ "name": "Base/chair fallen", "bone": "root", "attachment": "Base/chair fallen" },
+	{ "name": "Base/table 2", "bone": "root", "attachment": "Base/table 2" },
+	{ "name": "Base/table", "bone": "root", "attachment": "Base/table" },
+	{ "name": "Bldg 2/Table-Broken", "bone": "root", "attachment": "Bldg 2/Table-Broken" },
+	{ "name": "Bldg 2/crates dusty", "bone": "root", "attachment": "Bldg 2/crates dusty" },
+	{ "name": "Bldg 3/Decoration_Attic_Misc", "bone": "root", "attachment": "Bldg 3/Decoration_Attic_Misc" },
+	{ "name": "Bldg 4/tesla skeleton", "bone": "root", "attachment": "Bldg 4/tesla skeleton" },
+	{ "name": "Bldg 4/sliding_tool_bench", "bone": "root", "attachment": "Bldg 4/sliding_tool_bench" },
+	{ "name": "Bldg 4/twitterchair", "bone": "root", "attachment": "Bldg 4/twitterchair" },
+	{ "name": "Bldg 5/Decoration_Victorian_Table_Long", "bone": "root", "attachment": "Bldg 5/Decoration_Victorian_Table_Long" },
+	{ "name": "Bldg 5/Decoration_Table_Kitchen", "bone": "root", "attachment": "Bldg 5/Decoration_Table_Kitchen" },
+	{ "name": "Bldg 6/Lamp shade yellow", "bone": "root", "attachment": "Bldg 6/Lamp shade yellow" },
+	{ "name": "Bldg 6/Decoration_Sofa_Green", "bone": "root", "attachment": "Bldg 6/Decoration_Sofa_Green" },
+	{ "name": "Bldg 8/Table-Broken", "bone": "root", "attachment": "Bldg 8/Table-Broken" },
+	{ "name": "Bldg 8/RoundTable", "bone": "root", "attachment": "Bldg 8/RoundTable" },
+	{ "name": "Bldg 8/table (3)", "bone": "root", "attachment": "Bldg 8/table (3)" },
+	{ "name": "Edge Fencing/Border fence bottom", "bone": "root", "attachment": "Edge Fencing/Border fence bottom" },
+	{ "name": "Edge Fencing/Border fence top L", "bone": "root", "attachment": "Edge Fencing/Border fence top L" },
+	{ "name": "Edge Fencing/Exit fence top R", "bone": "root", "attachment": "Edge Fencing/Exit fence top R" },
+	{ "name": "Edge Fencing/Border fence side R", "bone": "root", "attachment": "Edge Fencing/Border fence side R" },
+	{ "name": "Edge Fencing/Capa 571", "bone": "root", "attachment": "Edge Fencing/Capa 571" },
+	{ "name": "Edge Fencing/Border fence angle", "bone": "root", "attachment": "Edge Fencing/Border fence angle" },
+	{ "name": "Edge Fencing/Border fence side L1", "bone": "root", "attachment": "Edge Fencing/Border fence side L1" },
+	{ "name": "Edge Fencing/Border fence side L2", "bone": "root", "attachment": "Edge Fencing/Border fence side L2" },
+	{ "name": "Edge Fencing/Border fence side L3", "bone": "root", "attachment": "Edge Fencing/Border fence side L3" },
+	{ "name": "Powerplant", "bone": "root", "attachment": "Powerplant" },
+	{ "name": "stadium/Capa 516", "bone": "root", "attachment": "stadium/Capa 516" },
+	{ "name": "stadium/overlay", "bone": "root", "attachment": "stadium/overlay" },
+	{ "name": "spiderwebs/Capa 554", "bone": "root", "attachment": "spiderwebs/Capa 554" },
+	{ "name": "spiderwebs/Capa 560", "bone": "root", "attachment": "spiderwebs/Capa 560" },
+	{ "name": "spiderwebs/Capa 559", "bone": "root", "attachment": "spiderwebs/Capa 559" },
+	{ "name": "spiderwebs/Capa 558", "bone": "root", "attachment": "spiderwebs/Capa 558" },
+	{ "name": "spiderwebs/Capa 557", "bone": "root", "attachment": "spiderwebs/Capa 557" },
+	{ "name": "spiderwebs/Capa 556", "bone": "root", "attachment": "spiderwebs/Capa 556" },
+	{ "name": "spiderwebs/Capa 555", "bone": "root", "attachment": "spiderwebs/Capa 555" },
+	{ "name": "skeletons/skeleton 3", "bone": "root" },
+	{ "name": "skeletons/skeleton 2", "bone": "root" },
+	{ "name": "skeletons/skeleton 1", "bone": "root" }
+],
+"skins": {
+	"default": {
+		"Island Base": {
+			"Island Base": { "x": 2798.5, "y": -3005.5, "width": 5599, "height": 6013 }
+		},
+		"Powerplant towers": {
+			"Powerplant towers": { "x": 1324.5, "y": -2892, "width": 1113, "height": 478 }
+		},
+		"Powerplant fencing/Powerplant fence piece short 1": {
+			"Powerplant fencing/Powerplant fence piece short 1": { "x": 1885.5, "y": -3680, "width": 125, "height": 128 }
+		},
+		"Powerplant fencing/Powerplant fence side R2": {
+			"Powerplant fencing/Powerplant fence side R2": { "x": 1840, "y": -3730, "width": 30, "height": 202 }
+		},
+		"Powerplant fencing/Powerplant fence side R1": {
+			"Powerplant fencing/Powerplant fence side R1": { "x": 1838, "y": -3301.5, "width": 32, "height": 487 }
+		},
+		"Powerplant fencing/Powerplant fence piece short 2": {
+			"Powerplant fencing/Powerplant fence piece short 2": { "x": 1884.5, "y": -3481, "width": 125, "height": 128 }
+		},
+		"Powerplant fencing/Powerplant fence piece": {
+			"Powerplant fencing/Powerplant fence piece": { "x": 1341.5, "y": -3848, "width": 1015, "height": 128 }
+		},
+		"Trees and Grass/Pine": {
+			"Trees and Grass/Pine": { "x": 2799, "y": -3013, "width": 160, "height": 354 }
+		},
+		"Trees and Grass/Pine fallen": {
+			"Trees and Grass/Pine fallen": { "x": 2799, "y": -3013, "width": 380, "height": 160 }
+		},
+		"Trees and Grass/Tree": {
+			"Trees and Grass/Tree": { "x": 2799.5, "y": -3013.5, "width": 251, "height": 347 }
+		},
+		"Trees and Grass/grass": {
+			"Trees and Grass/grass": { "x": 2798.5, "y": -3006, "width": 61, "height": 62 }
+		},
+		"Base Fencing/Base fence TOP": {
+			"Base Fencing/Base fence TOP": { "x": 2628, "y": -3860.5, "width": 1288, "height": 131 }
+		},
+		"Base Fencing/Base fence side R": {
+			"Base Fencing/Base fence side R": { "x": 3259, "y": -4418.5, "width": 32, "height": 1221 }
+		},
+		"Base Fencing/Base fence side L": {
+			"Base Fencing/Base fence side L": { "x": 1997, "y": -4418.5, "width": 32, "height": 1221 }
+		},
+		"Base Fencing/Base fence BOTTOM": {
+			"Base Fencing/Base fence BOTTOM": { "x": 2624, "y": -4965.5, "width": 1288, "height": 131 }
+		},
+		"boat": {
+			"boat": { "x": 489.499999999999, "y": -4775.5, "width": 473, "height": 243 }
+		},
+		"Base/chair fallen": {
+			"Base/chair fallen": { "x": 2454.5, "y": -4241.5, "width": 75, "height": 65 }
+		},
+		"Base/table 2": {
+			"Base/table 2": { "x": 2896, "y": -4588.5, "width": 160, "height": 163 }
+		},
+		"Base/table": {
+			"Base/table": { "x": 2365, "y": -4587.5, "width": 152, "height": 111 }
+		},
+		"Bldg 2/Table-Broken": {
+			"Bldg 2/Table-Broken": { "x": 1335, "y": -5298.5, "width": 118, "height": 71 }
+		},
+		"Bldg 2/crates dusty": {
+			"Bldg 2/crates dusty": { "x": 1673.5, "y": -5176, "width": 91, "height": 102 }
+		},
+		"Bldg 3/Decoration_Attic_Misc": {
+			"Bldg 3/Decoration_Attic_Misc": { "x": 1995.5, "y": -5501, "width": 257, "height": 132 }
+		},
+		"Bldg 4/tesla skeleton": {
+			"Bldg 4/tesla skeleton": { "x": 3540, "y": -5054, "width": 226, "height": 44 }
+		},
+		"Bldg 4/sliding_tool_bench": {
+			"Bldg 4/sliding_tool_bench": { "x": 3650.5, "y": -4830, "width": 85, "height": 70 }
+		},
+		"Bldg 4/twitterchair": {
+			"Bldg 4/twitterchair": { "x": 3587.5, "y": -4874.5, "width": 71, "height": 75 }
+		},
+		"Bldg 5/Decoration_Victorian_Table_Long": {
+			"Bldg 5/Decoration_Victorian_Table_Long": { "x": 4146, "y": -4477, "width": 174, "height": 116 }
+		},
+		"Bldg 5/Decoration_Table_Kitchen": {
+			"Bldg 5/Decoration_Table_Kitchen": { "x": 4546, "y": -5104, "width": 126, "height": 150 }
+		},
+		"Bldg 6/Lamp shade yellow": {
+			"Bldg 6/Lamp shade yellow": { "x": 3682.5, "y": -4073.5, "width": 75, "height": 59 }
+		},
+		"Bldg 6/Decoration_Sofa_Green": {
+			"Bldg 6/Decoration_Sofa_Green": { "x": 3575.5, "y": -3886, "width": 171, "height": 106 }
+		},
+		"Bldg 8/Table-Broken": {
+			"Bldg 8/Table-Broken": { "x": 2701.5, "y": -2951.5, "width": 107, "height": 65 }
+		},
+		"Bldg 8/RoundTable": {
+			"Bldg 8/RoundTable": { "x": 2666, "y": -3461, "width": 108, "height": 86 }
+		},
+		"Bldg 8/table (3)": {
+			"Bldg 8/table (3)": { "x": 2055, "y": -3237.5, "width": 106, "height": 85 }
+		},
+		"Edge Fencing/Border fence bottom": {
+			"Edge Fencing/Border fence bottom": { "x": 3012.5, "y": -5651.5, "width": 3963, "height": 159 }
+		},
+		"Edge Fencing/Border fence top L": {
+			"Edge Fencing/Border fence top L": { "x": 1330, "y": -3105, "width": 1034, "height": 130 }
+		},
+		"Edge Fencing/Exit fence top R": {
+			"Edge Fencing/Exit fence top R": { "x": 5237.5, "y": -3152, "width": 721, "height": 160 }
+		},
+		"Edge Fencing/Border fence side R": {
+			"Edge Fencing/Border fence side R": { "x": 5230, "y": -3598.5, "width": 514, "height": 999 }
+		},
+		"Edge Fencing/Capa 571": {
+			"Edge Fencing/Capa 571": { "x": 5068.5, "y": -4491, "width": 187, "height": 790 }
+		},
+		"Edge Fencing/Border fence angle": {
+			"Edge Fencing/Border fence angle": { "x": 900.999999999999, "y": -4063.5, "width": 180, "height": 155 }
+		},
+		"Edge Fencing/Border fence side L1": {
+			"Edge Fencing/Border fence side L1": { "x": 825.499999999999, "y": -3581.5, "width": 33, "height": 1065 }
+		},
+		"Edge Fencing/Border fence side L2": {
+			"Edge Fencing/Border fence side L2": { "x": 979.999999999999, "y": -4287, "width": 32, "height": 522 }
+		},
+		"Edge Fencing/Border fence side L3": {
+			"Edge Fencing/Border fence side L3": { "x": 1046, "y": -5330.5, "width": 32, "height": 737 }
+		},
+		"Powerplant": {
+			"Powerplant": { "x": 1357, "y": -3292, "width": 800, "height": 990 }
+		},
+		"stadium/Capa 516": {
+			"stadium/Capa 516": { "x": 3999.5, "y": -2866, "width": 1491, "height": 1346 }
+		},
+		"stadium/overlay": {
+			"stadium/overlay": { "x": 3955.5, "y": -3325.5, "width": 473, "height": 149 }
+		},
+		"spiderwebs/Capa 554": {
+			"spiderwebs/Capa 554": { "x": 3837, "y": -4400.5, "width": 76, "height": 91 }
+		},
+		"spiderwebs/Capa 560": {
+			"spiderwebs/Capa 560": { "x": 4056.5, "y": -5154.5, "width": 111, "height": 89 }
+		},
+		"spiderwebs/Capa 559": {
+			"spiderwebs/Capa 559": { "x": 1819, "y": -4778, "width": 90, "height": 94 }
+		},
+		"spiderwebs/Capa 558": {
+			"spiderwebs/Capa 558": { "x": 1972, "y": -3503.5, "width": 68, "height": 103 }
+		},
+		"spiderwebs/Capa 557": {
+			"spiderwebs/Capa 557": { "x": 1942.5, "y": -3359, "width": 63, "height": 52 }
+		},
+		"spiderwebs/Capa 556": {
+			"spiderwebs/Capa 556": { "x": 3287, "y": -3892.5, "width": 42, "height": 113 }
+		},
+		"spiderwebs/Capa 555": {
+			"spiderwebs/Capa 555": { "x": 3389, "y": -4202.5, "width": 90, "height": 103 }
+		},
+		"skeletons/skeleton 3": {
+			"skeletons/skeleton 3": { "x": 2799, "y": -3006, "width": 206, "height": 190 }
+		},
+		"skeletons/skeleton 2": {
+			"skeletons/skeleton 2": { "x": 2799, "y": -3005.5, "width": 198, "height": 139 }
+		},
+		"skeletons/skeleton 1": {
+			"skeletons/skeleton 1": { "x": 2799, "y": -3005.5, "width": 184, "height": 57 }
+		}
+	}
+},
+"animations": { "animation": {} }
+}

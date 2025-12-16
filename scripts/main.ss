@@ -29,6 +29,9 @@ Player_Team :: enum {
 }
 
 all_zombie_spawns: List(Entity);
+all_survivor_spawns: List(Entity);
+
+ROUND_TIME_LIMIT :: 300.0; // 5 minutes in seconds
 
 g_game: struct {
     state: Game_State;
@@ -45,6 +48,7 @@ g_game: struct {
 
     player_count_last_frame: int;
     round_countdown_timer: float;
+    round_timer: float; // Time remaining in the current round
 };
 
 complete_current_task :: proc() {
@@ -88,32 +92,62 @@ ao_before_scene_load :: proc() {
 }
 
 Zombie_Spawn_Point :: class : Component { }
+Survivor_Spawn_Point :: class : Component { }
 
 ao_start :: proc() {
     foreach spawn: component_iterator(Zombie_Spawn_Point) {
         all_zombie_spawns->append(spawn.entity);
     }
+    foreach spawn: component_iterator(Survivor_Spawn_Point) {
+        all_survivor_spawns->append(spawn.entity);
+    }
+    foreach gm: component_iterator(Game_Manager) {
+        g_game_manager = gm;
+        break;
+    }
 }
 
-draw_big_game_text :: proc(str: string, args: [^]any = .{}) {
+draw_big_game_text :: proc(str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 64;
     text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 150);
     UI.text(text_rect, ts, str, args);
 }
 
-draw_small_game_text :: proc(str: string, args: [^]any = .{}) {
+draw_small_game_text :: proc(str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 48;
     text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 75);
     UI.text(text_rect, ts, str, args);
 }
 
+draw_round_timer :: proc(time_remaining: float) {
+    // Format time as M:SS
+    total_seconds := max(0, time_remaining.(int));
+    minutes := total_seconds / 60;
+    seconds := total_seconds % 60;
+
+    // Draw timer background
+    timer_rect := UI.get_safe_screen_rect()->top_center_rect()->offset(0, -60)->grow(80, 40, 20, 40);
+    UI.quad(timer_rect, white_sprite, {0, 0, 0, 0.6});
+
+    // Draw timer text
+    ts := UI.default_text_settings();
+    ts.size = 48;
+
+    // Make timer red when under 30 seconds
+    if time_remaining < 30.0 {
+        ts.color = {1, 0.3, 0.3, 1};
+    }
+
+    UI.text(timer_rect, ts, "%:%{02}", {minutes, seconds});
+}
+
 begin_task_ui :: proc() -> Rect {
     return UI.get_safe_screen_rect()->left_center_rect()->offset(20, 25);
 }
 
-draw_task_title :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
+draw_task_title :: proc(rect: ref Rect, str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 48;
     ts.halign = .LEFT;
@@ -122,7 +156,7 @@ draw_task_title :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
     UI.text(text_rect, ts, str, args);
 }
 
-draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
+draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 36;
     ts.halign = .LEFT;
@@ -132,7 +166,7 @@ draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = .{}) {
 }
 
 rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
-    return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, .{0, 0, 1})->multiply(Matrix4.translate(-point)));
+    return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, {0, 0, 1})->multiply(Matrix4.translate(-point)));
 }
 
 Tutorial_Arrow_Options :: struct {
@@ -158,14 +192,14 @@ draw_tutorial_arrow :: proc(player: Player, target_position: v2, options: Tutori
     max_distance := player.camera.size * 0.8;
     offset_to_target := normalize_vector_to_radius(target_position - player.entity.world_position, max_distance) * max_distance;
     arrow_position := player.entity.world_position + offset_to_target;
-    arrow_rect := Rect.{arrow_position, arrow_position}->grow(0.5);
+    arrow_rect := Rect{arrow_position, arrow_position}->grow(0.5);
 
     aim_d := dot(player.last_aim_direction, normalize(target_position - player.entity.world_position));
     alpha_t := linear_step(0.85, 1.0, aim_d);
     alpha := lerp(1.0, 0.25, alpha_t);
     alpha *= 1 - options.inv_alpha_multiplier;
 
-    UI.push_color_multiplier(.{1, 1, 1, alpha});
+    UI.push_color_multiplier({1, 1, 1, alpha});
     defer UI.pop_color_multiplier();
 
     if length_squared(arrow_position - target_position) > 0.1 {
@@ -299,7 +333,7 @@ ao_update :: proc(dt: float) {
             REQUIRED_PLAYERS :: 3;
             if player_count < REQUIRED_PLAYERS {
                 draw_big_game_text("Waiting for players...");
-                draw_small_game_text("% / %", .{player_count, REQUIRED_PLAYERS});
+                draw_small_game_text("% / %", {player_count, REQUIRED_PLAYERS});
             }
             else {
                 if g_game.player_count_last_frame < REQUIRED_PLAYERS {
@@ -315,8 +349,8 @@ ao_update :: proc(dt: float) {
                 }
                 g_game.round_countdown_timer -= dt;
 
-                draw_big_game_text("Starting round in %s...", .{g_game.round_countdown_timer.(int) + 1});
-                draw_small_game_text("% players", .{player_count});
+                draw_big_game_text("Starting round in %s...", {g_game.round_countdown_timer.(int) + 1});
+                draw_small_game_text("% players", {player_count});
 
                 if g_game.round_countdown_timer <= 0 {
                     g_game.round_countdown_timer = 0;
@@ -335,6 +369,10 @@ ao_update :: proc(dt: float) {
                     for i: 0..players.count-1 {
                         player := players[i];
                         respawn_player(player);
+
+                        // Show round start intro animation
+                        intro_controller := new(Round_Start_Animation_Controller);
+                        player->set_controller(intro_controller);
                     }
 
                     g_game.tasks[0] = .FUEL_CANISTERS;
@@ -343,10 +381,14 @@ ao_update :: proc(dt: float) {
                     g_game.tasks[3] = .TAKEOFF;
                     g_game.current_task_index = 0;
                     g_game.current_task = g_game.tasks[g_game.current_task_index];
+                    g_game.round_timer = ROUND_TIME_LIMIT;
                 }
             }
         }
         case .GAMEPLAY: {
+            // Decrement round timer
+            g_game.round_timer -= dt;
+
             survivors_left := 0;
             foreach player: component_iterator(Player) {
                 if player.team == .SURVIVOR && player.health.is_dead == false {
@@ -378,6 +420,10 @@ ao_update :: proc(dt: float) {
             }
 
             switch {
+                case g_game.round_timer <= 0: {
+                    // Time ran out - zombies win!
+                    end_game(.ZOMBIE);
+                }
                 case survivors_left == 0: {
                     end_game(.ZOMBIE);
                 }
@@ -386,6 +432,9 @@ ao_update :: proc(dt: float) {
                 }
                 case: {
                     local_player := Game.try_get_local_player();
+
+                    // Draw round timer at top of screen
+                    draw_round_timer(g_game.round_timer);
 
                     // Draw current task objective
                     if local_player != null {
@@ -400,19 +449,19 @@ ao_update :: proc(dt: float) {
 
                                 rect := begin_task_ui();
                                 draw_task_title(&rect, "Eliminate all Survivors");
-                                draw_task_subtitle(&rect, "Survivors left: %", .{survivors_left});
+                                draw_task_subtitle(&rect, "Survivors left: %", {survivors_left});
                             }
                             case .SURVIVOR: {
                                 switch g_game.current_task {
                                     case .FUEL_CANISTERS: {
                                         rect := begin_task_ui();
                                         draw_task_title(&rect, "Collect Fuel Canisters");
-                                        draw_task_subtitle(&rect, "Fuel: % / %", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                                        draw_task_subtitle(&rect, "Fuel: % / %", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
                                     }
                                     case .RESTORE_BEACONS: {
                                         rect := begin_task_ui();
                                         draw_task_title(&rect, "Restore Beacons");
-                                        draw_task_subtitle(&rect, "Beacons: % / %", .{g_game.beacons_restored, REQUIRED_BEACONS});
+                                        draw_task_subtitle(&rect, "Beacons: % / %", {g_game.beacons_restored, REQUIRED_BEACONS});
                                     }
                                     case .ALIGN_TAKEOFF: {
                                         rect := begin_task_ui();
@@ -425,8 +474,8 @@ ao_update :: proc(dt: float) {
                                                 case .Pitch: if align.is_aligned { pitch_aligned = "X"; }
                                             }
                                         }
-                                        draw_task_subtitle(&rect, "[%] Yaw aligned",   .{yaw_aligned});
-                                        draw_task_subtitle(&rect, "[%] Pitch aligned", .{pitch_aligned});
+                                        draw_task_subtitle(&rect, "[%] Yaw aligned",   {yaw_aligned});
+                                        draw_task_subtitle(&rect, "[%] Pitch aligned", {pitch_aligned});
                                     }
                                     case .TAKEOFF: {
                                         takeoff: Takeoff_Station;
@@ -441,9 +490,9 @@ ao_update :: proc(dt: float) {
                                         if takeoff.initiated {
                                             x = "X";
                                         }
-                                        draw_task_subtitle(&rect, "[%] Takeoff initiated", .{x});
+                                        draw_task_subtitle(&rect, "[%] Takeoff initiated", {x});
                                         if takeoff.initiated {
-                                            draw_small_game_text("Takeoff in %{.1} seconds...", .{takeoff.takeoff_timer});
+                                            draw_small_game_text("Takeoff in %{.1} seconds...", {takeoff.takeoff_timer});
                                         }
                                     }
                                 }
@@ -460,18 +509,23 @@ ao_update :: proc(dt: float) {
                 UI.push_layer(-1000);
                 defer UI.pop_layer();
                 if maybe_local.team != g_game.winner {
-                    UI.quad(UI.get_screen_rect(), white_sprite, .{1, 0, 0, 0.1});
+                    UI.quad(UI.get_screen_rect(), white_sprite, {1, 0, 0, 0.1});
                 }
                 else {
-                    UI.quad(UI.get_screen_rect(), white_sprite, .{0, 1, 0, 0.1});
+                    UI.quad(UI.get_screen_rect(), white_sprite, {0, 1, 0, 0.1});
                 }
             }
 
             if g_game.end_game_screen_timer >= 5.0 {
-                g_game = .{};
+                g_game = {};
             }
         }
     }
+}
+
+get_random :: proc(rng: ref u64, array: []$T) -> T {
+    index := rng_range_int(rng, 0, array.count-1);
+    return array[index];
 }
 
 respawn_player :: proc(using player: Player) {
@@ -480,8 +534,9 @@ respawn_player :: proc(using player: Player) {
 
     switch team {
         case .SURVIVOR: {
-            offset := v2.{rng_range_float(&server_rng, -3.5, 3.5), rng_range_float(&server_rng, -2, 2)};
-            player.entity->set_local_position(g_game_manager.survivor_spawn.world_position + offset);
+            spawn := get_random(&server_rng, all_survivor_spawns.elements);
+            offset := v2{rng_range_float(&server_rng, -0.5, 0.5), rng_range_float(&server_rng, -0.5, 0.5)};
+            player.entity->set_local_position(spawn.world_position + offset);
         }
         case .ZOMBIE: {
             valid_spawns: List(Entity);
@@ -518,22 +573,22 @@ ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> b
         return false;
     }
     if interactable.listener != null switch #object_type(interactable.listener) {
-        case Sell_Zone: return interactable.listener.(Sell_Zone)->can_use(player);
+        case Sell_Zone:             return interactable.listener.(Sell_Zone)->can_use(player);
         case Align_Takeoff_Station: return interactable.listener.(Align_Takeoff_Station)->can_use(player);
-        case Takeoff_Station: return interactable.listener.(Takeoff_Station)->can_use(player);
-        case Fuel_Canister: return interactable.listener.(Fuel_Canister)->can_use(player);
-        case Beacon: return interactable.listener.(Beacon)->can_use(player);
+        case Takeoff_Station:       return interactable.listener.(Takeoff_Station)->can_use(player);
+        case Fuel_Canister:         return interactable.listener.(Fuel_Canister)->can_use(player);
+        case Beacon:                return interactable.listener.(Beacon)->can_use(player);
     }
     return true;
 }
 
 ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
     if interactable.listener != null switch #object_type(interactable.listener) {
-        case Sell_Zone: interactable.listener.(Sell_Zone)->on_interact(player);
-        case Beacon: interactable.listener.(Beacon)->on_interact(player);
+        case Sell_Zone:             interactable.listener.(Sell_Zone)->on_interact(player);
+        case Beacon:                interactable.listener.(Beacon)->on_interact(player);
         case Align_Takeoff_Station: interactable.listener.(Align_Takeoff_Station)->on_interact(player);
-        case Takeoff_Station: interactable.listener.(Takeoff_Station)->on_interact(player);
-        case Fuel_Canister: interactable.listener.(Fuel_Canister)->on_interact(player);
+        case Takeoff_Station:       interactable.listener.(Takeoff_Station)->on_interact(player);
+        case Fuel_Canister:         interactable.listener.(Fuel_Canister)->on_interact(player);
     }
 }
 
@@ -543,16 +598,10 @@ ao_can_use_ability :: proc(player: Player, ability: Ability_Base) -> bool {
 }
 
 Game_Manager :: class : Component {
-    survivor_spawn: Entity @ao_serialize;
-    zombie_spawn:   Entity @ao_serialize;
     main_navmesh:   Navmesh @ao_serialize;
     ship_navmesh:   Navmesh @ao_serialize;
     bullet_navmesh: Navmesh @ao_serialize;
     fuel_delivery_tutorial_arrow_point: Entity @ao_serialize;
-
-    ao_start :: proc(using this: Game_Manager) {
-        g_game_manager = this;
-    }
 }
 
 //
@@ -604,7 +653,7 @@ Interact_Ability :: class : Ability_Base {
             defer UI.pop_layer();
             UI.push_id("click to interact");
             defer UI.pop_id();
-            click_zone := UI.button(UI.get_screen_rect(), .{}, .{}, "");
+            click_zone := UI.button(UI.get_screen_rect(), {}, {}, "");
             if player.device_kind == .PC && !click_zone.hovering {
                 hovering_click_zone = false;
             }
@@ -627,7 +676,7 @@ Interact_Ability :: class : Ability_Base {
                 food_def := get_food_definition(food.kind);
                 if player.mouth_stat < food_def.required_mouth_size {
                     if params.clicked {
-                        Notifier.notify(format_string("Your Mouth is too small to eat %!", .{food_def.name}));
+                        Notifier.notify(format_string("Your Mouth is too small to eat %!", {food_def.name}));
                     }
                     reticle_alpha = 0.5;
                 }
@@ -677,8 +726,8 @@ Interact_Ability :: class : Ability_Base {
             UI.push_layer(100);
             defer UI.pop_layer();
 
-            rect := Rect.{clickable.entity.world_position, clickable.entity.world_position}->grow(0.5);
-            UI.quad(rect, get_asset(Texture_Asset, "ui/reticle.png"), .{2, 2, 2, reticle_alpha});
+            rect := Rect{clickable.entity.world_position, clickable.entity.world_position}->grow(0.5);
+            UI.quad(rect, get_asset(Texture_Asset, "ui/reticle.png"), {2, 2, 2, reticle_alpha});
         }
     }
 }
@@ -689,36 +738,33 @@ Always_Aiming_Ability_Data :: struct {
 }
 
 update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_Params) -> Always_Aiming_Ability_Data {
-    if player.health.is_dead {
-        return .{};
-    }
-
     result: Always_Aiming_Ability_Data;
-    if params.active {
-        if length(params.drag_offset) > 0.1 {
-            result.aim = true;
+    if length(params.drag_offset) > 0.35 {
+        if params.released {
             result.shoot = true;
         }
+        else {
+            result.aim = true;
+        }
     }
-    else {
-        if player.device_kind == .PC {
-            if player.active_ability == null {
-                UI.push_layer(-1000);
-                defer UI.pop_layer();
-                UI.push_id("click to shoot");
-                defer UI.pop_id();
 
-                interact := UI.button(UI.get_screen_rect(), .{}, .{}, "");
+    if player.device_kind == .PC {
+        if player.active_ability == null {
+            UI.push_layer(-1000);
+            defer UI.pop_layer();
+            UI.push_id("click to shoot");
+            defer UI.pop_id();
 
-                if interact.hovering {
-                    result.aim = true;
-                    params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
-                }
+            interact := UI.button(UI.get_screen_rect(), {}, {}, "");
 
-                if params.can_use {
-                    if interact.active {
-                        result.shoot = true;
-                    }
+            if interact.hovering {
+                result.aim = true;
+                params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
+            }
+
+            if params.can_use {
+                if interact.active {
+                    result.shoot = true;
                 }
             }
         }
@@ -858,7 +904,7 @@ Dodge_Roll :: class : Ability_Base {
                 UI.push_id("click to roll");
                 defer UI.pop_id();
 
-                interact := UI.button(UI.get_screen_rect(), .{}, .{}, "");
+                interact := UI.button(UI.get_screen_rect(), {}, {}, "");
                 if interact.just_pressed {
                     activate = true;
                     player.active_ability = null;
@@ -869,7 +915,7 @@ Dodge_Roll :: class : Ability_Base {
             if params.active {
                 aim = true;
             }
-            if params.clicked {
+            if params.released {
                 activate = true;
             }
         }
@@ -1010,6 +1056,94 @@ Clickable :: class : Component {
     required_range: float @ao_serialize;
 }
 
+Round_Start_Animation_Controller :: class : Controller_Base {
+    hold_progress: float;
+
+    controller_begin :: proc(using this: Round_Start_Animation_Controller) {
+        freeze_player = true;
+        hold_progress = 0;
+    }
+
+    controller_update :: proc(using this: Round_Start_Animation_Controller, dt: float) {
+        TOTAL_TIME :: 10.0;
+
+        hold_progress += dt / TOTAL_TIME;
+        hold_progress = clamp(hold_progress, 0, 1);
+
+        if player->is_local_or_server() {
+            bg_tint_01 := Ease.fade_in_and_out(0.1, 1.0, hold_progress);
+
+            UI.push_layer(1000);
+            defer UI.pop_layer();
+
+            UI.push_color_multiplier({1, 1, 1, bg_tint_01});
+            defer UI.pop_color_multiplier();
+
+            UI.quad(UI.get_screen_rect(), white_sprite, {0, 0, 0, 0.9});
+
+            pos_01 := Ease.slide_in_and_out(0.1, 1.0, hold_progress);
+            ts := UI.default_text_settings();
+            ts.size = 52;
+            ts.color = {1, 1, 1, 1};
+            ts.word_wrap = true;
+            rect := UI.get_safe_screen_rect()->offset(pos_01 * 100, 0);
+
+            switch player.team {
+                case .SURVIVOR: {
+                    actual_rect := UI.text_sync(rect, ts, "Complete objectives to escape!\nCollect fuel, restore beacons, and take off before time runs out!");
+                    ts.size = 64;
+                    ts.color = {0.2, 1, 0.2, 1};
+                    UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are a Survivor.\n\n");
+                }
+                case .ZOMBIE: {
+                    actual_rect := UI.text_sync(rect, ts, "Hunt down all survivors!\nInfect them before they escape!");
+                    ts.size = 64;
+                    ts.color = {1, 0.2, 0.2, 1};
+                    UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are Infected.\n\n");
+                }
+                case .SPECTATOR: {
+                    actual_rect := UI.text_sync(rect, ts, "Watch the action unfold!");
+                    ts.size = 64;
+                    ts.color = {0.7, 0.7, 0.7, 1};
+                    UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are Spectating.\n\n");
+                }
+            }
+
+            // Blocker button to detect hold-to-close
+            empty_button_settings: Button_Settings;
+            click_result := UI.button(UI.get_screen_rect(), empty_button_settings, {}, "");
+            if click_result.pressed {
+                hold_progress += dt;
+                hold_progress = clamp(hold_progress, 0, 1);
+            }
+
+            // Draw hold progress bar
+            ts.color = {1, 1, 1, 1};
+            hold_rect_bg := UI.get_safe_screen_rect()->bottom_center_rect()->offset(0, 200)->grow(10, 150, 10, 150);
+
+            // Calculate the filled portion width based on hold_progress
+            hold_rect := hold_rect_bg->inset(2)->subrect(0, 0, hold_progress, 1);
+            UI.quad(hold_rect_bg, white_sprite, {0.8, 0.8, 0.8, 1});
+            UI.quad(hold_rect, white_sprite, {0.1, 0.1, 0.1, 1});
+
+            ts.size = 28;
+            close_str := "Click and hold to close";
+            if player.device_kind != .PC {
+                close_str = "Tap and hold to close";
+            }
+            UI.text(hold_rect_bg->offset(0, 35), ts, close_str);
+        }
+
+        if hold_progress >= 1 {
+            end_controller(player, false);
+        }
+    }
+
+    controller_end :: proc(using this: Round_Start_Animation_Controller, interrupt: bool) {
+        // Nothing special needed on end
+    }
+}
+
 //
 // Food
 //
@@ -1104,7 +1238,7 @@ Eating_Controller :: class : Controller_Base {
 
             rng := rng_seed(food.entity.id ^ food.health.current_health.(u64));
             num := rng_range_int(&rng, 1, 5);
-            SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", .{num})), desc);
+            SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", {num})), desc);
         }
 
         if died {
@@ -1124,7 +1258,7 @@ Eating_Controller :: class : Controller_Base {
 
         food_health_t := food.health->get_health_percent();
         scale := lerp(0.25, 1.0, food_health_t);
-        food.entity->set_local_scale(.{scale, scale});
+        food.entity->set_local_scale({scale, scale});
 
         offset := player.entity.local_position.y - food.entity.local_position.y;
         offset /= food.entity.local_scale.y;
@@ -1138,18 +1272,18 @@ Eating_Controller :: class : Controller_Base {
         // UI.push_layer(10);
         // defer UI.pop_layer();
 
-        // rect := Rect.{food.entity.local_position, food.entity.local_position}->grow(0.1, 0.3, 0.1, 0.3)->offset(0, 1);
-        // UI.quad(rect, white_sprite, .{0, 0, 0, 1});
+        // rect := Rect{food.entity.local_position, food.entity.local_position}->grow(0.1, 0.3, 0.1, 0.3)->offset(0, 1);
+        // UI.quad(rect, white_sprite, {0, 0, 0, 1});
         // rect = rect->subrect(0, 0, food_health_t, 1);
         // color_t := linear_step(0.25, 0.6, food_health_t);
-        // UI.quad(rect, white_sprite, .{1-color_t, color_t, 0, 1});
+        // UI.quad(rect, white_sprite, {1-color_t, color_t, 0, 1});
     }
 
     controller_end :: proc(using this: Eating_Controller, interrupt: bool) {
         food.locked = false;
         player->player_set_trigger("RESET");
         food.entity->set_local_position(original_food_position);
-        food.entity->set_local_scale(.{1, 1});
+        food.entity->set_local_scale({1, 1});
         food.sprite.depth_offset = 0;
         food.entity->set_local_rotation(0);
     }
@@ -1175,10 +1309,10 @@ Chop_Tree_Controller :: class : Controller_Base {
 
         // Face the tree
         if tree.entity.world_position.x < player.entity.world_position.x {
-            player.entity->set_local_scale(.{-1, 1});
+            player.entity->set_local_scale({-1, 1});
         }
         else {
-            player.entity->set_local_scale(.{1, 1});
+            player.entity->set_local_scale({1, 1});
         }
     }
 
@@ -1196,7 +1330,7 @@ Chop_Tree_Controller :: class : Controller_Base {
 
             rng := rng_seed(tree.entity.id ^ tree.health.current_health.(u64));
             num := rng_range_int(&rng, 1, 5);
-            SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", .{num})), desc);
+            SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", {num})), desc);
         }
 
         if died {
@@ -1322,7 +1456,7 @@ spawn_particle :: proc(spawn_position: v2, target_entity: Entity, particle_type:
     rng := rng_seed(entity.id);
     angle := rng_range_float(&rng, 0, 2 * PI);
     speed := rng_range_float(&rng, 5, 10);
-    particle.velocity = .{cos(angle) * speed, sin(angle) * speed};
+    particle.velocity = {cos(angle) * speed, sin(angle) * speed};
 }
 
 //
@@ -1342,7 +1476,7 @@ Health_Component :: class : Component {
     ao_start :: proc(using health: Health_Component) {
         current_health = max_health;
         if health_bar_offset.x == 0 && health_bar_offset.y == 0 {
-            health_bar_offset = .{0, 1.5};
+            health_bar_offset = {0, 1.5};
         }
     }
 
@@ -1358,13 +1492,13 @@ Health_Component :: class : Component {
         // if health_percent >= 1.0 return;
 
         bar_pos := entity.world_position + health_bar_offset;
-        bar_rect := Rect.{bar_pos, bar_pos}->grow(0.1, 0.4, 0.1, 0.4);
+        bar_rect := Rect{bar_pos, bar_pos}->grow(0.1, 0.4, 0.1, 0.4);
 
-        UI.quad(bar_rect, white_sprite, .{0.01, 0.01, 0.01, 1});
+        UI.quad(bar_rect, white_sprite, {0.01, 0.01, 0.01, 1});
 
         fill_rect := bar_rect->subrect(0, 0, health_percent, 1);
 
-        color := lerp(v4.{0.8, 0.1, 0.1, 1}, .{0.1, 0.8, 0.1, 1}, health_percent);
+        color := lerp(v4{0.8, 0.1, 0.1, 1}, {0.1, 0.8, 0.1, 1}, health_percent);
         UI.quad(fill_rect, white_sprite, color);
     }
 
@@ -1376,7 +1510,7 @@ Health_Component :: class : Component {
         last_damage_time = get_time();
 
         // Spawn damage number
-        spawn_damage_number(amount, entity.world_position + v2.{0, 0.5});
+        spawn_damage_number(amount, entity.world_position + v2{0, 0.5});
 
         if current_health <= 0 {
             current_health = 0;
@@ -1444,7 +1578,7 @@ Damage_Number :: class : Component {
         UI.push_layer(100);
         defer UI.pop_layer();
 
-        rect := Rect.{entity.local_position, entity.local_position}->grow(0.2, 0.4, 0.2, 0.4);
+        rect := Rect{entity.local_position, entity.local_position}->grow(0.2, 0.4, 0.2, 0.4);
 
         fade_t := linear_step(lifetime-1, lifetime, time_alive);
         ts := UI.default_text_settings();
@@ -1454,9 +1588,9 @@ Damage_Number :: class : Component {
 
         // Fade out towards the end of lifetime
         alpha := 1.0 - fade_t;
-        ts.color = .{1, 0, 0, alpha}; // Red
-        ts.outline_color = .{0, 0, 0, 1};
-        UI.text(rect, ts, "%", .{value});
+        ts.color = {1, 0, 0, alpha}; // Red
+        ts.outline_color = {0, 0, 0, 1};
+        UI.text(rect, ts, "%", {value});
     }
 }
 
@@ -1473,7 +1607,7 @@ spawn_damage_number :: proc(value: int, position: v2) {
     rng := rng_seed(entity.id);
     vel_x := rng_range_float(&rng, -0.3, 0.3);
     vel_y := rng_range_float(&rng, 0.75, 0.9);
-    damage_number.velocity = v2.{vel_x, vel_y} * 10;
+    damage_number.velocity = v2{vel_x, vel_y} * 10;
 }
 
 Finder :: struct($T: typeid) {
@@ -1529,7 +1663,7 @@ Death_Controller :: class : Controller_Base {
         if g_game.state == .GAMEPLAY {
             time_until_respawn := 5.0 - elapsed_time;
             if player->is_local() {
-                draw_big_game_text("Respawning in %s", .{time_until_respawn.(int) + 1});
+                draw_big_game_text("Respawning in %s", {time_until_respawn.(int) + 1});
             }
             if time_until_respawn <= 0 {
                 end_controller(player, false);
@@ -1641,12 +1775,12 @@ Player :: class : Player_Base {
         UI.push_z(entity.world_position.y-0.001);
         defer UI.pop_z();
 
-        bar_pos := entity.world_position + v2.{0, 1.75};
+        bar_pos := entity.world_position + v2{0, 1.75};
         bar_width := 0.8;
         bar_height := 0.2;
         segment_gap := 0.02;
 
-        bar_rect := Rect.{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
+        bar_rect := Rect{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
 
         // Background bar
         {
@@ -1654,13 +1788,13 @@ Player :: class : Player_Base {
 
             bar_rect_jitter := bar_rect->offset(jitter * 0.15, 0);
 
-            UI.quad(bar_rect_jitter, white_sprite, .{0.01, 0.01, 0.01, 1});
+            UI.quad(bar_rect_jitter, white_sprite, {0.01, 0.01, 0.01, 1});
             inner_bar := bar_rect_jitter->inset(0.04);
-            UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
+            UI.quad(inner_bar, white_sprite, {0.15, 0.15, 0.15, 1});
 
             // fill bar
             full_ammo_t := current_ammo_float / MAX_AMMO.(float);
-            UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, .{0.4, 0.4, 0.1, 1});
+            UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, {0.4, 0.4, 0.1, 1});
 
             // Calculate segment dimensions
             segment_width := inner_bar->width() / MAX_AMMO.(float);
@@ -1672,23 +1806,23 @@ Player :: class : Player_Base {
             for i: 0..MAX_AMMO-1 {
                 segment_rect := base_segment_rect->offset_unscaled(segment_width * i.(float), 0);
                 if i < current_ammo {
-                    UI.quad(segment_rect, white_sprite, .{0.2, 0.9, 0.9, 1});
+                    UI.quad(segment_rect, white_sprite, {0.2, 0.9, 0.9, 1});
                 }
 
                 UI.push_layer_relative(1);
                 defer UI.pop_layer();
-                draw_rect_grow_fade_out_effect(segment_rect, get_time() - time_last_shot[i], .{0, 1, 0, 1});
+                draw_rect_grow_fade_out_effect(segment_rect, get_time() - time_last_shot[i], {0, 1, 0, 1});
             }
             for i: 0..MAX_AMMO-2 {
                 notch_rect := base_notch_rect->offset_unscaled(segment_width * (i+1).(float), 0);
-                UI.quad(notch_rect, white_sprite, .{0.2, 0.01, 0.01, 1});
+                UI.quad(notch_rect, white_sprite, {0.2, 0.01, 0.01, 1});
             }
         }
 
         // No ammo indicator
         no_ammo_t := Ease.out_quart(Ease.T(get_time() - last_failed_to_shoot_time, 0.35));
         no_ammo_rect := bar_rect->grow(0.2 * no_ammo_t);
-        UI.quad(no_ammo_rect, white_sprite, lerp(v4.{1, 0, 0, 1}, v4.{1, 0, 0, 0}, no_ammo_t));
+        UI.quad(no_ammo_rect, white_sprite, lerp(v4{1, 0, 0, 1}, v4{1, 0, 0, 0}, no_ammo_t));
     }
 
     draw_stamina_bar :: proc(using this: Player) {
@@ -1699,16 +1833,16 @@ Player :: class : Player_Base {
         defer UI.pop_z();
 
         // Position below the ammo bar
-        bar_pos := entity.world_position + v2.{0, 1.6};
+        bar_pos := entity.world_position + v2{0, 1.6};
         bar_width := 0.6;
         bar_height := 0.12;
 
-        bar_rect := Rect.{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
+        bar_rect := Rect{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
 
         // Background
-        UI.quad(bar_rect, white_sprite, .{0.01, 0.01, 0.01, 1});
+        UI.quad(bar_rect, white_sprite, {0.01, 0.01, 0.01, 1});
         inner_bar := bar_rect->inset(0.02);
-        UI.quad(inner_bar, white_sprite, .{0.15, 0.15, 0.15, 1});
+        UI.quad(inner_bar, white_sprite, {0.15, 0.15, 0.15, 1});
 
         // Stamina fill
         fill_rect := inner_bar->subrect(0, 0, sprint_stamina, 1);
@@ -1716,14 +1850,14 @@ Player :: class : Player_Base {
         // Color: yellow when full, orange when depleting
         fill_color: v4;
         if sprint_exhausted {
-            fill_color = .{1, 0, 0, 1};
+            fill_color = {1, 0, 0, 1};
         }
         else {
             if is_sprinting {
-                fill_color = lerp(v4.{1, 0.3, 0, 1}, .{1, 0.8, 0, 1}, sprint_stamina);
+                fill_color = lerp(v4{1, 0.3, 0, 1}, {1, 0.8, 0, 1}, sprint_stamina);
             }
             else {
-                fill_color = lerp(v4.{1, 0.3, 0, 1}, .{0.3, 1, 0, 1}, sprint_stamina);
+                fill_color = lerp(v4{1, 0.3, 0, 1}, {0.3, 1, 0, 1}, sprint_stamina);
             }
         }
         UI.quad(fill_rect, white_sprite, fill_color);
@@ -1734,10 +1868,10 @@ Player :: class : Player_Base {
         if sprint_exhausted {
             time_since_exhaust := (get_time() - last_exhaust_time) * 0.5;
             exhaust_time_loop := time_since_exhaust % 0.5;
-            draw_rect_grow_fade_out_effect(bar_rect, exhaust_time_loop,  .{1, 0, 0, 1});
+            draw_rect_grow_fade_out_effect(bar_rect, exhaust_time_loop,  {1, 0, 0, 1});
         }
         time_since_recover := (get_time() - last_exhaust_recover_time) * 0.5;
-        draw_rect_grow_fade_out_effect(bar_rect, time_since_recover, .{0, 1, 0, 1});
+        draw_rect_grow_fade_out_effect(bar_rect, time_since_recover, {0, 1, 0, 1});
     }
 
     ao_start :: proc(using this: Player) {
@@ -1761,7 +1895,7 @@ Player :: class : Player_Base {
 
         health = entity->add_component(Health_Component);
         health->set_max_health(1, true);
-        health.health_bar_offset = .{0, 1.75};
+        health.health_bar_offset = {0, 1.75};
 
         // Initialize ammo system
         current_ammo = 0;
@@ -1780,6 +1914,7 @@ Player :: class : Player_Base {
         sprint_stamina = 1;
 
         {
+            animator->awaken();
             layer := animator.instance.state_machine->try_get_layer("main");
             running_state = layer->try_get_state("Run_Fast");
             assert(running_state != null, "failed to find running state");
@@ -1828,7 +1963,7 @@ Player :: class : Player_Base {
                 e->set_local_scale(entity.local_scale * 1.5);
                 animator := e->add_component(Spine_Animator);
                 brightness := rng_range_float(&dust_rng, 0.5, 1);
-                animator.instance.color_multiplier = .{brightness, brightness, brightness, 0.25};
+                animator.instance.color_multiplier = {brightness, brightness, brightness, 0.25};
                 animator.instance->set_skeleton(dust_spine);
                 animator.instance->set_animation("running_dust_poof", false, 0, 1);
                 e->queue_for_destruction(0.5);
@@ -1859,13 +1994,13 @@ Player :: class : Player_Base {
         current_ammo = current_ammo_float.(int);
 
         {
-            name_color := v4.{1, 1, 1, 1};
+            name_color := v4{1, 1, 1, 1};
             switch team {
                 case .SURVIVOR: {
-                    name_color = .{0, 1, 0, 1};
+                    name_color = {0, 1, 0, 1};
                 }
                 case .ZOMBIE: {
-                    name_color = .{1, 0, 0, 1};
+                    name_color = {1, 0, 0, 1};
                 }
             }
 
@@ -1904,7 +2039,8 @@ Player :: class : Player_Base {
                 }
             }
             else {
-                draw_ability_button(this, Dodge_Roll, 0);
+                draw_ability_button(this, Slash_Ability, 0);
+                draw_ability_button(this, Dodge_Roll, 1);
                 draw_ability_button(this, Sprint_Ability, 4);
             }
         }
@@ -2056,7 +2192,7 @@ Tree :: class : Component {
     ao_start :: proc(using tree: Tree) {
         health = entity->add_component(Health_Component);
         health->set_max_health(10, true);
-        health.health_bar_offset = .{0, 2.0};
+        health.health_bar_offset = {0, 2.0};
         sprite.enabled = true;
         chopped_sprite.enabled = false;
     }
@@ -2113,7 +2249,7 @@ Duck :: class : Component {
         bob_amount := sin(duck_time * 2) * 0.05;
         rotation_amount := cos(duck_time * 1.5) * 5;
 
-        sprite.entity->set_local_position(.{0, bob_amount});
+        sprite.entity->set_local_position({0, bob_amount});
         sprite.entity->set_local_rotation(rotation_amount);
     }
 }
@@ -2210,7 +2346,7 @@ NPC :: class : Component {
 
         health = entity->add_component(Health_Component);
         health->set_max_health(12, true);
-        health.health_bar_offset = .{0, 1.5};
+        health.health_bar_offset = {0, 1.5};
 
         current_behaviour = new(NPC_Behaviour);
         current_behaviour.kind = .WANDERING;
@@ -2305,7 +2441,7 @@ NPC :: class : Component {
                         current_behaviour.wander_serial += 1;
                         rng := rng_seed(entity.id ^ current_behaviour.wander_serial);
                         current_behaviour.next_wander_time = get_time() + rng_range_float(&rng, 4, 8);
-                        current_behaviour.wander_target = home_position + v2.{rng_range_float(&rng, -wander_radius, wander_radius), rng_range_float(&rng, -wander_radius, wander_radius)};
+                        current_behaviour.wander_target = home_position + v2{rng_range_float(&rng, -wander_radius, wander_radius), rng_range_float(&rng, -wander_radius, wander_radius)};
                         current_behaviour.wandering = true;
                     }
 
@@ -2349,13 +2485,13 @@ NPC :: class : Component {
                 this->update_scale(current_behaviour.attack_direction.x);
 
                 agent.friction = 0;
-                agent.velocity = .{};
+                agent.velocity = {};
 
                 if current_behaviour.time_in_state > 0.25 {
                     agent.velocity = current_behaviour.attack_direction * 10;
                 }
                 if current_behaviour.time_in_state > 0.5 {
-                    agent.velocity = .{};
+                    agent.velocity = {};
                     this->complete_current_behaviour();
                 }
             }
@@ -2404,6 +2540,8 @@ Food_Projectile :: class : Component {
     hit_radius: float;
 
     start_rotation: float;
+
+    triangle_hint: int;
 
     ao_start :: proc(using this: Food_Projectile) {
         spawn_time = get_time();
@@ -2471,7 +2609,7 @@ Food_Projectile :: class : Component {
             point: v2;
             // todo(josh): this crashes!!!:
             // if Game_Manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
-            if g_game_manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
+            if g_game_manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point, &triangle_hint) {
                 if !in_range(point - entity.world_position, 0.01) {
                     destroy_self = true;
                 }
@@ -2558,7 +2696,7 @@ Align_Takeoff_Station :: class : Component {
         }
         else {
             foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                player->add_notification(format_string("% axis aligned!", .{axis}));
+                player->add_notification(format_string("% axis aligned!", {axis}));
             }
         }
     }
@@ -2620,6 +2758,8 @@ Fuel_Canister :: class : Component {
     last_carrier_position: v2;
     shadow_scale: v2;
 
+    triangle_hint: int;
+
     ao_start :: proc(using this: Fuel_Canister) {
         interactable.listener = this;
         shadow_scale = shadow_sprite.entity.local_scale;
@@ -2642,37 +2782,35 @@ Fuel_Canister :: class : Component {
                 entity->set_local_position(new_position);
 
                 point_in_ship: v2;
-                if g_game_manager.ship_navmesh->try_find_closest_point_on_navmesh(carrier.entity.world_position, &point_in_ship) {
-                    if in_range(point_in_ship - carrier.entity.world_position, 0.1) {
-                        g_game.fuel_deposited += 1;
-                        {
-                            sfx := default_sfx_desc();
-                            sfx->set_position(carrier.entity.world_position);
-                            sfx.volume_perturb = 0.2;
-                            sfx.speed_perturb = 0.1;
-                            SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
-                        }
-
-                        // Check if task is complete
-                        if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
-                            foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                                player->add_notification("All fuel collected!");
-                            }
-                            complete_current_task();
-                        }
-                        else {
-                            foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                                player->add_notification(format_string("Fuel deposited! (% / %)", .{g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
-                            }
-                        }
-
-                        destroy_entity(entity);
+                if in_range(carrier.entity.world_position - g_game_manager.fuel_delivery_tutorial_arrow_point.world_position, 0.5) {
+                    g_game.fuel_deposited += 1;
+                    {
+                        sfx := default_sfx_desc();
+                        sfx->set_position(carrier.entity.world_position);
+                        sfx.volume_perturb = 0.2;
+                        sfx.speed_perturb = 0.1;
+                        SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
                     }
+
+                    // Check if task is complete
+                    if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
+                        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                            player->add_notification("All fuel collected!");
+                        }
+                        complete_current_task();
+                    }
+                    else {
+                        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                            player->add_notification(format_string("Fuel deposited! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
+                        }
+                    }
+
+                    destroy_entity(entity);
                 }
             }
         }
 
-        fuel_hover_position := v2.{0, 0};
+        fuel_hover_position := v2{0, 0};
         new_shadow_scale := shadow_scale;
         if is_picked_up {
             t := PI * get_time();
@@ -2815,14 +2953,14 @@ Beacon :: class : Component {
         // Update sprite tint based on state
         switch state {
             case .INACTIVE: {
-                sprite.color = .{0.5, 0.5, 0.5, 0.2};
+                sprite.color = {0.5, 0.5, 0.5, 0.2};
             }
             case .RESTORING: {
                 progress_t := restore_progress / BEACON_RESTORE_TIME;
-                sprite.color = lerp(v4.{1, 0.5, 0, 0.2}, .{0, 1, 0.5, 0.2}, progress_t);
+                sprite.color = lerp(v4{1, 0.5, 0, 0.2}, {0, 1, 0.5, 0.2}, progress_t);
             }
             case .RESTORED: {
-                sprite.color = .{0, 1, 0.5, 0.2};
+                sprite.color = {0, 1, 0.5, 0.2};
             }
         }
     }
@@ -2843,23 +2981,23 @@ Beacon :: class : Component {
             bar_height := 0.2;
             bar_y_offset := 1.5;
 
-            bar_pos := entity.world_position + v2.{0, bar_y_offset};
-            bar_bg_rect := Rect.{
-                .{bar_pos.x - bar_width/2, bar_pos.y - bar_height/2},
-                .{bar_pos.x + bar_width/2, bar_pos.y + bar_height/2}
+            bar_pos := entity.world_position + v2{0, bar_y_offset};
+            bar_bg_rect := Rect{
+                {bar_pos.x - bar_width/2, bar_pos.y - bar_height/2},
+                {bar_pos.x + bar_width/2, bar_pos.y + bar_height/2}
             };
 
             // Background
-            UI.quad(bar_bg_rect, white_sprite, .{0.1, 0.1, 0.1, 0.8});
+            UI.quad(bar_bg_rect, white_sprite, {0.1, 0.1, 0.1, 0.8});
 
             // Progress fill
             progress_t := restore_progress / BEACON_RESTORE_TIME;
             fill_rect := bar_bg_rect;
             fill_rect.max.x = fill_rect.min.x + (fill_rect.max.x - fill_rect.min.x) * progress_t;
 
-            fill_color := v4.{1, 0, 0, 1};
+            fill_color := v4{1, 0, 0, 1};
             if survivor_nearby {
-                fill_color = lerp(v4.{1, 1, 0, 1}, .{0, 1, 0, 1}, progress_t);
+                fill_color = lerp(v4{1, 1, 0, 1}, {0, 1, 0, 1}, progress_t);
             }
             UI.quad(fill_rect, white_sprite, fill_color);
         }
@@ -2893,7 +3031,7 @@ on_beacon_restored :: proc(beacon: Beacon) {
     }
     else {
         foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-            player->add_notification(format_string("Beacon restored! (% / %)", .{g_game.beacons_restored, REQUIRED_BEACONS}));
+            player->add_notification(format_string("Beacon restored! (% / %)", {g_game.beacons_restored, REQUIRED_BEACONS}));
         }
     }
 }

@@ -13,5 +13,11 @@
     "texture": {
       "resample_multiplier": 1
     }
+  },
+  {
+    "id": "new_map/*",
+    "texture": {
+      "resample_multiplier": 1
+    }
   }
 ]
