@@ -898,7 +898,7 @@ Shoot_Ability :: class : Ability_Base {
         aiming := update_always_aiming_ability(player, &params);
         if params.can_use {
             if aiming.shoot {
-                ability.current_cooldown = 0.5;
+                ability.current_cooldown = 0.75;
                 sfx := default_sfx_desc();
                 sfx->set_position(player.entity.local_position);
                 sfx.volume_perturb = 0.2;
@@ -1089,7 +1089,7 @@ Slash_Ability :: class : Ability_Base {
     on_update :: proc(ability: Slash_Ability, player: Player, params: Ability_Update_Params) {
         if update_always_aiming_ability(player, &params).shoot {
             if params.can_use {
-                ability.current_cooldown = 0.6;
+                ability.current_cooldown = 1;
 
                 controller := new(Slash_Controller);
                 controller.direction = params.drag_direction;
@@ -1123,6 +1123,7 @@ Slash_Controller :: class : Controller_Base {
     controller_update :: proc(using this: Slash_Controller, dt: float) {
         foreach other: component_iterator(Player) {
             if other.team == player.team continue;
+            if other.team != .SURVIVOR continue;
             if in_range(other.entity.world_position - player.entity.world_position, 0.75) {
                 already_hit := false;
                 for i: 0..already_hit_list.elements.count-1 {
@@ -1757,7 +1758,7 @@ Death_Controller :: class : Controller_Base {
         freeze_player = true;
         player->add_name_invisibility_reason("death");
         player->player_set_trigger("death");
-        {
+        if Game.is_server() {
             sfx := default_sfx_desc();
             sfx->set_position(player.entity.world_position);
             sfx.volume = 0.5;
@@ -2088,14 +2089,12 @@ Player :: class : Player_Base {
             }
 
             running_state.speed = SPRINT_SPEED_BONUS;
-            if g_game.state == .GAMEPLAY { // no stamina in lobby
-                sprint_stamina -= dt * SPRINT_DRAIN_RATE;
-                if sprint_stamina <= 0 {
-                    sprint_stamina = 0;
-                    is_sprinting = false;
-                    sprint_exhausted = true;
-                    last_exhaust_time = get_time();
-                }
+            sprint_stamina -= dt * SPRINT_DRAIN_RATE;
+            if sprint_stamina <= 0 {
+                sprint_stamina = 0;
+                is_sprinting = false;
+                sprint_exhausted = true;
+                last_exhaust_time = get_time();
             }
         }
         else {
@@ -2742,6 +2741,7 @@ Food_Projectile :: class : Component {
                 if player.health.is_dead continue;
                 if #alive(owner) && owner == player.entity continue;
                 if player.team == team continue;
+                if player.team != .ZOMBIE continue;
                 if in_range(player.entity.world_position - entity.world_position, hit_radius) {
                     player->take_damage(1);
                     destroy_self = true;
@@ -3016,7 +3016,7 @@ Fuel_Canister :: class : Component {
         interactable.listener = this;
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
-        carried_item.pickup_notification = "Bring the fuel canister to the ship!";
+        carried_item.pickup_notification = "Bring the fuel canister to the boat!";
     }
 
     can_use :: proc(using this: Fuel_Canister, player: Player) -> bool {
