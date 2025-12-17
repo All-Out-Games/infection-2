@@ -432,9 +432,13 @@ ao_update :: proc(dt: float) {
             }
 
             survivors_left := 0;
+            zombies_left := 0;
             foreach player: component_iterator(Player) {
                 if player.team == .SURVIVOR && player.health.is_dead == false {
                     survivors_left += 1;
+                }
+                if player.team == .ZOMBIE {
+                    zombies_left += 1;
                 }
             }
 
@@ -475,6 +479,10 @@ ao_update :: proc(dt: float) {
             all_survivors_resolved := (survivors_left == 0);
 
             switch {
+                case zombies_left == 0: {
+                    // All zombies left the game - survivors win!
+                    end_game(.SURVIVOR);
+                }
                 case g_game.round_timer <= 0: {
                     // Time ran out - survivors win if any escaped, otherwise zombies win
                     if survivors_escaped > 0 {
@@ -2137,7 +2145,13 @@ Player :: class : Player_Base {
         }
 
         if this->is_local_or_server() {
-            if g_game.state == .GAMEPLAY {
+
+            if g_game.state == .WAITING_FOR_PLAYERS {
+                draw_ability_button(this, Shoot_Ability, 0);
+                draw_ability_button(this, Dodge_Roll, 1);
+                draw_ability_button(this, Sprint_Ability, 4);
+            }
+            else {
                 if is_player_carrying_item(this) {
                     draw_ability_button(this, Drop_Item_Ability, 0);
                     draw_ability_button(this, Sprint_Ability, 4);
@@ -2154,11 +2168,6 @@ Player :: class : Player_Base {
                         }
                     }
                 }
-            }
-            else {
-                draw_ability_button(this, Shoot_Ability, 0);
-                draw_ability_button(this, Dodge_Roll, 1);
-                draw_ability_button(this, Sprint_Ability, 4);
             }
         }
 
