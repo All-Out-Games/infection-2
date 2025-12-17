@@ -36,7 +36,7 @@ ROUND_TIME_LIMIT :: 300.0; // 5 minutes in seconds
 g_game: struct {
     state: Game_State;
 
-    tasks: [4]Task;
+    tasks: [3]Task;
     current_task: Task;
     current_task_index: int;
 
@@ -44,12 +44,15 @@ g_game: struct {
     end_game_screen_timer: float;
 
     fuel_deposited: int;
+    battery_delivered: bool;
     beacons_restored: int;
 
     player_count_last_frame: int;
     round_countdown_timer: float;
     round_timer: float; // Time remaining in the current round
 };
+
+TASK_COMPLETION_TIME_BONUS :: 30.0;
 
 complete_current_task :: proc() {
     g_game.current_task_index += 1;
@@ -59,6 +62,9 @@ complete_current_task :: proc() {
     else {
         g_game.current_task = .NONE;
     }
+
+    // Bonus time for completing a task
+    g_game.round_timer += TASK_COMPLETION_TIME_BONUS;
 }
 
 server_rng: u64;
@@ -121,7 +127,7 @@ draw_small_game_text :: proc(str: string, args: [^]any = {}) {
     UI.text(text_rect, ts, str, args);
 }
 
-draw_round_timer :: proc(time_remaining: float) {
+draw_round_timer :: proc(time_remaining: float, paused: bool) {
     // Format time as M:SS
     total_seconds := max(0, time_remaining.(int));
     minutes := total_seconds / 60;
@@ -135,12 +141,25 @@ draw_round_timer :: proc(time_remaining: float) {
     ts := UI.default_text_settings();
     ts.size = 48;
 
-    // Make timer red when under 30 seconds
-    if time_remaining < 30.0 {
+    if paused {
+        // Pulsing yellow/gold when paused
+        pulse := (sin(get_time() * 4) + 1) * 0.5;
+        ts.color = {1, 0.8 + pulse * 0.2, 0.2, 1};
+    }
+    else if time_remaining < 30.0 {
+        // Make timer red when under 30 seconds
         ts.color = {1, 0.3, 0.3, 1};
     }
 
     UI.text(timer_rect, ts, "%:%{02}", {minutes, seconds});
+
+    if paused {
+        // Draw "PAUSED" indicator below timer
+        pause_ts := UI.default_text_settings();
+        pause_ts.size = 24;
+        pause_ts.color = {1, 0.9, 0.3, 1};
+        UI.text(timer_rect->offset(0, -35), pause_ts, "CHARGING");
+    }
 }
 
 begin_task_ui :: proc() -> Rect {
@@ -237,22 +256,27 @@ ao_update :: proc(dt: float) {
             foreach player: component_iterator(Player) {
                 player->end_controller(true);
                 player->remove_ghost_reason("spectator");
+                player->remove_ghost_reason("escaped");
                 player.team = .SURVIVOR;
+                player.is_on_boat = false;
                 respawn_player(player);
-            }
-            foreach takeoff: component_iterator(Takeoff_Station) {
-                takeoff.initiated = false;
             }
             foreach takeoff: component_iterator(Align_Takeoff_Station) {
                 takeoff.is_aligned = false;
                 takeoff.locked_in = false;
             }
-            {
-                // Destroy any existing spawned canisters
-                foreach fuel: component_iterator(Fuel_Canister) {
-                    destroy_entity(fuel.entity);
-                }
+            foreach fuel: component_iterator(Fuel_Canister) {
+                destroy_entity(fuel.entity);
+            }
+            foreach fuel: component_iterator(Boat_Battery) {
+                destroy_entity(fuel.entity);
+            }
+            // foreach beacon: component_iterator(Beacon) {
+            //     destroy_entity(beacon.entity);
+            // }
 
+            // spawn fuel canisters
+            {
                 // Count available spawn points
                 spawn_point_count := 0;
                 foreach spawn_point: component_iterator(Fuel_Spawn_Point) {
@@ -284,43 +308,52 @@ ao_update :: proc(dt: float) {
                     canister_entity->set_local_position(spawn_point.entity.world_position);
                 }
             }
+
+            // spawn beacons
+            // {
+            //     // Count available beacon spawn points
+            //     beacon_spawn_count := 0;
+            //     foreach spawn_point: component_iterator(Beacon_Spawn_Point) {
+            //         beacon_spawn_count += 1;
+            //     }
+
+            //     // Collect all spawn points into an array
+            //     beacon_spawns := new(Beacon_Spawn_Point, beacon_spawn_count);
+            //     beacon_index := 0;
+            //     foreach spawn_point: component_iterator(Beacon_Spawn_Point) {
+            //         beacon_spawns[beacon_index] = spawn_point;
+            //         beacon_index += 1;
+            //     }
+
+            //     // Fisher-Yates shuffle to randomize spawn points
+            //     for i: 0..beacon_spawn_count-1 {
+            //         j := rng_range_int(&server_rng, 0, beacon_spawn_count-1);
+            //         temp := beacon_spawns[i];
+            //         beacon_spawns[i] = beacon_spawns[j];
+            //         beacon_spawns[j] = temp;
+            //     }
+
+            //     // Spawn beacons at the first REQUIRED_BEACONS spawn points
+            //     beacons_to_spawn := min(REQUIRED_BEACONS, beacon_spawn_count);
+            //     #global beacon_prefab := get_asset(Prefab_Asset, "Beacon Task.prefab");
+            //     for i: 0..beacons_to_spawn-1 {
+            //         spawn_point := beacon_spawns[i];
+            //         beacon_entity := instantiate(beacon_prefab);
+            //         beacon_entity->set_local_position(spawn_point.entity.world_position);
+            //     }
+            // }
+
+            // spawn battery
             {
-                // Destroy any existing spawned beacons
-                foreach beacon: component_iterator(Beacon) {
-                    destroy_entity(beacon.entity);
-                }
+                #global prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
 
-                // Count available beacon spawn points
-                beacon_spawn_count := 0;
-                foreach spawn_point: component_iterator(Beacon_Spawn_Point) {
-                    beacon_spawn_count += 1;
-                }
-
-                // Collect all spawn points into an array
-                beacon_spawns := new(Beacon_Spawn_Point, beacon_spawn_count);
-                beacon_index := 0;
-                foreach spawn_point: component_iterator(Beacon_Spawn_Point) {
-                    beacon_spawns[beacon_index] = spawn_point;
-                    beacon_index += 1;
-                }
-
-                // Fisher-Yates shuffle to randomize spawn points
-                for i: 0..beacon_spawn_count-1 {
-                    j := rng_range_int(&server_rng, 0, beacon_spawn_count-1);
-                    temp := beacon_spawns[i];
-                    beacon_spawns[i] = beacon_spawns[j];
-                    beacon_spawns[j] = temp;
-                }
-
-                // Spawn beacons at the first REQUIRED_BEACONS spawn points
-                beacons_to_spawn := min(REQUIRED_BEACONS, beacon_spawn_count);
-                beacon_prefab := get_asset(Prefab_Asset, "Beacon Task.prefab");
-                for i: 0..beacons_to_spawn-1 {
-                    spawn_point := beacon_spawns[i];
-                    beacon_entity := instantiate(beacon_prefab);
-                    beacon_entity->set_local_position(spawn_point.entity.world_position);
+                // there is only one spawn
+                foreach spawn_point: component_iterator(Boat_Battery_Spawn_Point) {
+                    battery := instantiate(prefab);
+                    battery->set_local_position(spawn_point.entity.world_position);
                 }
             }
+
             g_game.state = .WAITING_FOR_PLAYERS;
         }
         case .WAITING_FOR_PLAYERS: {
@@ -376,9 +409,10 @@ ao_update :: proc(dt: float) {
                     }
 
                     g_game.tasks[0] = .FUEL_CANISTERS;
-                    g_game.tasks[1] = .RESTORE_BEACONS;
-                    g_game.tasks[2] = .ALIGN_TAKEOFF;
-                    g_game.tasks[3] = .TAKEOFF;
+                    g_game.tasks[1] = .CHARGE_BATTERY;
+                    // g_game.tasks[2] = .RESTORE_BEACONS;
+                    // g_game.tasks[2] = .ALIGN_TAKEOFF;
+                    g_game.tasks[2] = .TAKEOFF;
                     g_game.current_task_index = 0;
                     g_game.current_task = g_game.tasks[g_game.current_task_index];
                     g_game.round_timer = ROUND_TIME_LIMIT;
@@ -386,8 +420,16 @@ ao_update :: proc(dt: float) {
             }
         }
         case .GAMEPLAY: {
-            // Decrement round timer
-            g_game.round_timer -= dt;
+            // Decrement round timer (paused while battery is charging)
+            timer_paused := false;
+            battery := get_boat_battery();
+            if battery != null && battery.state == .CHARGING {
+                timer_paused = true;
+            }
+
+            if !timer_paused {
+                g_game.round_timer -= dt;
+            }
 
             survivors_left := 0;
             foreach player: component_iterator(Player) {
@@ -400,41 +442,62 @@ ao_update :: proc(dt: float) {
                 g_game.winner = winner;
                 g_game.state = .END_GAME_SCREEN;
                 foreach player: component_iterator(Player) {
-                    if player.team == winner {
-                        if player.team == .SURVIVOR {
-                            player->add_notification("Survivors win!");
+                    switch winner {
+                        case .SURVIVOR: {
+                            if player.team == .ZOMBIE {
+                                player->add_notification("Zombies lose!");
+                            }
+                            else {
+                                player->add_notification("Survivors win!");
+                            }
                         }
-                        else {
-                            player->add_notification("Zombies win!");
-                        }
-                    }
-                    else {
-                        if player.team == .SURVIVOR {
-                            player->add_notification("Survivors lose!");
-                        }
-                        else {
-                            player->add_notification("Zombies lose!");
+                        case .ZOMBIE: {
+                            if player.team == .ZOMBIE {
+                                player->add_notification("Zombies win!");
+                            }
+                            else {
+                                player->add_notification("Survivors lose!");
+                            }
                         }
                     }
                 }
             }
 
+            // Count survivors who escaped
+            survivors_escaped := 0;
+            foreach player: component_iterator(Player) {
+                if player.is_on_boat {
+                    survivors_escaped += 1;
+                }
+            }
+
+            // All survivors are either dead or escaped - time to end the game
+            all_survivors_resolved := (survivors_left == 0);
+
             switch {
                 case g_game.round_timer <= 0: {
-                    // Time ran out - zombies win!
-                    end_game(.ZOMBIE);
+                    // Time ran out - survivors win if any escaped, otherwise zombies win
+                    if survivors_escaped > 0 {
+                        end_game(.SURVIVOR);
+                    }
+                    else {
+                        end_game(.ZOMBIE);
+                    }
                 }
-                case survivors_left == 0: {
-                    end_game(.ZOMBIE);
-                }
-                case g_game.current_task_index >= g_game.tasks.count: {
-                    end_game(.SURVIVOR);
+                case all_survivors_resolved: {
+                    // All survivors are dead or escaped
+                    if survivors_escaped > 0 {
+                        end_game(.SURVIVOR);
+                    }
+                    else {
+                        end_game(.ZOMBIE);
+                    }
                 }
                 case: {
                     local_player := Game.try_get_local_player();
 
                     // Draw round timer at top of screen
-                    draw_round_timer(g_game.round_timer);
+                    draw_round_timer(g_game.round_timer, timer_paused);
 
                     // Draw current task objective
                     if local_player != null {
@@ -457,6 +520,25 @@ ao_update :: proc(dt: float) {
                                         rect := begin_task_ui();
                                         draw_task_title(&rect, "Collect Fuel Canisters");
                                         draw_task_subtitle(&rect, "Fuel: % / %", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                                    }
+                                    case .CHARGE_BATTERY: {
+                                        rect := begin_task_ui();
+                                        draw_task_title(&rect, "Charge the Battery");
+                                        battery := get_boat_battery();
+                                        if battery != null {
+                                            switch battery.state {
+                                                case .UNCHARGED: {
+                                                    draw_task_subtitle(&rect, "Bring battery to charger");
+                                                }
+                                                case .CHARGING: {
+                                                    progress := (battery.charge_t * 100).(int);
+                                                    draw_task_subtitle(&rect, "Charging: %0%%", {progress});
+                                                }
+                                                case .CHARGED: {
+                                                    draw_task_subtitle(&rect, "Bring battery to boat!");
+                                                }
+                                            }
+                                        }
                                     }
                                     case .RESTORE_BEACONS: {
                                         rect := begin_task_ui();
@@ -485,15 +567,21 @@ ao_update :: proc(dt: float) {
                                         }
 
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Take off!");
-                                        x := " ";
-                                        if takeoff.initiated {
-                                            x = "X";
+                                        draw_task_title(&rect, "Escape on the boat!");
+
+                                        // Count escaped survivors
+                                        escaped_count := 0;
+                                        alive_count := 0;
+                                        foreach p: component_iterator(Player) {
+                                            if p.is_on_boat {
+                                                escaped_count += 1;
+                                            }
+                                            else if p.team == .SURVIVOR && !p.health.is_dead {
+                                                alive_count += 1;
+                                            }
                                         }
-                                        draw_task_subtitle(&rect, "[%] Takeoff initiated", {x});
-                                        if takeoff.initiated {
-                                            draw_small_game_text("Takeoff in %{.1} seconds...", {takeoff.takeoff_timer});
-                                        }
+                                        draw_task_subtitle(&rect, "Escaped: %", {escaped_count});
+                                        draw_task_subtitle(&rect, "Survivors remaining: %", {alive_count});
                                     }
                                 }
                             }
@@ -505,14 +593,26 @@ ao_update :: proc(dt: float) {
         case .END_GAME_SCREEN: {
             g_game.end_game_screen_timer += dt;
             maybe_local := Game.try_get_local_player();
-            if maybe_local != null && maybe_local.team != .SPECTATOR {
+            if maybe_local != null {
                 UI.push_layer(-1000);
                 defer UI.pop_layer();
-                if maybe_local.team != g_game.winner {
-                    UI.quad(UI.get_screen_rect(), white_sprite, {1, 0, 0, 0.1});
-                }
-                else {
-                    UI.quad(UI.get_screen_rect(), white_sprite, {0, 1, 0, 0.1});
+                switch g_game.winner {
+                    case .SURVIVOR: {
+                        if maybe_local.team == .ZOMBIE {
+                            UI.quad(UI.get_screen_rect(), white_sprite, {1, 0, 0, 0.1});
+                        }
+                        else {
+                            UI.quad(UI.get_screen_rect(), white_sprite, {0, 1, 0, 0.1});
+                        }
+                    }
+                    case .ZOMBIE: {
+                        if maybe_local.team == .ZOMBIE {
+                            UI.quad(UI.get_screen_rect(), white_sprite, {0, 1, 0, 0.1});
+                        }
+                        else {
+                            UI.quad(UI.get_screen_rect(), white_sprite, {1, 0, 0, 0.1});
+                        }
+                    }
                 }
             }
 
@@ -573,22 +673,30 @@ ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> b
         return false;
     }
     if interactable.listener != null switch #object_type(interactable.listener) {
-        case Sell_Zone:             return interactable.listener.(Sell_Zone)->can_use(player);
-        case Align_Takeoff_Station: return interactable.listener.(Align_Takeoff_Station)->can_use(player);
-        case Takeoff_Station:       return interactable.listener.(Takeoff_Station)->can_use(player);
-        case Fuel_Canister:         return interactable.listener.(Fuel_Canister)->can_use(player);
-        case Beacon:                return interactable.listener.(Beacon)->can_use(player);
+        case Sell_Zone:              return interactable.listener.(Sell_Zone)->can_use(player);
+        case Align_Takeoff_Station:  return interactable.listener.(Align_Takeoff_Station)->can_use(player);
+        case Takeoff_Station:        return interactable.listener.(Takeoff_Station)->can_use(player);
+        case Fuel_Canister:          return interactable.listener.(Fuel_Canister)->can_use(player);
+        case Fuel_Delivery_Point:    return interactable.listener.(Fuel_Delivery_Point)->can_use(player);
+        case Boat_Battery:           return interactable.listener.(Boat_Battery)->can_use(player);
+        case Battery_Charger:        return interactable.listener.(Battery_Charger)->can_use(player);
+        case Battery_Delivery_Point: return interactable.listener.(Battery_Delivery_Point)->can_use(player);
+        case Beacon:                 return interactable.listener.(Beacon)->can_use(player);
     }
     return true;
 }
 
 ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
     if interactable.listener != null switch #object_type(interactable.listener) {
-        case Sell_Zone:             interactable.listener.(Sell_Zone)->on_interact(player);
-        case Beacon:                interactable.listener.(Beacon)->on_interact(player);
-        case Align_Takeoff_Station: interactable.listener.(Align_Takeoff_Station)->on_interact(player);
-        case Takeoff_Station:       interactable.listener.(Takeoff_Station)->on_interact(player);
-        case Fuel_Canister:         interactable.listener.(Fuel_Canister)->on_interact(player);
+        case Sell_Zone:              interactable.listener.(Sell_Zone)->on_interact(player);
+        case Beacon:                 interactable.listener.(Beacon)->on_interact(player);
+        case Align_Takeoff_Station:  interactable.listener.(Align_Takeoff_Station)->on_interact(player);
+        case Takeoff_Station:        interactable.listener.(Takeoff_Station)->on_interact(player);
+        case Fuel_Canister:          interactable.listener.(Fuel_Canister)->on_interact(player);
+        case Fuel_Delivery_Point:    interactable.listener.(Fuel_Delivery_Point)->on_interact(player);
+        case Boat_Battery:           interactable.listener.(Boat_Battery)->on_interact(player);
+        case Battery_Charger:        interactable.listener.(Battery_Charger)->on_interact(player);
+        case Battery_Delivery_Point: interactable.listener.(Battery_Delivery_Point)->on_interact(player);
     }
 }
 
@@ -601,7 +709,6 @@ Game_Manager :: class : Component {
     main_navmesh:   Navmesh @ao_serialize;
     ship_navmesh:   Navmesh @ao_serialize;
     bullet_navmesh: Navmesh @ao_serialize;
-    fuel_delivery_tutorial_arrow_point: Entity @ao_serialize;
 }
 
 //
@@ -812,23 +919,23 @@ Shoot_Ability :: class : Ability_Base {
     }
 }
 
-// Drop fuel canister ability - only shown when carrying fuel
-Drop_Fuel_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Drop_Fuel_Ability) {
+// Drop item ability - shown when carrying any item
+Drop_Item_Ability :: class : Ability_Base {
+    on_init :: proc(ability: Drop_Item_Ability) {
         ability.name = "Drop";
         ability.icon = get_asset(Texture_Asset, "icons/fuel.png");
         ability.keybind_override = keybind_drop_fuel;
     }
 
-    can_use :: proc(ability: Drop_Fuel_Ability, player: Player) -> bool {
-        return is_player_carrying_canister(player);
+    can_use :: proc(ability: Drop_Item_Ability, player: Player) -> bool {
+        return is_player_carrying_item(player);
     }
 
-    on_update :: proc(ability: Drop_Fuel_Ability, player: Player, params: Ability_Update_Params) {
+    on_update :: proc(ability: Drop_Item_Ability, player: Player, params: Ability_Update_Params) {
         if params.clicked && params.can_use {
-            canister := get_player_canister(player);
-            if canister != null {
-                drop_canister(canister, player.entity.world_position);
+            item := get_player_carried_item(player);
+            if item != null {
+                drop_carried_item(item, player.entity.world_position);
             }
         }
     }
@@ -1090,7 +1197,7 @@ Round_Start_Animation_Controller :: class : Controller_Base {
 
             switch player.team {
                 case .SURVIVOR: {
-                    actual_rect := UI.text_sync(rect, ts, "Complete objectives to escape!\nCollect fuel, restore beacons, and take off before time runs out!");
+                    actual_rect := UI.text_sync(rect, ts, "Restore the boat to escape before time runs out!");
                     ts.size = 64;
                     ts.color = {0.2, 1, 0.2, 1};
                     UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are a Survivor.\n\n");
@@ -1711,6 +1818,8 @@ Player :: class : Player_Base {
 
     upgrade_menu_tab_index: int;
 
+    is_on_boat: bool;
+
     health: Health_Component;
 
     active_ability: Ability_Base;
@@ -1874,14 +1983,20 @@ Player :: class : Player_Base {
         draw_rect_grow_fade_out_effect(bar_rect, time_since_recover, {0, 1, 0, 1});
     }
 
+    turn_into_spectator :: proc(using this: Player) {
+        if team != .SPECTATOR {
+            team = .SPECTATOR;
+            this->add_ghost_reason("spectator");
+        }
+    }
+
     ao_start :: proc(using this: Player) {
         agent.lock_to_navmesh = true;
         agent->set_navmesh_to_lock_to(g_game_manager.main_navmesh);
 
         switch g_game.state {
             case .GAMEPLAY: {
-                team = .SPECTATOR;
-                this->add_ghost_reason("spectator");
+                this->turn_into_spectator();
             }
             case: {
                 team = .SURVIVOR;
@@ -1898,15 +2013,15 @@ Player :: class : Player_Base {
         health.health_bar_offset = {0, 1.75};
 
         // Initialize ammo system
-        current_ammo = 0;
-        current_ammo_float = 0;
+        current_ammo = MAX_AMMO;
+        current_ammo_float = MAX_AMMO.(float);
 
         {
             register_ability(this, Interact_Ability);
             register_ability(this, Shoot_Ability);
             register_ability(this, Dodge_Roll);
             register_ability(this, Slash_Ability);
-            register_ability(this, Drop_Fuel_Ability);
+            register_ability(this, Drop_Item_Ability);
             register_ability(this, Sprint_Ability);
         }
 
@@ -1931,16 +2046,11 @@ Player :: class : Player_Base {
         switch team {
             case .SURVIVOR: {
                 base_speed: float;
-                if is_player_carrying_canister(this) {
+                if is_player_carrying_item(this) {
                     agent.movement_speed = 150;
                 }
                 else {
                     agent.movement_speed = 215;
-                }
-
-                // Apply sprint speed bonus
-                if is_sprinting {
-                    agent.movement_speed *= SPRINT_SPEED_BONUS;
                 }
             }
             case .ZOMBIE: {
@@ -1948,6 +2058,14 @@ Player :: class : Player_Base {
             }
             case .SPECTATOR: {
                 agent.movement_speed = 450;
+            }
+        }
+
+        // Apply sprint speed bonus
+        if is_sprinting {
+            agent.movement_speed *= SPRINT_SPEED_BONUS;
+            if Game.is_launched_from_editor() {
+                agent.movement_speed *= 3;
             }
         }
 
@@ -2021,9 +2139,9 @@ Player :: class : Player_Base {
 
         if this->is_local_or_server() {
             if g_game.state == .GAMEPLAY {
-                if is_player_carrying_canister(this) {
-                    // Only show drop fuel ability when carrying
-                    draw_ability_button(this, Drop_Fuel_Ability, 0);
+                if is_player_carrying_item(this) {
+                    draw_ability_button(this, Drop_Item_Ability, 0);
+                    draw_ability_button(this, Sprint_Ability, 4);
                 }
                 else {
                     switch team {
@@ -2039,13 +2157,13 @@ Player :: class : Player_Base {
                 }
             }
             else {
-                draw_ability_button(this, Slash_Ability, 0);
+                draw_ability_button(this, Shoot_Ability, 0);
                 draw_ability_button(this, Dodge_Roll, 1);
                 draw_ability_button(this, Sprint_Ability, 4);
             }
         }
 
-        if g_game.state == .GAMEPLAY {
+        {
             UI.push_world_draw_context();
             defer UI.pop_draw_context();
 
@@ -2054,59 +2172,98 @@ Player :: class : Player_Base {
                 this->draw_stamina_bar();
             }
 
-            if this->is_local() {
-                switch team {
-                    case .SURVIVOR: {
-                        tutorial_arrow_options := default_tutorial_arrow_options();
+            if g_game.state == .GAMEPLAY {
+                if this->is_local() {
+                    switch team {
+                        case .SURVIVOR: {
+                            tutorial_arrow_options := default_tutorial_arrow_options();
 
-                        switch g_game.current_task {
-                            case .FUEL_CANISTERS: {
-                                if is_player_carrying_canister(this) {
-                                    draw_tutorial_arrow(this, g_game_manager.fuel_delivery_tutorial_arrow_point.world_position, tutorial_arrow_options);
-                                }
-                                else {
-                                    foreach fuel: component_iterator(Fuel_Canister) {
-                                        if !fuel.is_picked_up {
-                                            draw_tutorial_arrow(this, fuel.entity.world_position, tutorial_arrow_options);
+                            switch g_game.current_task {
+                                case .FUEL_CANISTERS: {
+                                    if is_player_carrying_item(this) {
+                                        foreach delivery: component_iterator(Fuel_Delivery_Point) {
+                                            draw_tutorial_arrow(this, delivery.entity.world_position, tutorial_arrow_options);
+                                        }
+                                    }
+                                    else {
+                                        foreach fuel: component_iterator(Fuel_Canister) {
+                                            if !fuel.carried_item.is_picked_up {
+                                                draw_tutorial_arrow(this, fuel.entity.world_position, tutorial_arrow_options);
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            case .RESTORE_BEACONS: {
-                                foreach beacon: component_iterator(Beacon) {
-                                    if beacon.state == .INACTIVE || (beacon.state == .RESTORING && beacon.survivor_nearby == false) {
-                                        draw_tutorial_arrow(this, beacon.entity.world_position, tutorial_arrow_options);
+                                case .CHARGE_BATTERY: {
+                                    battery := get_boat_battery();
+                                    if battery != null {
+                                        switch battery.state {
+                                            case .UNCHARGED: {
+                                                if battery.carried_item.is_picked_up {
+                                                    // Point to charger
+                                                    foreach charger: component_iterator(Battery_Charger) {
+                                                        draw_tutorial_arrow(this, charger.entity.world_position, tutorial_arrow_options);
+                                                    }
+                                                }
+                                                else {
+                                                    // Point to battery
+                                                    draw_tutorial_arrow(this, battery.entity.world_position, tutorial_arrow_options);
+                                                }
+                                            }
+                                            case .CHARGING: {
+                                                // Point to battery while charging
+                                                draw_tutorial_arrow(this, battery.entity.world_position, tutorial_arrow_options);
+                                            }
+                                            case .CHARGED: {
+                                                if battery.carried_item.is_picked_up {
+                                                    // Point to boat delivery
+                                                    foreach delivery: component_iterator(Battery_Delivery_Point) {
+                                                        draw_tutorial_arrow(this, delivery.entity.world_position, tutorial_arrow_options);
+                                                    }
+                                                }
+                                                else {
+                                                    // Point to battery to pick up
+                                                    draw_tutorial_arrow(this, battery.entity.world_position, tutorial_arrow_options);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                            case .ALIGN_TAKEOFF: {
-                                foreach align: component_iterator(Align_Takeoff_Station) {
-                                    if !align.is_aligned {
-                                        draw_tutorial_arrow(this, align.entity.world_position, tutorial_arrow_options);
+                                case .RESTORE_BEACONS: {
+                                    foreach beacon: component_iterator(Beacon) {
+                                        if beacon.state == .INACTIVE || (beacon.state == .RESTORING && beacon.survivor_nearby == false) {
+                                            draw_tutorial_arrow(this, beacon.entity.world_position, tutorial_arrow_options);
+                                        }
                                     }
                                 }
-                            }
-                            case .TAKEOFF: {
-                                takeoff: Takeoff_Station;
-                                foreach c: component_iterator(Takeoff_Station) {
-                                    takeoff = c;
-                                    break;
+                                case .ALIGN_TAKEOFF: {
+                                    foreach align: component_iterator(Align_Takeoff_Station) {
+                                        if !align.is_aligned {
+                                            draw_tutorial_arrow(this, align.entity.world_position, tutorial_arrow_options);
+                                        }
+                                    }
                                 }
-                                if !takeoff.initiated {
-                                    draw_tutorial_arrow(this, takeoff.entity.world_position, tutorial_arrow_options);
+                                case .TAKEOFF: {
+                                    takeoff: Takeoff_Station;
+                                    foreach c: component_iterator(Takeoff_Station) {
+                                        takeoff = c;
+                                        break;
+                                    }
+                                    if !is_on_boat {
+                                        draw_tutorial_arrow(this, takeoff.entity.world_position, tutorial_arrow_options);
+                                    }
                                 }
                             }
                         }
-                    }
-                    case .ZOMBIE: {
-                        survivor_hint_options := default_tutorial_arrow_options();
-                        survivor_hint_options.near = false;
-                        foreach other: component_iterator(Player) if other.team == .SURVIVOR && !other.health.is_dead {
-                            distance := length(other.entity.world_position - entity.world_position);
-                            inv_alpha := linear_step(0, 20, distance);
-                            survivor_hint_options.inv_alpha_multiplier = inv_alpha;
-                            if inv_alpha < 1 {
-                                draw_tutorial_arrow(this, other.entity.world_position, survivor_hint_options);
+                        case .ZOMBIE: {
+                            survivor_hint_options := default_tutorial_arrow_options();
+                            survivor_hint_options.near = false;
+                            foreach other: component_iterator(Player) if other.team == .SURVIVOR && !other.health.is_dead {
+                                distance := length(other.entity.world_position - entity.world_position);
+                                inv_alpha := linear_step(0, 20, distance);
+                                survivor_hint_options.inv_alpha_multiplier = inv_alpha;
+                                if inv_alpha < 1 {
+                                    draw_tutorial_arrow(this, other.entity.world_position, survivor_hint_options);
+                                }
                             }
                         }
                     }
@@ -2457,7 +2614,7 @@ NPC :: class : Component {
             }
             case .AGGRO: {
                 switch {
-                    case !alive(current_behaviour.target): {
+                    case !#alive(current_behaviour.target): {
                         // Target left the game
                         this->complete_current_behaviour();
                     }
@@ -2570,7 +2727,7 @@ Food_Projectile :: class : Component {
 
                 if in_range(npc.entity.world_position - entity.world_position, hit_radius) {
                     attacker: Player = null;
-                    if alive(owner) {
+                    if #alive(owner) {
                         attacker = owner->get_component(Player);
                     }
                     npc->damage(damage, attacker);
@@ -2583,7 +2740,7 @@ Food_Projectile :: class : Component {
         if !destroy_self {
             foreach player: component_iterator(Player) {
                 if player.health.is_dead continue;
-                if alive(owner) && owner == player.entity continue;
+                if #alive(owner) && owner == player.entity continue;
                 if player.team == team continue;
                 if in_range(player.entity.world_position - entity.world_position, hit_radius) {
                     player->take_damage(1);
@@ -2649,6 +2806,7 @@ Task :: enum {
     NONE;
 
     FUEL_CANISTERS;
+    CHARGE_BATTERY;
     RESTORE_BEACONS;
     ALIGN_TAKEOFF;
     TAKEOFF;
@@ -2705,35 +2863,25 @@ Align_Takeoff_Station :: class : Component {
 Takeoff_Station :: class : Component {
     interactable: Interactable @ao_serialize;
 
-    initiated: bool;
-    takeoff_timer: float;
-
     ao_start :: proc(using this: Takeoff_Station) {
         interactable.listener = this;
     }
 
-    ao_update :: proc(using this: Takeoff_Station, dt: float) {
-        if g_game.state != .GAMEPLAY return;
-        if g_game.current_task != .TAKEOFF return;
-        if initiated {
-            if takeoff_timer > 0 {
-                takeoff_timer -= dt;
-                if takeoff_timer <= 0 {
-                    takeoff_timer = 0;
-                    complete_current_task();
-                }
-            }
-        }
-    }
-
     can_use :: proc(using this: Takeoff_Station, player: Player) -> bool {
-        return g_game.current_task == .TAKEOFF && player.team == .SURVIVOR && !initiated;
+        return g_game.current_task == .TAKEOFF && player.team == .SURVIVOR && !player.is_on_boat;
     }
 
     on_interact :: proc(using this: Takeoff_Station, player: Player) {
-        player->add_notification("Takeoff initiated!");
-        initiated = true;
-        takeoff_timer = 10;
+        player.is_on_boat = true;
+        player->turn_into_spectator();
+        player->add_notification("You escaped!");
+
+        // Notify all players
+        foreach p: component_iterator(Player) {
+            if p != player {
+                p->add_notification(format_string("A survivor escaped!", {}));
+            }
+        }
     }
 }
 
@@ -2743,13 +2891,12 @@ Takeoff_Station :: class : Component {
 
 REQUIRED_FUEL_CANISTERS :: 3;
 
-Fuel_Spawn_Point :: class : Component {
-    // Just a marker component to indicate a potential fuel spawn location
-    // Place these around the map in the editor
-}
+//
+// Carried Item (shared carrying logic for Fuel_Canister, Boat_Battery, etc.)
+//
 
-Fuel_Canister :: class : Component {
-    fuel_sprite: Sprite_Renderer @ao_serialize;
+Carried_Item :: class : Component {
+    item_sprite: Sprite_Renderer @ao_serialize;
     shadow_sprite: Sprite_Renderer @ao_serialize;
     interactable: Interactable @ao_serialize;
 
@@ -2758,21 +2905,22 @@ Fuel_Canister :: class : Component {
     last_carrier_position: v2;
     shadow_scale: v2;
 
-    triangle_hint: int;
+    pickup_sfx: string;
+    drop_sfx: string;
+    pickup_notification: string;
 
-    ao_start :: proc(using this: Fuel_Canister) {
-        interactable.listener = this;
+    ao_start :: proc(using this: Carried_Item) {
         shadow_scale = shadow_sprite.entity.local_scale;
     }
 
-    ao_late_update :: proc(using this: Fuel_Canister, dt: float) {
+    ao_late_update :: proc(using this: Carried_Item, dt: float) {
         if is_picked_up && carrier != null {
-            if alive(carrier) {
+            if #alive(carrier) {
                 last_carrier_position = carrier.entity.world_position;
             }
-            if !alive(carrier) || carrier.health.is_dead {
-                // Carrier died or disconnected, drop the canister
-                drop_canister(this, last_carrier_position);
+            if !#alive(carrier) || carrier.health.is_dead {
+                // Carrier died or disconnected, drop the item
+                drop_carried_item(this, last_carrier_position);
             }
             else {
                 // Follow the carrier
@@ -2780,101 +2928,354 @@ Fuel_Canister :: class : Component {
                 target_position := carrier.entity.local_position + vector;
                 new_position := lerp(entity.local_position, target_position, 0.25);
                 entity->set_local_position(new_position);
-
-                point_in_ship: v2;
-                if in_range(carrier.entity.world_position - g_game_manager.fuel_delivery_tutorial_arrow_point.world_position, 0.5) {
-                    g_game.fuel_deposited += 1;
-                    {
-                        sfx := default_sfx_desc();
-                        sfx->set_position(carrier.entity.world_position);
-                        sfx.volume_perturb = 0.2;
-                        sfx.speed_perturb = 0.1;
-                        SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
-                    }
-
-                    // Check if task is complete
-                    if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
-                        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                            player->add_notification("All fuel collected!");
-                        }
-                        complete_current_task();
-                    }
-                    else {
-                        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                            player->add_notification(format_string("Fuel deposited! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
-                        }
-                    }
-
-                    destroy_entity(entity);
-                }
             }
         }
 
-        fuel_hover_position := v2{0, 0};
+        // Hover animation when picked up
+        hover_position := v2{0, 0};
         new_shadow_scale := shadow_scale;
         if is_picked_up {
             t := PI * get_time();
-            fuel_hover_position.y = 0.4 + sin(t) * 0.2;
-            new_shadow_scale = shadow_scale / (1.0 + fuel_hover_position.y);
+            hover_position.y = 0.4 + sin(t) * 0.2;
+            new_shadow_scale = shadow_scale / (1.0 + hover_position.y);
         }
-        fuel_sprite.entity->set_local_position(fuel_hover_position);
-        fuel_sprite.depth_offset = -fuel_hover_position.y;
+        item_sprite.entity->set_local_position(hover_position);
+        item_sprite.depth_offset = -hover_position.y;
         shadow_sprite.entity->set_local_scale(new_shadow_scale);
-    }
-
-    can_use :: proc(using this: Fuel_Canister, player: Player) -> bool {
-        return g_game.current_task == .FUEL_CANISTERS
-            && player.team == .SURVIVOR
-            && !is_picked_up
-            && !is_player_carrying_canister(player);
-    }
-
-    on_interact :: proc(using this: Fuel_Canister, player: Player) {
-        pickup_canister(this, player);
     }
 }
 
-is_player_carrying_canister :: proc(player: Player) -> bool {
-    foreach canister: component_iterator(Fuel_Canister) {
-        if canister.carrier == player {
+is_player_carrying_item :: proc(player: Player) -> bool {
+    foreach item: component_iterator(Carried_Item) {
+        if item.carrier == player {
             return true;
         }
     }
     return false;
 }
 
-get_player_canister :: proc(player: Player) -> Fuel_Canister {
-    foreach canister: component_iterator(Fuel_Canister) {
-        if canister.carrier == player {
-            return canister;
+get_player_carried_item :: proc(player: Player) -> Carried_Item {
+    foreach item: component_iterator(Carried_Item) {
+        if item.carrier == player {
+            return item;
         }
     }
     return null;
 }
 
-pickup_canister :: proc(using canister: Fuel_Canister, player: Player) {
+pickup_carried_item :: proc(using item: Carried_Item, player: Player) {
     is_picked_up = true;
     carrier = player;
-    player->add_notification("Bring the fuel canister to the ship!");
-    {
+    if pickup_notification.count > 0 {
+        player->add_notification(pickup_notification);
+    }
+    if pickup_sfx.count > 0 {
         sfx := default_sfx_desc();
-        sfx->set_position(canister.entity.world_position);
+        sfx->set_position(item.entity.world_position);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
-        SFX.play(get_asset(SFX_Asset, "sfx/pickup_fuel.wav"), sfx);
+        SFX.play(get_asset(SFX_Asset, pickup_sfx), sfx);
     }
 }
 
-drop_canister :: proc(using canister: Fuel_Canister, position: v2) {
+drop_carried_item :: proc(using item: Carried_Item, position: v2) {
     entity->set_local_position(position);
     is_picked_up = false;
     carrier = null;
-    {
+    if drop_sfx.count > 0 {
         sfx := default_sfx_desc();
-        sfx->set_position(canister.entity.world_position);
+        sfx->set_position(item.entity.world_position);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
-        SFX.play(get_asset(SFX_Asset, "sfx/drop_fuel.wav"), sfx);
+        SFX.play(get_asset(SFX_Asset, drop_sfx), sfx);
+    }
+}
+
+//
+// Fuel Canister Task
+//
+
+Fuel_Spawn_Point :: class : Component {
+    // Just a marker component to indicate a potential fuel spawn location
+    // Place these around the map in the editor
+}
+
+Fuel_Canister :: class : Component {
+    carried_item: Carried_Item @ao_serialize;
+    interactable: Interactable @ao_serialize;
+
+    ao_start :: proc(using this: Fuel_Canister) {
+        interactable.listener = this;
+        carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
+        carried_item.drop_sfx = "sfx/drop_fuel.wav";
+        carried_item.pickup_notification = "Bring the fuel canister to the ship!";
+    }
+
+    can_use :: proc(using this: Fuel_Canister, player: Player) -> bool {
+        return g_game.current_task == .FUEL_CANISTERS
+            && player.team == .SURVIVOR
+            && !carried_item.is_picked_up
+            && !is_player_carrying_item(player);
+    }
+
+    on_interact :: proc(using this: Fuel_Canister, player: Player) {
+        pickup_carried_item(carried_item, player);
+    }
+}
+
+Fuel_Delivery_Point :: class : Component {
+    interactable: Interactable @ao_serialize;
+
+    ao_start :: proc(using this: Fuel_Delivery_Point) {
+        interactable.listener = this;
+    }
+
+    can_use :: proc(using this: Fuel_Delivery_Point, player: Player) -> bool {
+        if g_game.current_task != .FUEL_CANISTERS return false;
+        if player.team != .SURVIVOR return false;
+
+        // Only usable if the player is carrying a fuel canister
+        item := get_player_carried_item(player);
+        if item == null return false;
+
+        canister := item.entity->get_component(Fuel_Canister);
+        return canister != null;
+    }
+
+    on_interact :: proc(using this: Fuel_Delivery_Point, player: Player) {
+        item := get_player_carried_item(player);
+        if item == null return;
+
+        canister := item.entity->get_component(Fuel_Canister);
+        if canister == null return;
+
+        g_game.fuel_deposited += 1;
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(entity.world_position);
+            sfx.volume_perturb = 0.2;
+            sfx.speed_perturb = 0.1;
+            SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
+        }
+
+        // Check if task is complete
+        if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
+            foreach p: component_iterator(Player) if p.team == .SURVIVOR {
+                p->add_notification("All fuel collected!");
+            }
+            complete_current_task();
+        }
+        else {
+            foreach p: component_iterator(Player) if p.team == .SURVIVOR {
+                p->add_notification(format_string("Fuel deposited! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
+            }
+        }
+
+        destroy_entity(canister.entity);
+    }
+}
+
+//
+// Boat Battery Task
+//
+
+BATTERY_CHARGE_TIME :: 30.0;
+
+Battery_State :: enum {
+    UNCHARGED;
+    CHARGING;
+    CHARGED;
+}
+
+Boat_Battery_Spawn_Point :: class : Component {
+    // Marker component for battery spawn locations
+}
+
+Boat_Battery :: class : Component {
+    carried_item: Carried_Item @ao_serialize;
+    interactable: Interactable @ao_serialize;
+
+    state: Battery_State;
+    charge_t: float;
+    charger: Battery_Charger;
+
+    ao_start :: proc(using this: Boat_Battery) {
+        interactable.listener = this;
+        carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
+        carried_item.drop_sfx = "sfx/drop_fuel.wav";
+        state = .UNCHARGED;
+    }
+
+    ao_update :: proc(using this: Boat_Battery, dt: float) {
+        if g_game.current_task != .CHARGE_BATTERY return;
+
+        if state == .CHARGING && charger != null && #alive(charger) {
+            // Float towards charger
+            entity->lerp_local_position(charger.entity.world_position, 15 * dt);
+
+            // Charging progress
+            charge_t += dt / BATTERY_CHARGE_TIME;
+            if charge_t >= 1 {
+                charge_t = 1;
+                state = .CHARGED;
+                charger.is_charging = false;
+                carried_item.pickup_notification = "Bring the charged battery to the boat!";
+                foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                    player->add_notification("Battery fully charged! Bring it to the boat!");
+                }
+            }
+        }
+
+    }
+
+    ao_late_update :: proc(using this: Boat_Battery, dt: float) {
+        if g_game.current_task != .CHARGE_BATTERY return;
+
+        // Draw charging progress bar when charging
+        if state == .CHARGING {
+            UI.push_world_draw_context();
+            defer UI.pop_draw_context();
+
+            UI.push_layer(100);
+            defer UI.pop_layer();
+
+            bar_width := 1.5;
+            bar_height := 0.15;
+            bar_position := entity.world_position + v2{0, 0.8};
+            bg_rect := Rect{bar_position, bar_position}->grow(0.075, 0.75, 0.075, 0.75);
+            fill_rect := bg_rect->inset(0.01)->subrect(0, 0, charge_t, 1);
+
+            UI.quad(bg_rect, white_sprite, {0.2, 0.2, 0.2, 0.8});
+            UI.quad(fill_rect, white_sprite, {1.0, 0.8, 0.0, 1.0}); // Yellow/gold for charging
+        }
+    }
+
+    can_use :: proc(using this: Boat_Battery, player: Player) -> bool {
+        if g_game.current_task != .CHARGE_BATTERY return false;
+        if player.team != .SURVIVOR return false;
+        if is_player_carrying_item(player) return false;
+
+        // Can pick up if uncharged (to bring to charger) or charged (to bring to boat)
+        if state == .UNCHARGED && !carried_item.is_picked_up {
+            carried_item.pickup_notification = "Bring the battery to the charger!";
+            return true;
+        }
+        if state == .CHARGED && !carried_item.is_picked_up {
+            return true;
+        }
+        return false;
+    }
+
+    on_interact :: proc(using this: Boat_Battery, player: Player) {
+        pickup_carried_item(carried_item, player);
+    }
+
+    start_charging :: proc(using this: Boat_Battery, target_charger: Battery_Charger) {
+        state = .CHARGING;
+        charger = target_charger;
+
+        // Drop from carrier if being carried
+        if carried_item.is_picked_up && carried_item.carrier != null {
+            carried_item.is_picked_up = false;
+            carried_item.carrier = null;
+        }
+
+        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+            player->add_notification("Battery charging... Stay alive!");
+        }
+    }
+}
+
+Battery_Charger :: class : Component {
+    interactable: Interactable @ao_serialize;
+    is_charging: bool;
+
+    ao_start :: proc(using this: Battery_Charger) {
+        interactable.listener = this;
+    }
+
+    can_use :: proc(using this: Battery_Charger, player: Player) -> bool {
+        if g_game.current_task != .CHARGE_BATTERY return false;
+        if player.team != .SURVIVOR return false;
+        if is_charging return false;
+
+        // Only usable if the player is carrying an uncharged battery
+        item := get_player_carried_item(player);
+        if item == null return false;
+
+        battery := item.entity->get_component(Boat_Battery);
+        if battery == null return false;
+
+        return battery.state == .UNCHARGED;
+    }
+
+    on_interact :: proc(using this: Battery_Charger, player: Player) {
+        item := get_player_carried_item(player);
+        if item == null return;
+
+        battery := item.entity->get_component(Boat_Battery);
+        if battery == null return;
+
+        is_charging = true;
+        battery->start_charging(this);
+
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(entity.world_position);
+            SFX.play(get_asset(SFX_Asset, "sfx/align_takeoff.wav"), sfx); // TODO: charging sound
+        }
+    }
+}
+
+get_boat_battery :: proc() -> Boat_Battery {
+    foreach battery: component_iterator(Boat_Battery) {
+        return battery;
+    }
+    return null;
+}
+
+Battery_Delivery_Point :: class : Component {
+    interactable: Interactable @ao_serialize;
+
+    ao_start :: proc(using this: Battery_Delivery_Point) {
+        interactable.listener = this;
+    }
+
+    can_use :: proc(using this: Battery_Delivery_Point, player: Player) -> bool {
+        if g_game.current_task != .CHARGE_BATTERY return false;
+        if player.team != .SURVIVOR return false;
+
+        // Only usable if the player is carrying a charged battery
+        item := get_player_carried_item(player);
+        if item == null return false;
+
+        battery := item.entity->get_component(Boat_Battery);
+        if battery == null return false;
+
+        return battery.state == .CHARGED;
+    }
+
+    on_interact :: proc(using this: Battery_Delivery_Point, player: Player) {
+        item := get_player_carried_item(player);
+        if item == null return;
+
+        battery := item.entity->get_component(Boat_Battery);
+        if battery == null return;
+
+        g_game.battery_delivered = true;
+        {
+            sfx := default_sfx_desc();
+            sfx->set_position(entity.world_position);
+            sfx.volume_perturb = 0.2;
+            sfx.speed_perturb = 0.1;
+            SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
+        }
+
+        foreach p: component_iterator(Player) if p.team == .SURVIVOR {
+            p->add_notification("Battery installed!");
+        }
+        complete_current_task();
+        destroy_entity(battery.entity);
     }
 }
 

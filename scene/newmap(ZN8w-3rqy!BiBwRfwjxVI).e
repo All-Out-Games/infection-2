@@ -9,10 +9,11 @@
   },
   "local_rotation": 0,
   "local_scale": {
-    "X": 4,
-    "Y": 4
+    "X": 1,
+    "Y": 1
   },
-  "previous_sibling": "5284264187309104:1765148460804393200"
+  "previous_sibling": "5284264187309104:1765148460804393200",
+  "next_sibling": "7176997535257146:1765925566910828000"
 },
 {
   "cid": 1,
@@ -21,7 +22,6 @@
   "internal_component_type": "Game_Manager",
   "data": {
     "main_navmesh": "7098507147846066:1765904911770942400",
-    "bullet_navmesh": "7098507147846066:1765904911770942400",
-    "fuel_delivery_tutorial_arrow_point": "5346733351525056:1765164899878856000"
+    "bullet_navmesh": "7098507147846066:1765904911770942400"
   }
 }

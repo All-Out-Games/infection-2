@@ -1,5 +1,14 @@
 [
   {
+    "id": "sprites/battery.png",
+    "texture": {
+      "pivot": [
+        0.0585937500000000,
+        -0.6718750000000000
+      ]
+    }
+  },
+  {
     "id": "fuel_canister.png",
     "texture": {
       "pivot": [

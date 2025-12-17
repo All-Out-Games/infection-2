@@ -9,8 +9,8 @@
   },
   "local_rotation": 0,
   "local_scale": {
-    "X": 1,
-    "Y": 1
+    "X": 4,
+    "Y": 4
   },
   "next_sibling": "7098118272061789:1765904809436325500",
   "parent": "7098224802183858:1765904837470262600"
@@ -22,6 +22,7 @@
   "internal_component_type": "Sprite_Renderer",
   "data": {
     "texture": "new_map/Island Base.png",
-    "depth_offset": 14.9321622848510742
+    "depth_offset": 14.9321622848510742,
+    "layer": -100
   }
 }
