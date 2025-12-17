@@ -906,7 +906,7 @@ Shoot_Ability :: class : Ability_Base {
                 if player.current_ammo > 0 {
                     player.current_ammo -= 1;
                     player.current_ammo_float -= 1;
-                    shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.75, player.team, player.entity);
+                    shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.5, player.team, player.entity);
                     player.time_last_shot[player.current_ammo] = get_time();
                     SFX.play(get_asset(SFX_Asset, "sfx/shoot.wav"), sfx);
                 }
@@ -2781,6 +2781,14 @@ Food_Projectile :: class : Component {
             effect->set_local_position(entity.world_position);
             effect->queue_for_destruction(0.5);
             destroy_entity(entity);
+
+            #global sfx := default_sfx_desc();
+            sfx->set_position(entity.world_position);
+            sfx.volume = 0.5;
+            sfx.volume_perturb = 0.1;
+            sfx.speed_perturb = 0.1;
+            #global sfx_asset := get_asset(SFX_Asset, "sfx/pop.wav");
+            SFX.play(sfx_asset, sfx);
         }
     }
 }
