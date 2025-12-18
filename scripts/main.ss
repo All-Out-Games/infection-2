@@ -52,7 +52,7 @@ g_game: struct {
     round_timer: float; // Time remaining in the current round
 };
 
-TASK_COMPLETION_TIME_BONUS :: 30.0;
+TASK_COMPLETION_TIME_BONUS :: 60.0;
 
 complete_current_task :: proc() {
     g_game.current_task_index += 1;
@@ -1837,13 +1837,13 @@ Death_Controller :: class : Controller_Base {
 // Player, mostly UI
 //
 
-Notification :: class {
-    time: float;
-    text: string;
-    next: Notification;
-}
-
 Player :: class : Player_Base {
+    Notification :: class {
+        time: float;
+        text: string;
+        next: Notification;
+    }
+
     team: Player_Team;
 
     last_food_arrive_time: float;
@@ -2001,18 +2001,15 @@ Player :: class : Player_Base {
         fill_rect := inner_bar->subrect(0, 0, sprint_stamina, 1);
 
         // Color: yellow when full, orange when depleting
-        fill_color: v4;
-        if sprint_exhausted {
-            fill_color = {1, 0, 0, 1};
-        }
-        else {
+        fill_color: v4 = #expr {
+            if sprint_exhausted {
+                give {1, 0, 0, 1};
+            }
             if is_sprinting {
-                fill_color = lerp(v4{1, 0.3, 0, 1}, {1, 0.8, 0, 1}, sprint_stamina);
+                give lerp(v4{1, 0.3, 0, 1}, {1, 0.8, 0, 1}, sprint_stamina);
             }
-            else {
-                fill_color = lerp(v4{1, 0.3, 0, 1}, {0.3, 1, 0, 1}, sprint_stamina);
-            }
-        }
+            give lerp(v4{1, 0.3, 0, 1}, {0.3, 1, 0, 1}, sprint_stamina);
+        };
         UI.quad(fill_rect, white_sprite, fill_color);
 
         UI.push_layer_relative(1);
