@@ -5,15 +5,15 @@
   "name": "Battery delivery point",
   "local_enabled": true,
   "local_position": {
-
+    "Y": 0.2706584930419922
   },
   "local_rotation": 0,
   "local_scale": {
     "X": 1,
     "Y": 1
   },
-  "next_sibling": "5346733351525056:1765164899878856000",
-  "parent": "7176997535257146:1765925566910828000"
+  "previous_sibling": "5346733351525056:1765164899878856000",
+  "parent": "7404570017185033:1766009692521570000"
 },
 {
   "cid": 1,
@@ -23,7 +23,7 @@
   "data": {
     "text": "Deliver battery",
     "hold_text": "Delivering battery...",
-    "radius": 1
+    "radius": 1.5000000000000000
   }
 },
 {

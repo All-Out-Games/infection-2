@@ -36,7 +36,7 @@ ROUND_TIME_LIMIT :: 300.0; // 5 minutes in seconds
 g_game: struct {
     state: Game_State;
 
-    tasks: [3]Task;
+    tasks: [4]Task;
     current_task: Task;
     current_task_index: int;
 
@@ -75,7 +75,16 @@ ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
 MAX_AMMO        :: 3;
 AMMO_PER_SECOND :: 0.5;
 
-g_game_manager: Game_Manager;
+get_game_manager :: proc() -> Game_Manager {
+    #global game_manager: Game_Manager;
+    if game_manager == null {
+        foreach gm: component_iterator(Game_Manager) {
+            game_manager = gm;
+            break;
+        }
+    }
+    return game_manager;
+}
 
 ao_before_scene_load :: proc() {
     white_sprite    = get_asset(Texture_Asset, "$AO/white.png");
@@ -107,10 +116,6 @@ ao_start :: proc() {
     foreach spawn: component_iterator(Survivor_Spawn_Point) {
         all_survivor_spawns->append(spawn.entity);
     }
-    foreach gm: component_iterator(Game_Manager) {
-        g_game_manager = gm;
-        break;
-    }
 }
 
 draw_big_game_text :: proc(str: string, args: [^]any = {}) {
@@ -127,7 +132,7 @@ draw_small_game_text :: proc(str: string, args: [^]any = {}) {
     UI.text(text_rect, ts, str, args);
 }
 
-draw_round_timer :: proc(time_remaining: float, paused: bool) {
+draw_round_timer :: proc(time_remaining: float, paused: bool, pause_reason: string) {
     // Format time as M:SS
     total_seconds := max(0, time_remaining.(int));
     minutes := total_seconds / 60;
@@ -154,11 +159,11 @@ draw_round_timer :: proc(time_remaining: float, paused: bool) {
     UI.text(timer_rect, ts, "%:%{02}", {minutes, seconds});
 
     if paused {
-        // Draw "PAUSED" indicator below timer
+        // Draw pause reason indicator below timer
         pause_ts := UI.default_text_settings();
         pause_ts.size = 24;
         pause_ts.color = {1, 0.9, 0.3, 1};
-        UI.text(timer_rect->offset(0, -35), pause_ts, "CHARGING");
+        UI.text(timer_rect->offset(0, -35), pause_ts, pause_reason);
     }
 }
 
@@ -274,6 +279,16 @@ ao_update :: proc(dt: float) {
             // foreach beacon: component_iterator(Beacon) {
             //     destroy_entity(beacon.entity);
             // }
+
+            // Reset trolley
+            trolley := get_trolley();
+            if trolley != null {
+                reset_trolley(trolley);
+            }
+
+            // Reset game state
+            g_game.fuel_deposited = 0;
+            g_game.battery_delivered = false;
 
             // spawn fuel canisters
             {
@@ -410,9 +425,8 @@ ao_update :: proc(dt: float) {
 
                     g_game.tasks[0] = .FUEL_CANISTERS;
                     g_game.tasks[1] = .CHARGE_BATTERY;
-                    // g_game.tasks[2] = .RESTORE_BEACONS;
-                    // g_game.tasks[2] = .ALIGN_TAKEOFF;
-                    g_game.tasks[2] = .TAKEOFF;
+                    g_game.tasks[2] = .PUSH_TROLLEY;
+                    g_game.tasks[3] = .TAKEOFF;
                     g_game.current_task_index = 0;
                     g_game.current_task = g_game.tasks[g_game.current_task_index];
                     g_game.round_timer = ROUND_TIME_LIMIT;
@@ -420,11 +434,19 @@ ao_update :: proc(dt: float) {
             }
         }
         case .GAMEPLAY: {
-            // Decrement round timer (paused while battery is charging)
+            // Decrement round timer (paused while battery is charging or trolley is being pushed)
             timer_paused := false;
+            timer_pause_reason := "";
+
             battery := get_boat_battery();
             if battery != null && battery.state == .CHARGING {
                 timer_paused = true;
+                timer_pause_reason = "CHARGING";
+            }
+
+            if g_game.current_task == .PUSH_TROLLEY && is_trolley_being_pushed() {
+                timer_paused = true;
+                timer_pause_reason = "PUSHING";
             }
 
             if !timer_paused {
@@ -505,7 +527,7 @@ ao_update :: proc(dt: float) {
                     local_player := Game.try_get_local_player();
 
                     // Draw round timer at top of screen
-                    draw_round_timer(g_game.round_timer, timer_paused);
+                    draw_round_timer(g_game.round_timer, timer_paused, timer_pause_reason);
 
                     // Draw current task objective
                     if local_player != null {
@@ -539,12 +561,25 @@ ao_update :: proc(dt: float) {
                                                     draw_task_subtitle(&rect, "Bring battery to charger");
                                                 }
                                                 case .CHARGING: {
-                                                    progress := (battery.charge_t * 100).(int);
-                                                    draw_task_subtitle(&rect, "Charging: %0%%", {progress});
+                                                    progress := battery.charge_t * 100;
+                                                    draw_task_subtitle(&rect, "Charging: %{.1}%%", {progress});
                                                 }
                                                 case .CHARGED: {
-                                                    draw_task_subtitle(&rect, "Bring battery to boat!");
+                                                    draw_task_subtitle(&rect, "Bring battery to trolley!");
                                                 }
+                                            }
+                                        }
+                                    }
+                                    case .PUSH_TROLLEY: {
+                                        rect := begin_task_ui();
+                                        draw_task_title(&rect, "Push the Trolley!");
+                                        trolley := get_trolley();
+                                        if trolley != null {
+                                            if trolley.is_being_pushed {
+                                                draw_task_subtitle(&rect, "Keep pushing to the trolley!");
+                                            }
+                                            else {
+                                                draw_task_subtitle(&rect, "Stay near the trolley to push");
                                             }
                                         }
                                     }
@@ -714,9 +749,9 @@ ao_can_use_ability :: proc(player: Player, ability: Ability_Base) -> bool {
 }
 
 Game_Manager :: class : Component {
-    main_navmesh:   Navmesh @ao_serialize;
-    ship_navmesh:   Navmesh @ao_serialize;
-    bullet_navmesh: Navmesh @ao_serialize;
+    main_navmesh:    Navmesh @ao_serialize;
+    trolley_navmesh: Navmesh @ao_serialize;
+    bullet_navmesh:  Navmesh @ao_serialize;
 }
 
 //
@@ -2001,7 +2036,7 @@ Player :: class : Player_Base {
 
     ao_start :: proc(using this: Player) {
         agent.lock_to_navmesh = true;
-        agent->set_navmesh_to_lock_to(g_game_manager.main_navmesh);
+        agent->set_navmesh_to_lock_to(get_game_manager().main_navmesh);
 
         switch g_game.state {
             case .GAMEPLAY: {
@@ -2097,7 +2132,12 @@ Player :: class : Player_Base {
             }
 
             running_state.speed = SPRINT_SPEED_BONUS;
-            sprint_stamina -= dt * SPRINT_DRAIN_RATE;
+            if !Game.is_launched_from_editor() {
+                sprint_stamina -= dt * SPRINT_DRAIN_RATE;
+            }
+            else {
+                sprint_stamina -= dt * (SPRINT_DRAIN_RATE * 0.1);
+            }
             if sprint_stamina <= 0 {
                 sprint_stamina = 0;
                 is_sprinting = false;
@@ -2207,9 +2247,16 @@ Player :: class : Player_Base {
                                         switch battery.state {
                                             case .UNCHARGED: {
                                                 if battery.carried_item.is_picked_up {
-                                                    // Point to charger
-                                                    foreach charger: component_iterator(Battery_Charger) {
-                                                        draw_tutorial_arrow(this, charger.entity.world_position, tutorial_arrow_options);
+                                                    carrier := battery.carried_item.carrier;
+                                                    if carrier != null && carrier == this {
+                                                        // I'm carrying - point to charger
+                                                        foreach charger: component_iterator(Battery_Charger) {
+                                                            draw_tutorial_arrow(this, charger.entity.world_position, tutorial_arrow_options);
+                                                        }
+                                                    }
+                                                    else if carrier != null {
+                                                        // Someone else is carrying - point to them
+                                                        draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
                                                     }
                                                 }
                                                 else {
@@ -2223,9 +2270,16 @@ Player :: class : Player_Base {
                                             }
                                             case .CHARGED: {
                                                 if battery.carried_item.is_picked_up {
-                                                    // Point to boat delivery
-                                                    foreach delivery: component_iterator(Battery_Delivery_Point) {
-                                                        draw_tutorial_arrow(this, delivery.entity.world_position, tutorial_arrow_options);
+                                                    carrier := battery.carried_item.carrier;
+                                                    if carrier != null && carrier == this {
+                                                        // I'm carrying - point to trolley delivery
+                                                        foreach delivery: component_iterator(Battery_Delivery_Point) {
+                                                            draw_tutorial_arrow(this, delivery.entity.world_position, tutorial_arrow_options);
+                                                        }
+                                                    }
+                                                    else if carrier != null {
+                                                        // Someone else is carrying - point to them
+                                                        draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
                                                     }
                                                 }
                                                 else {
@@ -2233,6 +2287,16 @@ Player :: class : Player_Base {
                                                     draw_tutorial_arrow(this, battery.entity.world_position, tutorial_arrow_options);
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                                case .PUSH_TROLLEY: {
+                                    trolley := get_trolley();
+                                    if trolley != null && !trolley.has_reached_destination {
+                                        // Don't show arrow if I'm already pushing (within range)
+                                        am_pushing := in_range(entity.world_position - trolley.entity.world_position, TROLLEY_SURVIVOR_RANGE);
+                                        if !am_pushing {
+                                            draw_tutorial_arrow(this, trolley.entity.world_position, tutorial_arrow_options);
                                         }
                                     }
                                 }
@@ -2775,7 +2839,7 @@ Food_Projectile :: class : Component {
             point: v2;
             // todo(josh): this crashes!!!:
             // if Game_Manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
-            if g_game_manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point, &triangle_hint) {
+            if get_game_manager().bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point, &triangle_hint) {
                 if !in_range(point - entity.world_position, 0.01) {
                     destroy_self = true;
                 }
@@ -2824,6 +2888,7 @@ Task :: enum {
 
     FUEL_CANISTERS;
     CHARGE_BATTERY;
+    PUSH_TROLLEY;
     RESTORE_BEACONS;
     ALIGN_TAKEOFF;
     TAKEOFF;
@@ -3025,7 +3090,7 @@ Fuel_Canister :: class : Component {
         interactable.listener = this;
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
-        carried_item.pickup_notification = "Bring the fuel canister to the boat!";
+        carried_item.pickup_notification = "Bring the fuel canister to the trolley!";
     }
 
     can_use :: proc(using this: Fuel_Canister, player: Player) -> bool {
@@ -3075,16 +3140,26 @@ Fuel_Delivery_Point :: class : Component {
             SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
         }
 
+        // Show fuel on trolley
+        trolley := get_trolley();
+        if trolley != null {
+            switch g_game.fuel_deposited {
+                case 1: trolley.fuel1_sprite.entity->set_local_enabled(true);
+                case 2: trolley.fuel2_sprite.entity->set_local_enabled(true);
+                case 3: trolley.fuel3_sprite.entity->set_local_enabled(true);
+            }
+        }
+
         // Check if task is complete
         if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
             foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-                p->add_notification("All fuel collected!");
+                p->add_notification("All fuel loaded on trolley!");
             }
             complete_current_task();
         }
         else {
             foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-                p->add_notification(format_string("Fuel deposited! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
+                p->add_notification(format_string("Fuel loaded! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
             }
         }
 
@@ -3136,9 +3211,9 @@ Boat_Battery :: class : Component {
                 charge_t = 1;
                 state = .CHARGED;
                 charger.is_charging = false;
-                carried_item.pickup_notification = "Bring the charged battery to the boat!";
+                carried_item.pickup_notification = "Bring the charged battery to the trolley!";
                 foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                    player->add_notification("Battery fully charged! Bring it to the boat!");
+                    player->add_notification("Battery fully charged! Bring it to the trolley!");
                 }
             }
         }
@@ -3289,11 +3364,188 @@ Battery_Delivery_Point :: class : Component {
         }
 
         foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-            p->add_notification("Battery installed!");
+            p->add_notification("Battery loaded on trolley!");
         }
+
+        // Show battery on trolley
+        trolley := get_trolley();
+        if trolley != null {
+            trolley.battery_sprite.entity->set_local_enabled(true);
+        }
+
         complete_current_task();
         destroy_entity(battery.entity);
     }
+}
+
+//
+// Payload Trolley
+//
+
+TROLLEY_SURVIVOR_RANGE :: 3.0;
+TROLLEY_ZOMBIE_RANGE :: 3.0;
+TROLLEY_SPEED :: 2.0;
+
+g_trolley: Trolley;
+
+Trolley :: class : Component {
+    agent: Movement_Agent @ao_serialize;
+    destination: Entity @ao_serialize; // The boat/end point
+
+    sprite: Sprite_Renderer @ao_serialize;
+    battery_sprite: Sprite_Renderer @ao_serialize;
+    fuel1_sprite: Sprite_Renderer @ao_serialize;
+    fuel2_sprite: Sprite_Renderer @ao_serialize;
+    fuel3_sprite: Sprite_Renderer @ao_serialize;
+
+    start_position: v2;
+    is_being_pushed: bool;
+    has_reached_destination: bool;
+
+    ao_start :: proc(using this: Trolley) {
+        g_trolley = this;
+        agent = entity->get_component(Movement_Agent);
+        agent->set_navmesh_to_lock_to(get_game_manager().trolley_navmesh);
+        start_position = entity.world_position;
+        reset_trolley(this);
+    }
+
+    ao_update :: proc(using this: Trolley, dt: float) {
+        if g_game.state != .GAMEPLAY return;
+        if g_game.current_task != .PUSH_TROLLEY return;
+        if has_reached_destination return;
+
+        // Check if any survivor or zombie is in range
+        survivor_nearby := false;
+        zombie_nearby := false;
+        foreach player: component_iterator(Player) {
+            if player.health.is_dead continue;
+            switch player.team {
+                case .SURVIVOR: {
+                    if in_range(player.entity.world_position - entity.world_position, TROLLEY_SURVIVOR_RANGE) {
+                        survivor_nearby = true;
+                    }
+                }
+                case .ZOMBIE: {
+                    if in_range(player.entity.world_position - entity.world_position, TROLLEY_ZOMBIE_RANGE) {
+                        zombie_nearby = true;
+                    }
+                }
+            }
+        }
+
+        is_being_pushed = survivor_nearby && !zombie_nearby;
+
+        if is_being_pushed {
+            // Move toward destination using Movement_Agent pathfinding
+            if destination != null && #alive(destination) {
+                result := agent->set_path_target(destination.world_position, 60);
+
+                // Flip sprite based on movement direction
+                if result.success && sprite != null {
+                    new_scale := sprite.entity.local_scale;
+                    if result.move_direction.x > 0.01 {
+                        new_scale.x = abs(new_scale.x);
+                    }
+                    else if result.move_direction.x < -0.01 {
+                        new_scale.x = -abs(new_scale.x);
+                    }
+                    sprite.entity->set_local_scale(new_scale);
+                }
+
+                // Check if reached destination
+                if in_range(entity.world_position - destination.world_position, 0.5) {
+                    on_reached_destination(this);
+                }
+            }
+        }
+    }
+
+    ao_late_update :: proc(using this: Trolley, dt: float) {
+        if g_game.current_task != .PUSH_TROLLEY return;
+        if has_reached_destination return;
+
+        // Draw progress indicator
+        UI.push_world_draw_context();
+        defer UI.pop_draw_context();
+
+        UI.push_layer(100);
+        defer UI.pop_layer();
+
+        // Show push status above trolley
+        bar_position := entity.world_position + v2{0, 1.2};
+
+        ts := UI.default_text_settings();
+        ts.size = 0.3;
+
+        if is_being_pushed {
+            ts.color = {0.2, 1, 0.2, 1};
+            UI.text(Rect{bar_position, bar_position}, ts, "PUSHING");
+        }
+        else {
+            // Check why not pushing
+            zombie_nearby := false;
+            foreach player: component_iterator(Player) {
+                if player.team != .ZOMBIE continue;
+                if in_range(player.entity.world_position - entity.world_position, TROLLEY_ZOMBIE_RANGE) {
+                    zombie_nearby = true;
+                    break;
+                }
+            }
+
+            if zombie_nearby {
+                ts.color = {1, 0.2, 0.2, 1};
+                UI.text(Rect{bar_position, bar_position}, ts, "CONTESTED");
+            }
+            else {
+                ts.color = {1, 1, 0.2, 1};
+                UI.text(Rect{bar_position, bar_position}, ts, "WAITING");
+            }
+        }
+    }
+
+    on_reached_destination :: proc(using this: Trolley) {
+        has_reached_destination = true;
+
+        // Hide the trolley sprite and all cargo sprites
+        sprite.entity->set_local_enabled(false);
+        battery_sprite.entity->set_local_enabled(false);
+        fuel1_sprite.entity->set_local_enabled(false);
+        fuel2_sprite.entity->set_local_enabled(false);
+        fuel3_sprite.entity->set_local_enabled(false);
+
+        foreach p: component_iterator(Player) if p.team == .SURVIVOR {
+            p->add_notification("Supplies delivered! Get to the boat!");
+        }
+
+        complete_current_task();
+    }
+}
+
+reset_trolley :: proc(using trolley: Trolley) {
+    entity->set_local_position(start_position);
+    is_being_pushed = false;
+    has_reached_destination = false;
+
+    // Re-enable trolley sprite
+    sprite.entity->set_local_enabled(true);
+
+    // Hide all cargo sprites initially
+    battery_sprite.entity->set_local_enabled(false);
+    fuel1_sprite.entity->set_local_enabled(false);
+    fuel2_sprite.entity->set_local_enabled(false);
+    fuel3_sprite.entity->set_local_enabled(false);
+}
+
+get_trolley :: proc() -> Trolley {
+    return g_trolley;
+}
+
+is_trolley_being_pushed :: proc() -> bool {
+    trolley := get_trolley();
+    if trolley == null return false;
+    if trolley.has_reached_destination return false;
+    return trolley.is_being_pushed;
 }
 
 //

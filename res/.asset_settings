@@ -1,5 +1,14 @@
 [
   {
+    "id": "sprites/trolly.png",
+    "texture": {
+      "pivot": [
+        -0.0078125000000000,
+        -0.6438293457031250
+      ]
+    }
+  },
+  {
     "id": "sprites/battery.png",
     "texture": {
       "pivot": [

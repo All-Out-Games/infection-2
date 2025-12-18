@@ -5,16 +5,16 @@
   "name": "Fuel delivery point",
   "local_enabled": true,
   "local_position": {
-
+    "Y": 0.2706584930419922
   },
   "local_rotation": 0,
   "local_scale": {
     "X": 1,
     "Y": 1
   },
-  "previous_sibling": "7166860868661080:1765922899396073500",
-  "next_sibling": "5306434179917335:1765154294949359100",
-  "parent": "7176997535257146:1765925566910828000"
+  "previous_sibling": "7404581670398988:1766009695588171800",
+  "next_sibling": "7166860868661080:1765922899396073500",
+  "parent": "7404570017185033:1766009692521570000"
 },
 {
   "cid": 1,
@@ -24,7 +24,7 @@
   "data": {
     "text": "Deliver fuel",
     "hold_text": "Delivering fuel...",
-    "radius": 1
+    "radius": 1.5000000000000000
   }
 },
 {
