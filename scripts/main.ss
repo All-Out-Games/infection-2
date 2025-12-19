@@ -281,8 +281,7 @@ ao_update :: proc(dt: float) {
             // }
 
             // Reset trolley
-            trolley := get_trolley();
-            if trolley != null {
+            if trolley := get_trolley(); trolley != null {
                 reset_trolley(trolley);
             }
 
@@ -573,8 +572,7 @@ ao_update :: proc(dt: float) {
                                     case .PUSH_TROLLEY: {
                                         rect := begin_task_ui();
                                         draw_task_title(&rect, "Push the Trolley!");
-                                        trolley := get_trolley();
-                                        if trolley != null {
+                                        if trolley := get_trolley(); trolley != null {
                                             if trolley.is_being_pushed {
                                                 draw_task_subtitle(&rect, "Keep pushing to the trolley!");
                                             }
@@ -2086,7 +2084,6 @@ Player :: class : Player_Base {
 
         switch team {
             case .SURVIVOR: {
-                base_speed: float;
                 if is_player_carrying_item(this) {
                     agent.movement_speed = 150;
                 }
@@ -2156,18 +2153,18 @@ Player :: class : Player_Base {
         current_ammo = current_ammo_float.(int);
 
         {
-            name_color := v4{1, 1, 1, 1};
+            do_name_color_override = true;
             switch team {
                 case .SURVIVOR: {
-                    name_color = {0, 1, 0, 1};
+                    name_color_override = {0, 1, 0, 1};
                 }
                 case .ZOMBIE: {
-                    name_color = {1, 0, 0, 1};
+                    name_color_override = {1, 0, 0, 1};
+                }
+                case: {
+                    name_color_override = {1, 1, 1, 1};
                 }
             }
-
-            do_name_color_override = true;
-            name_color_override = name_color;
         }
     }
 
@@ -2182,7 +2179,6 @@ Player :: class : Player_Base {
         }
 
         if this->is_local_or_server() {
-
             if g_game.state == .WAITING_FOR_PLAYERS {
                 draw_ability_button(this, Shoot_Ability, 0);
                 draw_ability_button(this, Dodge_Roll, 1);
@@ -2239,21 +2235,21 @@ Player :: class : Player_Base {
                                     }
                                 }
                                 case .CHARGE_BATTERY: {
-                                    battery := get_boat_battery();
-                                    if battery != null {
+                                    if battery := get_boat_battery(); battery != null {
                                         switch battery.state {
                                             case .UNCHARGED: {
                                                 if battery.carried_item.is_picked_up {
-                                                    carrier := battery.carried_item.carrier;
-                                                    if carrier != null && carrier == this {
-                                                        // I'm carrying - point to charger
-                                                        foreach charger: component_iterator(Battery_Charger) {
-                                                            draw_tutorial_arrow(this, charger.entity.world_position, tutorial_arrow_options);
+                                                    if carrier := battery.carried_item.carrier; carrier != null {
+                                                        if carrier == this {
+                                                            // I'm carrying - point to charger
+                                                            foreach charger: component_iterator(Battery_Charger) {
+                                                                draw_tutorial_arrow(this, charger.entity.world_position, tutorial_arrow_options);
+                                                            }
                                                         }
-                                                    }
-                                                    else if carrier != null {
-                                                        // Someone else is carrying - point to them
-                                                        draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
+                                                        else {
+                                                            // Someone else is carrying - point to them
+                                                            draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
+                                                        }
                                                     }
                                                 }
                                                 else {
@@ -2267,16 +2263,17 @@ Player :: class : Player_Base {
                                             }
                                             case .CHARGED: {
                                                 if battery.carried_item.is_picked_up {
-                                                    carrier := battery.carried_item.carrier;
-                                                    if carrier != null && carrier == this {
-                                                        // I'm carrying - point to trolley delivery
-                                                        foreach delivery: component_iterator(Battery_Delivery_Point) {
-                                                            draw_tutorial_arrow(this, delivery.entity.world_position, tutorial_arrow_options);
+                                                    if carrier := battery.carried_item.carrier; carrier != null {
+                                                        if carrier == this {
+                                                            // I'm carrying - point to trolley delivery
+                                                            foreach delivery: component_iterator(Battery_Delivery_Point) {
+                                                                draw_tutorial_arrow(this, delivery.entity.world_position, tutorial_arrow_options);
+                                                            }
                                                         }
-                                                    }
-                                                    else if carrier != null {
-                                                        // Someone else is carrying - point to them
-                                                        draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
+                                                        else {
+                                                            // Someone else is carrying - point to them
+                                                            draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
+                                                        }
                                                     }
                                                 }
                                                 else {
@@ -2288,8 +2285,7 @@ Player :: class : Player_Base {
                                     }
                                 }
                                 case .PUSH_TROLLEY: {
-                                    trolley := get_trolley();
-                                    if trolley != null && !trolley.has_reached_destination {
+                                    if trolley := get_trolley(); trolley != null && !trolley.has_reached_destination {
                                         // Don't show arrow if I'm already pushing (within range)
                                         am_pushing := in_range(entity.world_position - trolley.entity.world_position, TROLLEY_SURVIVOR_RANGE);
                                         if !am_pushing {
@@ -2599,8 +2595,7 @@ NPC :: class : Component {
             return true;
         }
 
-        result := agent->set_path_target(target, WANDER_SPEED);
-        if result.success {
+        if result := agent->set_path_target(target, WANDER_SPEED); result.success {
             this->update_scale(result.move_direction.x);
         }
         return false;
@@ -3138,8 +3133,7 @@ Fuel_Delivery_Point :: class : Component {
         }
 
         // Show fuel on trolley
-        trolley := get_trolley();
-        if trolley != null {
+        if trolley := get_trolley(); trolley != null {
             switch g_game.fuel_deposited {
                 case 1: trolley.fuel1_sprite.entity->set_local_enabled(true);
                 case 2: trolley.fuel2_sprite.entity->set_local_enabled(true);
@@ -3365,8 +3359,7 @@ Battery_Delivery_Point :: class : Component {
         }
 
         // Show battery on trolley
-        trolley := get_trolley();
-        if trolley != null {
+        if trolley := get_trolley(); trolley != null {
             trolley.battery_sprite.entity->set_local_enabled(true);
         }
 
