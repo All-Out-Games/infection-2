@@ -250,7 +250,7 @@ draw_rect_grow_fade_out_effect :: proc(rect: Rect, time: float, color: v4) {
     effect_t := Ease.out_quart(Ease.T(time, 0.35));
     if effect_t >= 1 return;
     growth := min(rect->width() * 0.5, rect->height() * 0.5) * effect_t;
-    effect_rect := rect->grow_unscaled(growth, growth, growth, growth);
+    effect_rect := rect->grow_unscaled(growth);
     color.w = 1 - effect_t;
     UI.quad(effect_rect, white_sprite, color);
 }
