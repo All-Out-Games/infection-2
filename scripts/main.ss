@@ -1914,6 +1914,7 @@ Player :: class : Player_Base {
         }
         health->take_damage(damage);
         if health.is_dead {
+            active_ability = null;
             controller := new(Death_Controller);
             this->set_controller(controller);
         }
@@ -2178,7 +2179,7 @@ Player :: class : Player_Base {
             camera.size = 5;
         }
 
-        if this->is_local_or_server() {
+        if this->is_local_or_server() && !health.is_dead {
             if g_game.state == .WAITING_FOR_PLAYERS {
                 draw_ability_button(this, Shoot_Ability, 0);
                 draw_ability_button(this, Dodge_Roll, 1);
