@@ -255,6 +255,15 @@ draw_rect_grow_fade_out_effect :: proc(rect: Rect, time: float, color: v4) {
     UI.quad(effect_rect, white_sprite, color);
 }
 
+shuffle :: proc(rng: ref u64, array: []$T) {
+    for i: 0..array.count-1 {
+        j := rng_range_int(rng, 0, array.count-1);
+        temp := array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+}
+
 ao_update :: proc(dt: float) {
     switch g_game.state {
         case .RESET_MAP: {
@@ -305,13 +314,7 @@ ao_update :: proc(dt: float) {
                     spawn_index += 1;
                 }
 
-                // Fisher-Yates shuffle to randomize spawn points
-                for i: 0..spawn_point_count-1 {
-                    j := rng_range_int(&server_rng, 0, spawn_point_count-1);
-                    temp := spawn_points[i];
-                    spawn_points[i] = spawn_points[j];
-                    spawn_points[j] = temp;
-                }
+                shuffle(&server_rng, spawn_points);
 
                 // Spawn canisters at the first REQUIRED_FUEL_CANISTERS spawn points
                 canisters_to_spawn := min(REQUIRED_FUEL_CANISTERS, spawn_point_count);
@@ -409,8 +412,11 @@ ao_update :: proc(dt: float) {
                         player.team = .SURVIVOR;
                     }
 
-                    first_zombie := rng_range_int(&server_rng, 0, player_count-1);
-                    players[first_zombie].team = .ZOMBIE;
+                    shuffle(&server_rng, players);
+                    zombie_count := max(1, player_count / 4);
+                    for i: 0..zombie_count-1 {
+                        players[i].team = .ZOMBIE;
+                    }
                     g_game.state = .GAMEPLAY;
 
                     for player: players {
