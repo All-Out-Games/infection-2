@@ -264,6 +264,23 @@ shuffle :: proc(rng: ref u64, array: []$T) {
     }
 }
 
+get_all_components :: proc($T: typeid) -> []T {
+    components: List(T);
+    foreach c: component_iterator(T) {
+        components->append(c);
+    }
+    return components.elements;
+}
+
+try_get_random_component :: proc(rng: ref u64, $T: typeid) -> T {
+    components := get_all_components(T);
+    if components.count == 0 {
+        return null;
+    }
+    index := rng_range_int(rng, 0, components.count-1);
+    return components[index];
+}
+
 ao_update :: proc(dt: float) {
     switch g_game.state {
         case .RESET_MAP: {
@@ -285,6 +302,9 @@ ao_update :: proc(dt: float) {
             foreach fuel: component_iterator(Boat_Battery) {
                 destroy_entity(fuel.entity);
             }
+            foreach charger: component_iterator(Battery_Charger) {
+                charger.is_charging = false;
+            }
             // foreach beacon: component_iterator(Beacon) {
             //     destroy_entity(beacon.entity);
             // }
@@ -300,27 +320,15 @@ ao_update :: proc(dt: float) {
 
             // spawn fuel canisters
             {
-                // Count available spawn points
-                spawn_point_count := 0;
-                foreach spawn_point: component_iterator(Fuel_Spawn_Point) {
-                    spawn_point_count += 1;
-                }
-
                 // Collect all spawn points into an array
-                spawn_points := new(Fuel_Spawn_Point, spawn_point_count);
-                spawn_index := 0;
-                foreach spawn_point: component_iterator(Fuel_Spawn_Point) {
-                    spawn_points[spawn_index] = spawn_point;
-                    spawn_index += 1;
-                }
-
-                shuffle(&server_rng, spawn_points);
+                fuel_spawn_points := get_all_components(Fuel_Spawn_Point);
+                shuffle(&server_rng, fuel_spawn_points);
 
                 // Spawn canisters at the first REQUIRED_FUEL_CANISTERS spawn points
-                canisters_to_spawn := min(REQUIRED_FUEL_CANISTERS, spawn_point_count);
+                canisters_to_spawn := min(REQUIRED_FUEL_CANISTERS, fuel_spawn_points.count);
                 canister_prefab := get_asset(Prefab_Asset, "fuel_canister.prefab");
                 for i: 0..canisters_to_spawn-1 {
-                    spawn_point := spawn_points[i];
+                    spawn_point := fuel_spawn_points[i];
                     canister_entity := instantiate(canister_prefab);
                     canister_entity->set_local_position(spawn_point.entity.world_position);
                 }
@@ -364,11 +372,9 @@ ao_update :: proc(dt: float) {
             {
                 #global prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
 
-                // there is only one spawn
-                foreach spawn_point: component_iterator(Boat_Battery_Spawn_Point) {
-                    battery := instantiate(prefab);
-                    battery->set_local_position(spawn_point.entity.world_position);
-                }
+                battery_spawn := try_get_random_component(&server_rng, Boat_Battery_Spawn_Point);
+                battery := instantiate(prefab);
+                battery->set_local_position(battery_spawn.entity.world_position);
             }
 
             g_game.state = .WAITING_FOR_PLAYERS;
@@ -944,7 +950,7 @@ Shoot_Ability :: class : Ability_Base {
         if params.can_use {
             if aiming.shoot {
                 ability.current_cooldown = 0.75;
-                sfx := default_sfx_desc();
+                sfx := SFX.default_sfx_desc();
                 sfx->set_position(player.entity.local_position);
                 sfx.volume_perturb = 0.2;
                 sfx.speed_perturb = 0.1;
@@ -1091,7 +1097,7 @@ Roll_Controller :: class : Controller_Base {
 
     controller_begin :: proc(using this: Roll_Controller) {
         {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(player.entity.world_position);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
@@ -1156,7 +1162,7 @@ Slash_Controller :: class : Controller_Base {
         player.agent.friction = 0;
         player->set_facing_right(direction.x > 0);
         {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(player.entity.world_position);
             sfx.volume = 0.75;
             sfx.volume_perturb = 0.1;
@@ -1183,7 +1189,7 @@ Slash_Controller :: class : Controller_Base {
                 other->take_damage(1);
                 already_hit_list->append(other);
                 {
-                    sfx := default_sfx_desc();
+                    sfx := SFX.default_sfx_desc();
                     sfx->set_position(other.entity.world_position);
                     sfx.volume = 0.75;
                     sfx.volume_perturb = 0.1;
@@ -1386,7 +1392,7 @@ Eating_Controller :: class : Controller_Base {
         // Apply player.chew_stat using Health_Component
         died := food.health->take_damage(player.chew_stat);
         {
-            desc := default_sfx_desc();
+            desc := SFX.default_sfx_desc();
             desc->set_position(player.entity.local_position);
 
             rng := rng_seed(food.entity.id ^ food.health.current_health.(u64));
@@ -1478,7 +1484,7 @@ Chop_Tree_Controller :: class : Controller_Base {
 
         // Play chop sound (reuse bite sounds for now)
         {
-            desc := default_sfx_desc();
+            desc := SFX.default_sfx_desc();
             desc->set_position(player.entity.local_position);
 
             rng := rng_seed(tree.entity.id ^ tree.health.current_health.(u64));
@@ -1804,7 +1810,7 @@ Death_Controller :: class : Controller_Base {
         player->add_name_invisibility_reason("death");
         player->player_set_trigger("death");
         if Game.is_server() {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(player.entity.world_position);
             sfx.volume = 0.5;
             sfx.speed_perturb = 0.15;
@@ -2236,6 +2242,14 @@ Player :: class : Player_Base {
                                             if !fuel.carried_item.is_picked_up {
                                                 draw_tutorial_arrow(this, fuel.entity.world_position, tutorial_arrow_options);
                                             }
+                                            else {
+                                                // Someone is carrying - point to them so others know to protect
+                                                if carrier := fuel.carried_item.carrier; carrier != null {
+                                                    far_only_options := tutorial_arrow_options;
+                                                    far_only_options.near = false;
+                                                    draw_tutorial_arrow(this, carrier.entity.world_position, far_only_options);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2253,7 +2267,9 @@ Player :: class : Player_Base {
                                                         }
                                                         else {
                                                             // Someone else is carrying - point to them
-                                                            draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
+                                                            far_only_options := tutorial_arrow_options;
+                                                            far_only_options.near = false;
+                                                            draw_tutorial_arrow(this, carrier.entity.world_position, far_only_options);
                                                         }
                                                     }
                                                 }
@@ -2277,7 +2293,9 @@ Player :: class : Player_Base {
                                                         }
                                                         else {
                                                             // Someone else is carrying - point to them
-                                                            draw_tutorial_arrow(this, carrier.entity.world_position, tutorial_arrow_options);
+                                                            far_only_options := tutorial_arrow_options;
+                                                            far_only_options.near = false;
+                                                            draw_tutorial_arrow(this, carrier.entity.world_position, far_only_options);
                                                         }
                                                     }
                                                 }
@@ -2816,7 +2834,7 @@ Food_Projectile :: class : Component {
                     player->take_damage(1);
                     destroy_self = true;
                     {
-                        sfx := default_sfx_desc();
+                        sfx := SFX.default_sfx_desc();
                         sfx->set_position(player.entity.world_position);
                         sfx.volume = 0.75;
                         sfx.volume_perturb = 0.1;
@@ -2852,7 +2870,7 @@ Food_Projectile :: class : Component {
             effect->queue_for_destruction(0.5);
             destroy_entity(entity);
 
-            #global sfx := default_sfx_desc();
+            #global sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
@@ -2916,7 +2934,7 @@ Align_Takeoff_Station :: class : Component {
 
     on_interact :: proc(using this: Align_Takeoff_Station, player: Player) {
         {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
             SFX.play(get_asset(SFX_Asset, "sfx/align_takeoff.wav"), sfx);
         }
@@ -3049,7 +3067,7 @@ pickup_carried_item :: proc(using item: Carried_Item, player: Player) {
         player->add_notification(pickup_notification);
     }
     if pickup_sfx.count > 0 {
-        sfx := default_sfx_desc();
+        sfx := SFX.default_sfx_desc();
         sfx->set_position(item.entity.world_position);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
@@ -3062,7 +3080,7 @@ drop_carried_item :: proc(using item: Carried_Item, position: v2) {
     is_picked_up = false;
     carrier = null;
     if drop_sfx.count > 0 {
-        sfx := default_sfx_desc();
+        sfx := SFX.default_sfx_desc();
         sfx->set_position(item.entity.world_position);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
@@ -3130,7 +3148,7 @@ Fuel_Delivery_Point :: class : Component {
 
         g_game.fuel_deposited += 1;
         {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
@@ -3308,7 +3326,7 @@ Battery_Charger :: class : Component {
         battery->start_charging(this);
 
         {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
             SFX.play(get_asset(SFX_Asset, "sfx/align_takeoff.wav"), sfx); // TODO: charging sound
         }
@@ -3352,7 +3370,7 @@ Battery_Delivery_Point :: class : Component {
 
         g_game.battery_delivered = true;
         {
-            sfx := default_sfx_desc();
+            sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
@@ -3683,7 +3701,7 @@ Beacon :: class : Component {
 on_beacon_restored :: proc(beacon: Beacon) {
     g_game.beacons_restored += 1;
     {
-        sfx := default_sfx_desc();
+        sfx := SFX.default_sfx_desc();
         sfx->set_position(beacon.entity.world_position);
         SFX.play(get_asset(SFX_Asset, "sfx/beacon_restore.wav"), sfx);
     }
