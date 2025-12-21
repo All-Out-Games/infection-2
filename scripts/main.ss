@@ -413,8 +413,7 @@ ao_update :: proc(dt: float) {
                     players[first_zombie].team = .ZOMBIE;
                     g_game.state = .GAMEPLAY;
 
-                    for i: 0..players.count-1 {
-                        player := players[i];
+                    for player: players {
                         respawn_player(player);
 
                         // Show round start intro animation
@@ -681,8 +680,7 @@ respawn_player :: proc(using player: Player) {
         }
         case .ZOMBIE: {
             valid_spawns: List(Entity);
-            for i: 0..all_zombie_spawns.elements.count-1 {
-                spawn := all_zombie_spawns.elements[i];
+            for spawn: all_zombie_spawns.elements {
                 spawn_ok := true;
                 foreach player: component_iterator(Player) if player.team == .SURVIVOR {
                     if in_range(spawn.world_position - player.entity.world_position, 10) {
@@ -1167,8 +1165,8 @@ Slash_Controller :: class : Controller_Base {
             if other.team != .SURVIVOR continue;
             if in_range(other.entity.world_position - player.entity.world_position, 0.75) {
                 already_hit := false;
-                for i: 0..already_hit_list.elements.count-1 {
-                    if already_hit_list.elements[i] == other {
+                for hit: already_hit_list.elements {
+                    if hit == other {
                         already_hit = true;
                         break;
                     }
