@@ -1,6 +1,6 @@
-import "core:core.ss"
+import "core:core.csl"
 
-import "other_script.ss"
+import "other_script.csl"
 
 white_sprite:    Texture_Asset;
 modal_bg_sprite: Texture_Asset;
