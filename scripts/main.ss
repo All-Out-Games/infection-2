@@ -890,52 +890,6 @@ Interact_Ability :: class : Ability_Base {
     }
 }
 
-Always_Aiming_Ability_Data :: struct {
-    aim:   bool;
-    shoot: bool;
-}
-
-update_always_aiming_ability :: proc(player: Player, params: ref Ability_Update_Params) -> Always_Aiming_Ability_Data {
-    result: Always_Aiming_Ability_Data;
-    if length(params.drag_offset) > 0.35 {
-        if params.released {
-            result.shoot = true;
-        }
-        else {
-            result.aim = true;
-        }
-    }
-
-    if player.device_kind == .PC {
-        if player.active_ability == null {
-            UI.push_layer(-1000);
-            defer UI.pop_layer();
-            UI.push_id("click to shoot");
-            defer UI.pop_id();
-
-            interact := UI.button(UI.get_screen_rect(), {}, {}, "");
-
-            if interact.hovering {
-                result.aim = true;
-                params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
-            }
-
-            if params.can_use {
-                if interact.active {
-                    result.shoot = true;
-                }
-            }
-        }
-    }
-
-    if result.aim {
-        player.last_aim_direction = params.drag_direction;
-        draw_thin_aiming_line(player.entity.world_position, params.drag_direction, 1.0 / player.camera.size * 4);
-    }
-
-    return result;
-}
-
 // On mobile: press and hold, shoots automatically while aiming
 // On PC: always active, click to shoot
 Shoot_Ability :: class : Ability_Base {
@@ -946,180 +900,25 @@ Shoot_Ability :: class : Ability_Base {
     }
 
     on_update :: proc(ability: Shoot_Ability, player: Player, params: Ability_Update_Params) {
-        aiming := update_always_aiming_ability(player, &params);
-        if params.can_use {
-            if aiming.shoot {
-                ability.current_cooldown = 0.75;
-                sfx := SFX.default_sfx_desc();
-                sfx->set_position(player.entity.local_position);
-                sfx.volume_perturb = 0.2;
-                sfx.speed_perturb = 0.1;
-                if player.current_ammo > 0 {
-                    player.current_ammo -= 1;
-                    player.current_ammo_float -= 1;
-                    shoot_projectile(player.entity.world_position, params.drag_direction * 10.0, 1, 0.5, player.team, player.entity);
-                    player.time_last_shot[player.current_ammo] = get_time();
-                    SFX.play(get_asset(SFX_Asset, "sfx/shoot.wav"), sfx);
-                }
-                else {
-                    player.last_failed_to_shoot_time = get_time();
-                    SFX.play(get_asset(SFX_Asset, "sfx/no_ammo.wav"), sfx);
-                }
-            }
-        }
-    }
-}
-
-// Drop item ability - shown when carrying any item
-Drop_Item_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Drop_Item_Ability) {
-        ability.name = "Drop";
-        ability.icon = get_asset(Texture_Asset, "icons/fuel.png");
-        ability.keybind_override = keybind_drop_fuel;
-    }
-
-    can_use :: proc(ability: Drop_Item_Ability, player: Player) -> bool {
-        return is_player_carrying_item(player);
-    }
-
-    on_update :: proc(ability: Drop_Item_Ability, player: Player, params: Ability_Update_Params) {
-        if params.clicked && params.can_use {
-            item := get_player_carried_item(player);
-            if item != null {
-                drop_carried_item(item, player.entity.world_position);
-            }
-        }
-    }
-}
-
-// Sprint ability - hold to move faster, uses stamina
-SPRINT_DRAIN_RATE :: 0.5;
-SPRINT_REGEN_RATE :: 0.2;
-SPRINT_SPEED_BONUS :: 1.35;
-
-Sprint_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Sprint_Ability) {
-        ability.name = "Sprint";
-        ability.keybind_override = keybind_sprint;
-        ability.draw_but_dont_use_keybind = true;
-    }
-
-    can_use :: proc(ability: Sprint_Ability, player: Player) -> bool {
-        return player.team == .SURVIVOR && player.sprint_stamina > 0;
-    }
-
-    on_update :: proc(ability: Sprint_Ability, player: Player, params: Ability_Update_Params) {
-        if player.device_kind == .PC {
-            if Keybinds.get_keybind_held(player, keybind_sprint) {
-                params.active = true;
-            }
-        }
-        if params.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
-            player.is_sprinting = true;
-        }
-        else {
-            player.is_sprinting = false;
-        }
-    }
-}
-
-// On mobile: press and hold, drag to aim
-// On PC: toggle on, click to shoot
-Dodge_Roll :: class : Ability_Base {
-    on_init :: proc(ability: Dodge_Roll) {
-        ability.name = "Roll";
-        // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
-        ability.is_aimed_ability = true;
-        ability.keybind_override = keybind_dodge_roll;
-    }
-
-    can_use :: proc(ability: Dodge_Roll, player: Player) -> bool {
-        return true;
-    }
-
-    on_update :: proc(ability: Dodge_Roll, player: Player, params: Ability_Update_Params) {
-        if player.health.is_dead {
-            return;
-        }
-
-        aim := false;
-        activate := false;
-        if player.device_kind == .PC {
-            if params.clicked {
-                player.active_ability = ability;
-            }
-            if player.active_ability == ability.(Ability_Base) {
-                if get_input_down(.MOUSE_RIGHT, true) {
-                    player.active_ability = null;
-                }
-            }
-            if player.active_ability == ability.(Ability_Base) { // todo(josh): @CSL @Incomplete: shouldn't need a cast here!!!
-                aim = true;
-                params.drag_direction = normalize(get_mouse_world_position() - player.entity.world_position);
-
-                UI.push_layer(-990); // be in front of the interact ability
-                defer UI.pop_layer();
-                UI.push_id("click to roll");
-                defer UI.pop_id();
-
-                interact := UI.button(UI.get_screen_rect(), {}, {}, "");
-                if interact.just_pressed {
-                    activate = true;
-                    player.active_ability = null;
-                }
-            }
-        }
-        else {
-            if params.active {
-                aim = true;
-            }
-            if params.released {
-                activate = true;
-            }
-        }
-
-        if aim {
-            draw_aiming_line(player.entity.world_position, params.drag_direction, 1.0 / player.camera.size * 4);
-        }
-
-        if params.can_use && activate {
-            ability.current_cooldown = 1.5;
-            controller := new(Roll_Controller);
-            controller.direction = params.drag_direction;
-            set_controller(player, controller);
-        }
-    }
-}
-
-Roll_Controller :: class : Controller_Base {
-    direction: v2;
-    original_friction: float;
-
-    controller_begin :: proc(using this: Roll_Controller) {
-        {
+        activation := Ability_Utilities.full_update_aimed_ability(player, &params);
+        if activation.activate {
+            ability.current_cooldown = 0.75;
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(player.entity.world_position);
-            sfx.volume = 0.5;
-            sfx.volume_perturb = 0.1;
+            sfx->set_position(player.entity.local_position);
+            sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
-            SFX.play(get_asset(SFX_Asset, "sfx/dodge_roll.wav"), sfx);
+            if player.current_ammo > 0 {
+                player.current_ammo -= 1;
+                player.current_ammo_float -= 1;
+                shoot_projectile(player.entity.world_position, activation.direction * 10.0, 1, 0.5, player.team, player.entity);
+                player.time_last_shot[player.current_ammo] = get_time();
+                SFX.play(get_asset(SFX_Asset, "sfx/shoot.wav"), sfx);
+            }
+            else {
+                player.last_failed_to_shoot_time = get_time();
+                SFX.play(get_asset(SFX_Asset, "sfx/no_ammo.wav"), sfx);
+            }
         }
-        disable_movement_inputs = true;
-        player->player_set_trigger("dodge_roll");
-        original_friction = player.agent.friction;
-        player.agent.friction = 0;
-        player->set_facing_right(direction.x > 0);
-    }
-
-    controller_update :: proc(using this: Roll_Controller, dt: float) {
-        player.agent.velocity = direction * 8;
-        if elapsed_time > 0.5 {
-            end_controller(player, false);
-        }
-    }
-
-    controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
-        player.agent.friction = original_friction;
     }
 }
 
@@ -1138,14 +937,13 @@ Slash_Ability :: class : Ability_Base {
     }
 
     on_update :: proc(ability: Slash_Ability, player: Player, params: Ability_Update_Params) {
-        if update_always_aiming_ability(player, &params).shoot {
-            if params.can_use {
-                ability.current_cooldown = 1;
+        activation := Ability_Utilities.full_update_aimed_ability(player, &params);
+        if activation.activate {
+            ability.current_cooldown = 1;
 
-                controller := new(Slash_Controller);
-                controller.direction = params.drag_direction;
-                set_controller(player, controller);
-            }
+            controller := new(Slash_Controller);
+            controller.direction = activation.direction;
+            set_controller(player, controller);
         }
     }
 }
@@ -1208,6 +1006,108 @@ Slash_Controller :: class : Controller_Base {
     controller_end :: proc(using this: Slash_Controller, interrupt: bool) {
         player.agent.friction = original_friction;
         player->player_set_trigger("RESET");
+    }
+}
+
+// Drop item ability - shown when carrying any item
+Drop_Item_Ability :: class : Ability_Base {
+    on_init :: proc(ability: Drop_Item_Ability) {
+        ability.name = "Drop";
+        ability.icon = get_asset(Texture_Asset, "icons/fuel.png");
+        ability.keybind_override = keybind_drop_fuel;
+    }
+
+    can_use :: proc(ability: Drop_Item_Ability, player: Player) -> bool {
+        return is_player_carrying_item(player);
+    }
+
+    on_update :: proc(ability: Drop_Item_Ability, player: Player, params: Ability_Update_Params) {
+        if params.clicked && params.can_use {
+            item := get_player_carried_item(player);
+            if item != null {
+                drop_carried_item(item, player.entity.world_position);
+            }
+        }
+    }
+}
+
+// Sprint ability - hold to move faster, uses stamina
+SPRINT_DRAIN_RATE :: 0.5;
+SPRINT_REGEN_RATE :: 0.2;
+SPRINT_SPEED_BONUS :: 1.35;
+
+Sprint_Ability :: class : Ability_Base {
+    on_init :: proc(ability: Sprint_Ability) {
+        ability.name = "Sprint";
+        ability.keybind_override = keybind_sprint;
+        ability.draw_but_dont_use_keybind = true;
+    }
+
+    can_use :: proc(ability: Sprint_Ability, player: Player) -> bool {
+        return player.team == .SURVIVOR && player.sprint_stamina > 0;
+    }
+
+    on_update :: proc(ability: Sprint_Ability, player: Player, params: Ability_Update_Params) {
+        holding := Ability_Utilities.update_holding_ability(player, &params, keybind_sprint);
+        if holding.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
+            player.is_sprinting = true;
+        }
+        else {
+            player.is_sprinting = false;
+        }
+    }
+}
+
+// On mobile: press and hold, drag to aim
+// On PC: toggle on, click to shoot
+Dodge_Roll :: class : Ability_Base {
+    on_init :: proc(ability: Dodge_Roll) {
+        ability.name = "Roll";
+        // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
+        ability.is_aimed_ability = true;
+        ability.keybind_override = keybind_dodge_roll;
+    }
+
+    on_update :: proc(ability: Dodge_Roll, player: Player, params: Ability_Update_Params) {
+        activation := Ability_Utilities.full_update_targeted_aimed_ability(player, ability, &params);
+        if activation.activate {
+            ability.current_cooldown = 1.5;
+            controller := new(Roll_Controller);
+            controller.direction = activation.direction;
+            set_controller(player, controller);
+        }
+    }
+}
+
+Roll_Controller :: class : Controller_Base {
+    direction: v2;
+    original_friction: float;
+
+    controller_begin :: proc(using this: Roll_Controller) {
+        {
+            sfx := SFX.default_sfx_desc();
+            sfx->set_position(player.entity.world_position);
+            sfx.volume = 0.5;
+            sfx.volume_perturb = 0.1;
+            sfx.speed_perturb = 0.1;
+            SFX.play(get_asset(SFX_Asset, "sfx/dodge_roll.wav"), sfx);
+        }
+        disable_movement_inputs = true;
+        player->player_set_trigger("dodge_roll");
+        original_friction = player.agent.friction;
+        player.agent.friction = 0;
+        player->set_facing_right(direction.x > 0);
+    }
+
+    controller_update :: proc(using this: Roll_Controller, dt: float) {
+        player.agent.velocity = direction * 8;
+        if elapsed_time > 0.5 {
+            end_controller(player, false);
+        }
+    }
+
+    controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
+        player.agent.friction = original_friction;
     }
 }
 
@@ -1873,10 +1773,6 @@ Player :: class : Player_Base {
     is_on_boat: bool;
 
     health: Health_Component;
-
-    active_ability: Ability_Base;
-
-    last_aim_direction: v2;
 
     notifications: List(Notification);
 
