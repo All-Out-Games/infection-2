@@ -7,7 +7,6 @@ modal_bg_sprite: Texture_Asset;
 button_green:    Texture_Asset;
 button_red:      Texture_Asset;
 button_orange:   Texture_Asset;
-tutorial_arrow:  Texture_Asset;
 
 dust_spine: Spine_Asset;
 
@@ -92,7 +91,6 @@ ao_before_scene_load :: proc() {
     button_green    = get_asset(Texture_Asset, "ui/button_large_green1.png");
     button_red      = get_asset(Texture_Asset, "ui/button_large_red1.png");
     button_orange   = get_asset(Texture_Asset, "ui/button_large_yellow2.png");
-    tutorial_arrow  = get_asset(Texture_Asset, "arrow.png");
 
     dust_spine      = get_asset(Spine_Asset, "rigs/dust_running_spine/dust_running.spine");
 
@@ -187,10 +185,6 @@ draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = {}) {
     ts.valign = .CENTER;
     text_rect := rect->cut_top(35);
     UI.text(text_rect, ts, str, args);
-}
-
-rotate_about_point :: proc(point: v2, degrees: float) -> Matrix4 {
-    return Matrix4.translate(point)->multiply(Matrix4.rotate(degrees, {0, 0, 1})->multiply(Matrix4.translate(-point)));
 }
 
 draw_rect_grow_fade_out_effect :: proc(rect: Rect, time: float, color: v4) {
