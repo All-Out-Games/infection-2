@@ -220,7 +220,7 @@ ao_update :: proc(dt: float) {
                 player->end_controller(true);
                 player->remove_ghost_reason("spectator");
                 player->remove_ghost_reason("escaped");
-                player.team = .SURVIVOR;
+                player->set_team(.SURVIVOR);
                 player.is_on_boat = false;
                 respawn_player(player);
             }
@@ -347,13 +347,13 @@ ao_update :: proc(dt: float) {
                     foreach player: component_iterator(Player) {
                         players[player_index] = player;
                         player_index += 1;
-                        player.team = .SURVIVOR;
+                        player->set_team(.SURVIVOR);
                     }
 
                     rng_shuffle(&server_rng, players);
                     zombie_count := max(1, player_count / 4);
                     for i: 0..zombie_count-1 {
-                        players[i].team = .ZOMBIE;
+                        players[i]->set_team(.ZOMBIE);
                     }
                     g_game.state = .GAMEPLAY;
 
@@ -1665,7 +1665,7 @@ Death_Controller :: class : Controller_Base {
     controller_end :: proc(using this: Death_Controller, interrupt: bool) {
         player->remove_name_invisibility_reason("death");
         if player.team == .SURVIVOR {
-            player.team = .ZOMBIE;
+            player->set_team(.ZOMBIE);
         }
         respawn_player(player);
         player.health->reset();
@@ -1863,9 +1863,29 @@ Player :: class : Player_Base {
 
     turn_into_spectator :: proc(using this: Player) {
         if team != .SPECTATOR {
-            team = .SPECTATOR;
+            this->set_team(.SPECTATOR);
             this->add_ghost_reason("spectator");
         }
+    }
+
+    ALIVE_CHANNEL :: 1 << 0;
+    DEAD_CHANNEL  :: 1 << 1;
+
+    set_team :: proc(using this: Player, new_team: Player_Team) {
+        listen_mask: s64;
+        speak_mask: s64;
+        if new_team == .SPECTATOR {
+            listen_mask = ALIVE_CHANNEL | DEAD_CHANNEL;
+            speak_mask = DEAD_CHANNEL;
+        }
+        else {
+            listen_mask = ALIVE_CHANNEL;
+            speak_mask = ALIVE_CHANNEL;
+        }
+
+        voice_channel_listen_mask = listen_mask.(u64);
+        voice_channel_speak_mask  = speak_mask.(u64);
+        team = new_team;
     }
 
     ao_start :: proc(using this: Player) {
@@ -1877,7 +1897,7 @@ Player :: class : Player_Base {
                 this->turn_into_spectator();
             }
             case: {
-                team = .SURVIVOR;
+                this->set_team(.SURVIVOR);
             }
         }
 
