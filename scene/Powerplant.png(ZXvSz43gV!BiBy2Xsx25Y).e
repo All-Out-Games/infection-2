@@ -24,7 +24,7 @@
   "internal_component_type": "Sprite_Renderer",
   "data": {
     "texture": "new_map/Powerplant/Powerplant.png",
-    "depth_offset": 1.8796511888504028,
+    "depth_offset": 2.1642546653747559,
     "layer": -100
   }
 }

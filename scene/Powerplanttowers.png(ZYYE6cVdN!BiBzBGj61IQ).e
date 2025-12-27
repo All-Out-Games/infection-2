@@ -24,6 +24,7 @@
   "internal_component_type": "Sprite_Renderer",
   "data": {
     "texture": "new_map/Powerplant towers.png",
-    "depth_offset": 2.8533854484558105
+    "depth_offset": 3.1021246910095215,
+    "layer": -100
   }
 }

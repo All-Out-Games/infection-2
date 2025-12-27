@@ -24,6 +24,7 @@
   "internal_component_type": "Sprite_Renderer",
   "data": {
     "texture": "new_map/Edge Fencing/Border fence top L.png",
-    "depth_offset": 1.3540508747100830
+    "depth_offset": 1.9324806928634644,
+    "layer": -100
   }
 }
