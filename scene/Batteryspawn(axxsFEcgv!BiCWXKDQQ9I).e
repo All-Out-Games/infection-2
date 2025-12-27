@@ -5,8 +5,8 @@
   "name": "Battery spawn",
   "local_enabled": true,
   "local_position": {
-    "X": -0.7657577991485596,
-    "Y": 4.6894688606262207
+    "X": 25.8108310699462891,
+    "Y": -22.1981925964355469
   },
   "local_rotation": 0,
   "local_scale": {
