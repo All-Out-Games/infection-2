@@ -655,32 +655,7 @@ ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> b
     if player.health.is_dead {
         return false;
     }
-    if interactable.listener != null switch #object_type(interactable.listener) {
-        case Sell_Zone:              return interactable.listener.(Sell_Zone)->can_use(player);
-        case Align_Takeoff_Station:  return interactable.listener.(Align_Takeoff_Station)->can_use(player);
-        case Takeoff_Station:        return interactable.listener.(Takeoff_Station)->can_use(player);
-        case Fuel_Canister:          return interactable.listener.(Fuel_Canister)->can_use(player);
-        case Fuel_Delivery_Point:    return interactable.listener.(Fuel_Delivery_Point)->can_use(player);
-        case Boat_Battery:           return interactable.listener.(Boat_Battery)->can_use(player);
-        case Battery_Charger:        return interactable.listener.(Battery_Charger)->can_use(player);
-        case Battery_Delivery_Point: return interactable.listener.(Battery_Delivery_Point)->can_use(player);
-        case Beacon:                 return interactable.listener.(Beacon)->can_use(player);
-    }
     return true;
-}
-
-ao_on_interactable_used :: proc(interactable: Interactable, player: Player) {
-    if interactable.listener != null switch #object_type(interactable.listener) {
-        case Sell_Zone:              interactable.listener.(Sell_Zone)->on_interact(player);
-        case Beacon:                 interactable.listener.(Beacon)->on_interact(player);
-        case Align_Takeoff_Station:  interactable.listener.(Align_Takeoff_Station)->on_interact(player);
-        case Takeoff_Station:        interactable.listener.(Takeoff_Station)->on_interact(player);
-        case Fuel_Canister:          interactable.listener.(Fuel_Canister)->on_interact(player);
-        case Fuel_Delivery_Point:    interactable.listener.(Fuel_Delivery_Point)->on_interact(player);
-        case Boat_Battery:           interactable.listener.(Boat_Battery)->on_interact(player);
-        case Battery_Charger:        interactable.listener.(Battery_Charger)->on_interact(player);
-        case Battery_Delivery_Point: interactable.listener.(Battery_Delivery_Point)->on_interact(player);
-    }
 }
 
 ao_can_use_ability :: proc(player: Player, ability: Ability_Base) -> bool {
@@ -2234,7 +2209,7 @@ Sell_Zone :: class : Component {
     interactable: Interactable @ao_serialize;
 
     ao_start :: proc(using this: Sell_Zone) {
-        interactable.listener = this;
+        interactable->set_listener(this);
     }
 
     can_use :: proc(using this: Sell_Zone, player: Player) -> bool {
@@ -2770,7 +2745,7 @@ Align_Takeoff_Station :: class : Component {
     locked_in: bool;
 
     ao_start :: proc(using this: Align_Takeoff_Station) {
-        interactable.listener = this;
+        interactable->set_listener(this);
     }
 
     can_use :: proc(using this: Align_Takeoff_Station, player: Player) -> bool {
@@ -2806,7 +2781,7 @@ Takeoff_Station :: class : Component {
     interactable: Interactable @ao_serialize;
 
     ao_start :: proc(using this: Takeoff_Station) {
-        interactable.listener = this;
+        interactable->set_listener(this);
     }
 
     can_use :: proc(using this: Takeoff_Station, player: Player) -> bool {
@@ -2951,7 +2926,7 @@ Fuel_Canister :: class : Component {
     interactable: Interactable @ao_serialize;
 
     ao_start :: proc(using this: Fuel_Canister) {
-        interactable.listener = this;
+        interactable->set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         carried_item.pickup_notification = "Bring the fuel canister to the trolley!";
@@ -2973,7 +2948,7 @@ Fuel_Delivery_Point :: class : Component {
     interactable: Interactable @ao_serialize;
 
     ao_start :: proc(using this: Fuel_Delivery_Point) {
-        interactable.listener = this;
+        interactable->set_listener(this);
     }
 
     can_use :: proc(using this: Fuel_Delivery_Point, player: Player) -> bool {
@@ -3055,7 +3030,7 @@ Boat_Battery :: class : Component {
     charger: Battery_Charger;
 
     ao_start :: proc(using this: Boat_Battery) {
-        interactable.listener = this;
+        interactable->set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         state = .UNCHARGED;
@@ -3136,7 +3111,7 @@ Battery_Charger :: class : Component {
     is_charging: bool;
 
     ao_start :: proc(using this: Battery_Charger) {
-        interactable.listener = this;
+        interactable->set_listener(this);
     }
 
     can_use :: proc(using this: Battery_Charger, player: Player) -> bool {
@@ -3183,7 +3158,7 @@ Battery_Delivery_Point :: class : Component {
     interactable: Interactable @ao_serialize;
 
     ao_start :: proc(using this: Battery_Delivery_Point) {
-        interactable.listener = this;
+        interactable->set_listener(this);
     }
 
     can_use :: proc(using this: Battery_Delivery_Point, player: Player) -> bool {
@@ -3429,7 +3404,7 @@ Beacon :: class : Component {
     survivor_nearby: bool;
 
     ao_start :: proc(using this: Beacon) {
-        interactable.listener = this;
+        interactable->set_listener(this);
         state = .INACTIVE;
         restore_progress = 0;
     }
