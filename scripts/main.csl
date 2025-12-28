@@ -692,6 +692,12 @@ Game_Manager :: class : Component {
     main_navmesh:    Navmesh @ao_serialize;
     trolley_navmesh: Navmesh @ao_serialize;
     bullet_navmesh:  Navmesh @ao_serialize;
+
+    test_string: string @ao_serialize;
+
+    ao_start :: proc(using this: Game_Manager) {
+        log("test string: %", {test_string});
+    }
 }
 
 //
@@ -822,8 +828,8 @@ Interact_Ability :: class : Ability_Base {
     }
 }
 
-// On mobile: press and hold, shoots automatically while aiming
-// On PC: always active, click to shoot
+// On mobile: press and and drag to aim, activate on release
+// On PC: always aiming, click to activate
 Shoot_Ability :: class : Ability_Base {
     on_init :: proc(ability: Shoot_Ability) {
         ability.name = "Shoot";
@@ -854,8 +860,8 @@ Shoot_Ability :: class : Ability_Base {
     }
 }
 
-// On mobile: press and hold, drag to aim
-// On PC: toggle on, click to shoot
+// On mobile: press and and drag to aim, activate on release
+// On PC: always aiming, click to activate
 Slash_Ability :: class : Ability_Base {
     on_init :: proc(ability: Slash_Ability) {
         ability.name = "Slash";
@@ -990,8 +996,8 @@ Sprint_Ability :: class : Ability_Base {
     }
 }
 
-// On mobile: press and hold, drag to aim
-// On PC: toggle on, click to shoot
+// On mobile: press and hold and drag to aim, activate on release
+// On PC: toggle on, click to activate
 Dodge_Roll :: class : Ability_Base {
     on_init :: proc(ability: Dodge_Roll) {
         ability.name = "Roll";
@@ -1913,15 +1919,6 @@ Player :: class : Player_Base {
         // Initialize ammo system
         current_ammo = MAX_AMMO;
         current_ammo_float = MAX_AMMO.(float);
-
-        {
-            register_ability(this, Interact_Ability);
-            register_ability(this, Shoot_Ability);
-            register_ability(this, Dodge_Roll);
-            register_ability(this, Slash_Ability);
-            register_ability(this, Drop_Item_Ability);
-            register_ability(this, Sprint_Ability);
-        }
 
         // Initialize sprint stamina
         sprint_stamina = 1;
