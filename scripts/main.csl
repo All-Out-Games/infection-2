@@ -1,6 +1,4 @@
-import "core:core.csl"
-
-import "other_script.csl"
+import "core:ao"
 
 white_sprite:    Texture_Asset;
 modal_bg_sprite: Texture_Asset;
@@ -204,7 +202,7 @@ get_all_components :: proc($T: typeid) -> []T {
     return components.elements;
 }
 
-try_get_random_component :: proc(rng: ref u64, $T: typeid) -> T {
+try_get_random_component :: proc(rng: *u64, $T: typeid) -> T {
     components := get_all_components(T);
     if components.count == 0 {
         return null;
@@ -483,55 +481,55 @@ ao_update :: proc(dt: float) {
                                 }
 
                                 rect := begin_task_ui();
-                                draw_task_title(&rect, "Eliminate all Survivors");
-                                draw_task_subtitle(&rect, "Survivors left: %", {survivors_left});
+                                draw_task_title(ref rect, "Eliminate all Survivors");
+                                draw_task_subtitle(ref rect, "Survivors left: %", {survivors_left});
                             }
                             case .SURVIVOR: {
                                 switch g_game.current_task {
                                     case .FUEL_CANISTERS: {
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Collect Fuel Canisters");
-                                        draw_task_subtitle(&rect, "Fuel: % / %", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                                        draw_task_title(ref rect, "Collect Fuel Canisters");
+                                        draw_task_subtitle(ref rect, "Fuel: % / %", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
                                     }
                                     case .CHARGE_BATTERY: {
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Charge the Battery");
+                                        draw_task_title(ref rect, "Charge the Battery");
                                         battery := get_boat_battery();
                                         if battery != null {
                                             switch battery.state {
                                                 case .UNCHARGED: {
-                                                    draw_task_subtitle(&rect, "Bring battery to charger");
+                                                    draw_task_subtitle(ref rect, "Bring battery to charger");
                                                 }
                                                 case .CHARGING: {
                                                     progress := battery.charge_t * 100;
-                                                    draw_task_subtitle(&rect, "Charging: %{.1}%%", {progress});
+                                                    draw_task_subtitle(ref rect, "Charging: %{.1}%%", {progress});
                                                 }
                                                 case .CHARGED: {
-                                                    draw_task_subtitle(&rect, "Bring battery to trolley!");
+                                                    draw_task_subtitle(ref rect, "Bring battery to trolley!");
                                                 }
                                             }
                                         }
                                     }
                                     case .PUSH_TROLLEY: {
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Push the Trolley!");
+                                        draw_task_title(ref rect, "Push the Trolley!");
                                         if trolley := get_trolley(); trolley != null {
                                             if trolley.is_being_pushed {
-                                                draw_task_subtitle(&rect, "Keep pushing to the trolley!");
+                                                draw_task_subtitle(ref rect, "Keep pushing to the trolley!");
                                             }
                                             else {
-                                                draw_task_subtitle(&rect, "Stay near the trolley to push");
+                                                draw_task_subtitle(ref rect, "Stay near the trolley to push");
                                             }
                                         }
                                     }
                                     case .RESTORE_BEACONS: {
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Restore Beacons");
-                                        draw_task_subtitle(&rect, "Beacons: % / %", {g_game.beacons_restored, REQUIRED_BEACONS});
+                                        draw_task_title(ref rect, "Restore Beacons");
+                                        draw_task_subtitle(ref rect, "Beacons: % / %", {g_game.beacons_restored, REQUIRED_BEACONS});
                                     }
                                     case .ALIGN_TAKEOFF: {
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Align Ship Systems");
+                                        draw_task_title(ref rect, "Align Ship Systems");
                                         yaw_aligned   := " ";
                                         pitch_aligned := " ";
                                         foreach align: component_iterator(Align_Takeoff_Station) {
@@ -540,8 +538,8 @@ ao_update :: proc(dt: float) {
                                                 case .Pitch: if align.is_aligned { pitch_aligned = "X"; }
                                             }
                                         }
-                                        draw_task_subtitle(&rect, "[%] Yaw aligned",   {yaw_aligned});
-                                        draw_task_subtitle(&rect, "[%] Pitch aligned", {pitch_aligned});
+                                        draw_task_subtitle(ref rect, "[%] Yaw aligned",   {yaw_aligned});
+                                        draw_task_subtitle(ref rect, "[%] Pitch aligned", {pitch_aligned});
                                     }
                                     case .TAKEOFF: {
                                         takeoff: Takeoff_Station;
@@ -551,7 +549,7 @@ ao_update :: proc(dt: float) {
                                         }
 
                                         rect := begin_task_ui();
-                                        draw_task_title(&rect, "Escape on the boat!");
+                                        draw_task_title(ref rect, "Escape on the boat!");
 
                                         // Count escaped survivors
                                         escaped_count := 0;
@@ -564,8 +562,8 @@ ao_update :: proc(dt: float) {
                                                 alive_count += 1;
                                             }
                                         }
-                                        draw_task_subtitle(&rect, "Escaped: %", {escaped_count});
-                                        draw_task_subtitle(&rect, "Survivors remaining: %", {alive_count});
+                                        draw_task_subtitle(ref rect, "Escaped: %", {escaped_count});
+                                        draw_task_subtitle(ref rect, "Survivors remaining: %", {alive_count});
                                     }
                                 }
                             }
@@ -607,7 +605,7 @@ ao_update :: proc(dt: float) {
     }
 }
 
-get_random :: proc(rng: ref u64, array: []$T) -> T {
+get_random :: proc(rng: *u64, array: []$T) -> T {
     index := rng_range_int(rng, 0, array.count-1);
     return array[index];
 }
@@ -2446,14 +2444,14 @@ NPC :: class : Component {
 
     push_behaviour :: proc(using this: NPC, behaviour: NPC_Behaviour) {
         if current_behaviour != null {
-            append(&behaviour_stack, current_behaviour);
+            behaviour_stack->append(current_behaviour);
         }
         current_behaviour = behaviour;
     }
 
     complete_current_behaviour :: proc(using this: NPC) {
         if behaviour_stack.elements.count > 0 {
-            current_behaviour = pop(&behaviour_stack);
+            current_behaviour = behaviour_stack->pop();
             current_behaviour.time_in_state = 0;
         }
         else {
@@ -2472,7 +2470,7 @@ NPC :: class : Component {
 
         if current_behaviour == null {
             if behaviour_stack.elements.count > 0 {
-                current_behaviour = pop(&behaviour_stack);
+                current_behaviour = behaviour_stack->pop();
             }
             if current_behaviour == null {
                 assert(behaviour_stack.elements.count == 0, "behaviour stack was empty");
