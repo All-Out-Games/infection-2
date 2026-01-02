@@ -202,12 +202,12 @@ get_all_components :: proc($T: typeid) -> []T {
     return components.elements;
 }
 
-try_get_random_component :: proc(rng: *u64, $T: typeid) -> T {
+try_get_random_component :: proc(rng: ref u64, $T: typeid) -> T {
     components := get_all_components(T);
     if components.count == 0 {
         return null;
     }
-    index := rng_range_int(rng, 0, components.count-1);
+    index := rng_range_int(ref rng, 0, components.count-1);
     return components[index];
 }
 
@@ -252,7 +252,7 @@ ao_update :: proc(dt: float) {
             {
                 // Collect all spawn points into an array
                 fuel_spawn_points := get_all_components(Fuel_Spawn_Point);
-                rng_shuffle(&server_rng, fuel_spawn_points);
+                rng_shuffle(ref server_rng, fuel_spawn_points);
 
                 // Spawn canisters at the first REQUIRED_FUEL_CANISTERS spawn points
                 canisters_to_spawn := min(REQUIRED_FUEL_CANISTERS, fuel_spawn_points.count);
@@ -282,7 +282,7 @@ ao_update :: proc(dt: float) {
 
             //     // Fisher-Yates rng_shuffle to randomize spawn points
             //     for i: 0..beacon_spawn_count-1 {
-            //         j := rng_range_int(&server_rng, 0, beacon_spawn_count-1);
+            //         j := rng_range_int(ref server_rng, 0, beacon_spawn_count-1);
             //         temp := beacon_spawns[i];
             //         beacon_spawns[i] = beacon_spawns[j];
             //         beacon_spawns[j] = temp;
@@ -302,7 +302,7 @@ ao_update :: proc(dt: float) {
             {
                 #global prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
 
-                battery_spawn := try_get_random_component(&server_rng, Boat_Battery_Spawn_Point);
+                battery_spawn := try_get_random_component(ref server_rng, Boat_Battery_Spawn_Point);
                 battery := instantiate(prefab);
                 battery->set_local_position(battery_spawn.entity.world_position);
             }
@@ -348,7 +348,7 @@ ao_update :: proc(dt: float) {
                         player->set_team(.SURVIVOR);
                     }
 
-                    rng_shuffle(&server_rng, players);
+                    rng_shuffle(ref server_rng, players);
                     zombie_count := max(1, player_count / 4);
                     for i: 0..zombie_count-1 {
                         players[i]->set_team(.ZOMBIE);
@@ -605,8 +605,8 @@ ao_update :: proc(dt: float) {
     }
 }
 
-get_random :: proc(rng: *u64, array: []$T) -> T {
-    index := rng_range_int(rng, 0, array.count-1);
+get_random :: proc(rng: ref u64, array: []$T) -> T {
+    index := rng_range_int(ref rng, 0, array.count-1);
     return array[index];
 }
 
@@ -616,8 +616,8 @@ respawn_player :: proc(using player: Player) {
 
     switch team {
         case .SURVIVOR: {
-            spawn := get_random(&server_rng, all_survivor_spawns.elements);
-            offset := v2{rng_range_float(&server_rng, -0.5, 0.5), rng_range_float(&server_rng, -0.5, 0.5)};
+            spawn := get_random(ref server_rng, all_survivor_spawns.elements);
+            offset := v2{rng_range_float(ref server_rng, -0.5, 0.5), rng_range_float(ref server_rng, -0.5, 0.5)};
             player.entity->set_local_position(spawn.world_position + offset);
         }
         case .ZOMBIE: {
@@ -636,12 +636,12 @@ respawn_player :: proc(using player: Player) {
             }
 
             if valid_spawns.elements.count > 0 {
-                index := rng_range_int(&server_rng, 0, valid_spawns.elements.count-1);
+                index := rng_range_int(ref server_rng, 0, valid_spawns.elements.count-1);
                 spawn := valid_spawns.elements[index];
                 player.entity->set_local_position(spawn.world_position);
             }
             else {
-                index := rng_range_int(&server_rng, 0, all_zombie_spawns.elements.count-1);
+                index := rng_range_int(ref server_rng, 0, all_zombie_spawns.elements.count-1);
                 spawn := all_zombie_spawns.elements[index];
                 player.entity->set_local_position(spawn.world_position);
             }
@@ -974,7 +974,6 @@ Sprint_Ability :: class : Ability_Base {
 Dodge_Roll :: class : Ability_Base {
     on_init :: proc(ability: Dodge_Roll) {
         ability.name = "Roll";
-        // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
         ability.is_aimed_ability = true;
         ability.keybind_override = keybind_dodge_roll;
     }
@@ -1207,7 +1206,7 @@ Eating_Controller :: class : Controller_Base {
             desc->set_position(player.entity.local_position);
 
             rng := rng_seed(food.entity.id ^ food.health.current_health.(u64));
-            num := rng_range_int(&rng, 1, 5);
+            num := rng_range_int(ref rng, 1, 5);
             SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", {num})), desc);
         }
 
@@ -1299,7 +1298,7 @@ Chop_Tree_Controller :: class : Controller_Base {
             desc->set_position(player.entity.local_position);
 
             rng := rng_seed(tree.entity.id ^ tree.health.current_health.(u64));
-            num := rng_range_int(&rng, 1, 5);
+            num := rng_range_int(ref rng, 1, 5);
             SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", {num})), desc);
         }
 
@@ -1424,8 +1423,8 @@ spawn_particle :: proc(spawn_position: v2, target_entity: Entity, particle_type:
 
     // Random direction in circle
     rng := rng_seed(entity.id);
-    angle := rng_range_float(&rng, 0, 2 * PI);
-    speed := rng_range_float(&rng, 5, 10);
+    angle := rng_range_float(ref rng, 0, 2 * PI);
+    speed := rng_range_float(ref rng, 5, 10);
     particle.velocity = {cos(angle) * speed, sin(angle) * speed};
 }
 
@@ -1575,8 +1574,8 @@ spawn_damage_number :: proc(value: int, position: v2) {
 
     // Random velocity
     rng := rng_seed(entity.id);
-    vel_x := rng_range_float(&rng, -0.3, 0.3);
-    vel_y := rng_range_float(&rng, 0.75, 0.9);
+    vel_x := rng_range_float(ref rng, -0.3, 0.3);
+    vel_y := rng_range_float(ref rng, 0.75, 0.9);
     damage_number.velocity = v2{vel_x, vel_y} * 10;
 }
 
@@ -1947,7 +1946,7 @@ Player :: class : Player_Base {
                 e->set_local_position(entity.world_position);
                 e->set_local_scale(entity.local_scale * 1.5);
                 animator := e->add_component(Spine_Animator);
-                brightness := rng_range_float(&dust_rng, 0.5, 1);
+                brightness := rng_range_float(ref dust_rng, 0.5, 1);
                 animator.instance.color_multiplier = {brightness, brightness, brightness, 0.25};
                 animator.instance->set_skeleton(dust_spine);
                 animator.instance->set_animation("running_dust_poof", false, 0, 1);
@@ -2308,7 +2307,7 @@ Duck :: class : Component {
 
     ao_update :: proc(using duck: Duck, dt: float) {
         rng := rng_seed(entity.id);
-        duck_time := get_time() * rng_range_float(&rng, 0.8, 1.2);
+        duck_time := get_time() * rng_range_float(ref rng, 0.8, 1.2);
         bob_amount := sin(duck_time * 2) * 0.05;
         rotation_amount := cos(duck_time * 1.5) * 5;
 
@@ -2502,8 +2501,8 @@ NPC :: class : Component {
                     if current_time > current_behaviour.next_wander_time {
                         current_behaviour.wander_serial += 1;
                         rng := rng_seed(entity.id ^ current_behaviour.wander_serial);
-                        current_behaviour.next_wander_time = get_time() + rng_range_float(&rng, 4, 8);
-                        current_behaviour.wander_target = home_position + v2{rng_range_float(&rng, -wander_radius, wander_radius), rng_range_float(&rng, -wander_radius, wander_radius)};
+                        current_behaviour.next_wander_time = get_time() + rng_range_float(ref rng, 4, 8);
+                        current_behaviour.wander_target = home_position + v2{rng_range_float(ref rng, -wander_radius, wander_radius), rng_range_float(ref rng, -wander_radius, wander_radius)};
                         current_behaviour.wandering = true;
                     }
 
@@ -2612,7 +2611,7 @@ Food_Projectile :: class : Component {
         }
 
         rng := rng_seed(entity.id);
-        start_rotation = rng_range_float(&rng, 0, 360);
+        start_rotation = rng_range_float(ref rng, 0, 360);
     }
 
     ao_update :: proc(using this: Food_Projectile, dt: float) {
@@ -2683,7 +2682,7 @@ Food_Projectile :: class : Component {
             hit_effect := get_asset(Prefab_Asset, "hit_effect.prefab");
             effect := instantiate(hit_effect);
             rng := rng_seed(entity.id);
-            effect.first_child->set_local_rotation(rng_range_float(&rng, 0, 360));
+            effect.first_child->set_local_rotation(rng_range_float(ref rng, 0, 360));
             effect->set_local_position(entity.world_position);
             effect->queue_for_destruction(0.5);
             destroy_entity(entity);
