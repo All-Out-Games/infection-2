@@ -649,18 +649,6 @@ respawn_player :: proc(using player: Player) {
     }
 }
 
-ao_can_use_interactable :: proc(interactable: Interactable, player: Player) -> bool {
-    if player.health.is_dead {
-        return false;
-    }
-    return true;
-}
-
-ao_can_use_ability :: proc(player: Player, ability: Ability_Base) -> bool {
-    if player.health.is_dead return false;
-    return true;
-}
-
 Game_Manager :: class : Component {
     main_navmesh:    Navmesh @ao_serialize;
     trolley_navmesh: Navmesh @ao_serialize;
@@ -865,7 +853,7 @@ Slash_Controller :: class : Controller_Base {
     already_hit_list: List(Player);
 
     controller_begin :: proc(using this: Slash_Controller) {
-        disable_movement_inputs = true;
+        player_specific.disable_movement_inputs = true;
         player->player_set_trigger("attack");
         original_friction = player.agent.friction;
         player.agent.friction = 0;
@@ -1002,7 +990,7 @@ Roll_Controller :: class : Controller_Base {
             sfx.speed_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/dodge_roll.wav"), sfx);
         }
-        disable_movement_inputs = true;
+        player_specific.disable_movement_inputs = true;
         player->player_set_trigger("dodge_roll");
         original_friction = player.agent.friction;
         player.agent.friction = 0;
@@ -1029,7 +1017,7 @@ Round_Start_Animation_Controller :: class : Controller_Base {
     hold_progress: float;
 
     controller_begin :: proc(using this: Round_Start_Animation_Controller) {
-        freeze_player = true;
+        player_specific.freeze_player = true;
         hold_progress = 0;
     }
 
@@ -1190,7 +1178,7 @@ Eating_Controller :: class : Controller_Base {
     time_last_clicked: float;
 
     controller_begin :: proc(using this: Eating_Controller) {
-        freeze_player = true;
+        player_specific.freeze_player = true;
         food.locked = true;
         player->player_set_trigger("start_eating");
         original_food_position = food.entity.local_position;
@@ -1265,7 +1253,7 @@ Chop_Tree_Controller :: class : Controller_Base {
     chopping_position: v2;
 
     controller_begin :: proc(using this: Chop_Tree_Controller) {
-        freeze_player = true;
+        player_specific.freeze_player = true;
         tree.locked = true;
         player->player_set_trigger("start_eating"); // Reuse eating animation for now
 
@@ -1616,7 +1604,7 @@ make_finder :: proc($T: typeid, position: v2) -> Finder(T) {
 
 Death_Controller :: class : Controller_Base {
     controller_begin :: proc(using this: Death_Controller) {
-        freeze_player = true;
+        player_specific.freeze_player = true;
         player->add_name_invisibility_reason("death");
         player->player_set_trigger("death");
         if Game.is_server() {
@@ -2187,7 +2175,19 @@ Player :: class : Player_Base {
         }
     }
 
-    ao_end :: proc(player: Player) {
+    ao_end :: proc(using this: Player) {
+    }
+
+    ao_can_use_interactable :: proc(using this: Player, interactable: Interactable) -> bool {
+        if health.is_dead {
+            return false;
+        }
+        return true;
+    }
+
+    ao_can_use_ability :: proc(using this: Player, ability: Ability_Base) -> bool {
+        if health.is_dead return false;
+        return true;
     }
 }
 
@@ -2913,12 +2913,11 @@ Fuel_Spawn_Point :: class : Component {
     // Place these around the map in the editor
 }
 
-Fuel_Canister :: class : Component {
+Fuel_Canister :: class : Interactable {
     carried_item: Carried_Item @ao_serialize;
-    interactable: Interactable @ao_serialize;
 
     ao_start :: proc(using this: Fuel_Canister) {
-        interactable->set_listener(this);
+        this->set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         carried_item.pickup_notification = "Bring the fuel canister to the trolley!";
@@ -2936,11 +2935,9 @@ Fuel_Canister :: class : Component {
     }
 }
 
-Fuel_Delivery_Point :: class : Component {
-    interactable: Interactable @ao_serialize;
-
+Fuel_Delivery_Point :: class : Interactable {
     ao_start :: proc(using this: Fuel_Delivery_Point) {
-        interactable->set_listener(this);
+        this->set_listener(this);
     }
 
     can_use :: proc(using this: Fuel_Delivery_Point, player: Player) -> bool {
@@ -3013,16 +3010,15 @@ Boat_Battery_Spawn_Point :: class : Component {
     // Marker component for battery spawn locations
 }
 
-Boat_Battery :: class : Component {
+Boat_Battery :: class : Interactable {
     carried_item: Carried_Item @ao_serialize;
-    interactable: Interactable @ao_serialize;
 
     state: Battery_State;
     charge_t: float;
     charger: Battery_Charger;
 
     ao_start :: proc(using this: Boat_Battery) {
-        interactable->set_listener(this);
+        this->set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         state = .UNCHARGED;
@@ -3098,12 +3094,11 @@ Boat_Battery :: class : Component {
     }
 }
 
-Battery_Charger :: class : Component {
-    interactable: Interactable @ao_serialize;
+Battery_Charger :: class : Interactable {
     is_charging: bool;
 
     ao_start :: proc(using this: Battery_Charger) {
-        interactable->set_listener(this);
+        this->set_listener(this);
     }
 
     can_use :: proc(using this: Battery_Charger, player: Player) -> bool {
@@ -3146,11 +3141,9 @@ get_boat_battery :: proc() -> Boat_Battery {
     return null;
 }
 
-Battery_Delivery_Point :: class : Component {
-    interactable: Interactable @ao_serialize;
-
+Battery_Delivery_Point :: class : Interactable {
     ao_start :: proc(using this: Battery_Delivery_Point) {
-        interactable->set_listener(this);
+        this->set_listener(this);
     }
 
     can_use :: proc(using this: Battery_Delivery_Point, player: Player) -> bool {

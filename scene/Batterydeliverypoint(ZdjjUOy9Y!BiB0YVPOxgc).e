@@ -16,22 +16,13 @@
   "parent": "7404570017185033:1766009692521570000"
 },
 {
-  "cid": 1,
-  "aoid": "7166860868846216:1765922899396121900",
-  "component_type": "Internal_Component",
-  "internal_component_type": "Interactable",
-  "data": {
-    "text": "Deliver battery",
-    "hold_text": "Delivering battery...",
-    "radius": 1.5000000000000000
-  }
-},
-{
   "cid": 2,
   "aoid": "7171701912772540:1765924173341159900",
   "component_type": "Internal_Component",
   "internal_component_type": "Battery_Delivery_Point",
   "data": {
-    "interactable": "7166860868846216:1765922899396121900"
+    "text": "Deliver battery",
+    "radius": 1.5000000000000000,
+    "required_hold_time": 0.5000000000000000
   }
 }

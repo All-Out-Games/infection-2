@@ -6,7 +6,7 @@
   "local_enabled": true,
   "local_position": {
     "X": -19.1550006866455078,
-    "Y": -5.9739108085632324
+    "Y": -5.9739999771118164
   },
   "local_rotation": 0,
   "local_scale": {
@@ -24,18 +24,7 @@
   "internal_component_type": "Sprite_Renderer",
   "data": {
     "texture": "sprites/battery_charger.png",
-    "depth_offset": 0.6858215332031250
-  }
-},
-{
-  "cid": 2,
-  "aoid": "7171124799394466:1765924021470873700",
-  "component_type": "Internal_Component",
-  "internal_component_type": "Interactable",
-  "data": {
-    "text": "Insert battery",
-    "hold_text": "Inserting battery...",
-    "radius": 1.5000000000000000
+    "depth_offset": 0.6859999895095825
   }
 },
 {
@@ -44,6 +33,8 @@
   "component_type": "Internal_Component",
   "internal_component_type": "Battery_Charger",
   "data": {
-    "interactable": "7171124799394466:1765924021470873700"
+    "text": "Insert battery",
+    "radius": 1.5000000000000000,
+    "required_hold_time": 0.5000000000000000
   }
 }

@@ -19,20 +19,10 @@
   "component_type": "Internal_Component",
   "internal_component_type": "Fuel_Canister",
   "data": {
-    "carried_item": "7169107692944966:1765923490659174700",
-    "interactable": "5314764842864317:1765156487205178100"
-  }
-},
-{
-  "cid": 3,
-  "aoid": "5314764842864317:1765156487205178100",
-  "component_type": "Internal_Component",
-  "internal_component_type": "Interactable",
-  "data": {
     "text": "Pick up fuel",
-    "hold_text": "Picking up fuel...",
     "radius": 1,
-    "required_hold_time": 0.5000000000000000
+    "required_hold_time": 0.5000000000000000,
+    "carried_item": "7169107692944966:1765923490659174700"
   }
 },
 {
@@ -43,6 +33,6 @@
   "data": {
     "item_sprite": "5325556261027583:1765159327021070400",
     "shadow_sprite": "5325770111722266:1765159383296955200",
-    "interactable": "5314764842864317:1765156487205178100"
+    "interactable": "5314729754997097:1765156477971629500"
   }
 }

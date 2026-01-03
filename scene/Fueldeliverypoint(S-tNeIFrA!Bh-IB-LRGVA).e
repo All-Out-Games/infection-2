@@ -17,22 +17,13 @@
   "parent": "7404570017185033:1766009692521570000"
 },
 {
-  "cid": 1,
-  "aoid": "7166506954623970:1765922806261816000",
-  "component_type": "Internal_Component",
-  "internal_component_type": "Interactable",
-  "data": {
-    "text": "Deliver fuel",
-    "hold_text": "Delivering fuel...",
-    "radius": 1.5000000000000000
-  }
-},
-{
   "cid": 2,
   "aoid": "7166829524744050:1765922891147764600",
   "component_type": "Internal_Component",
   "internal_component_type": "Fuel_Delivery_Point",
   "data": {
-    "interactable": "7166506954623970:1765922806261816000"
+    "text": "Deliver fuel",
+    "radius": 1.5000000000000000,
+    "required_hold_time": 0.5000000000000000
   }
 }
