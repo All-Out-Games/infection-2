@@ -215,7 +215,7 @@ ao_update :: proc(dt: float) {
     switch g_game.state {
         case .RESET_MAP: {
             foreach player: component_iterator(Player) {
-                player->end_controller(true);
+                player.entity->end_controller(true);
                 player->remove_ghost_reason("spectator");
                 player->remove_ghost_reason("escaped");
                 player->set_team(.SURVIVOR);
@@ -360,7 +360,7 @@ ao_update :: proc(dt: float) {
 
                         // Show round start intro animation
                         intro_controller := new(Round_Start_Animation_Controller);
-                        player->set_controller(intro_controller);
+                        player.entity->set_controller(intro_controller);
                     }
 
                     g_game.tasks[0] = .FUEL_CANISTERS;
@@ -611,7 +611,7 @@ get_random :: proc(rng: ref u64, array: []$T) -> T {
 }
 
 respawn_player :: proc(using player: Player) {
-    player->end_controller(true);
+    player.entity->end_controller(true);
     player.health->set_max_health(1, true);
 
     switch team {
@@ -679,7 +679,7 @@ Game_Manager :: class : Component {
 
 get_clickable_in_range :: proc(player: Player) -> Clickable {
     finder := make_finder(Clickable, player.entity.world_position);
-    if player.controller == null {
+    if player.entity.controller == null {
         foreach clickable: component_iterator(Clickable) {
             food := clickable.entity->get_component(Food);
             if food != null {
@@ -708,7 +708,7 @@ Interact_Ability :: class : Ability_Base {
     }
 
     can_use :: proc(ability: Interact_Ability, player: Player) -> bool {
-        return get_clickable_in_range(player) != null || player.controller != null;
+        return get_clickable_in_range(player) != null || player.entity.controller != null;
     }
 
     on_update :: proc(ability: Interact_Ability, player: Player, params: Ability_Update_Params) {
@@ -735,7 +735,7 @@ Interact_Ability :: class : Ability_Base {
         draw_reticle := false;
         reticle_alpha := 1.0;
 
-        if player.controller == null && clickable != null {
+        if player.entity.controller == null && clickable != null {
             draw_reticle = true;
             food := clickable.entity->get_component(Food);
             tree := clickable.entity->get_component(Tree);
@@ -764,7 +764,7 @@ Interact_Ability :: class : Ability_Base {
                         if params.clicked {
                             controller := new(Eating_Controller);
                             controller.food = food;
-                            set_controller(player, controller);
+                            player.entity->set_controller(controller);
                         }
                     }
                 }
@@ -773,17 +773,17 @@ Interact_Ability :: class : Ability_Base {
                 if params.clicked {
                     controller := new(Chop_Tree_Controller);
                     controller.tree = tree;
-                    set_controller(player, controller);
+                    player.entity->set_controller(controller);
                 }
             }
         }
 
         if params.clicked {
-            if player.controller != null {
+            if player.entity.controller != null {
                 draw_reticle = false;
-                switch player.controller.controller_type {
-                    case Eating_Controller:    player.controller.(Eating_Controller)->chomp();
-                    case Chop_Tree_Controller: player.controller.(Chop_Tree_Controller)->chop();
+                switch player.entity.controller.controller_type {
+                    case Eating_Controller:    player.entity.controller.(Eating_Controller)->chomp();
+                    case Chop_Tree_Controller: player.entity.controller.(Chop_Tree_Controller)->chop();
                 }
             }
         }
@@ -854,7 +854,7 @@ Slash_Ability :: class : Ability_Base {
 
             controller := new(Slash_Controller);
             controller.direction = activation.direction;
-            set_controller(player, controller);
+            player.entity->set_controller(controller);
         }
     }
 }
@@ -909,8 +909,8 @@ Slash_Controller :: class : Controller_Base {
         }
 
         player.agent.velocity = direction * 10;
-        if elapsed_time > 0.3 {
-            end_controller(player, false);
+        if this->get_elapsed_time() > 0.3 {
+            player.entity->end_controller(false);
         }
     }
 
@@ -984,7 +984,7 @@ Dodge_Roll :: class : Ability_Base {
             ability.current_cooldown = 1.5;
             controller := new(Roll_Controller);
             controller.direction = activation.direction;
-            set_controller(player, controller);
+            player.entity->set_controller(controller);
         }
     }
 }
@@ -1011,8 +1011,8 @@ Roll_Controller :: class : Controller_Base {
 
     controller_update :: proc(using this: Roll_Controller, dt: float) {
         player.agent.velocity = direction * 8;
-        if elapsed_time > 0.5 {
-            end_controller(player, false);
+        if this->get_elapsed_time() > 0.5 {
+            player.entity->end_controller(false);
         }
     }
 
@@ -1104,7 +1104,7 @@ Round_Start_Animation_Controller :: class : Controller_Base {
         }
 
         if hold_progress >= 1 {
-            end_controller(player, false);
+            player.entity->end_controller(false);
         }
     }
 
@@ -1212,7 +1212,7 @@ Eating_Controller :: class : Controller_Base {
 
         if died {
             food->on_eaten(player);
-            end_controller(player, false);
+            player.entity->end_controller(false);
             return;
         }
     }
@@ -1304,7 +1304,7 @@ Chop_Tree_Controller :: class : Controller_Base {
 
         if died {
             tree->on_chopped(player);
-            end_controller(player, false);
+            player.entity->end_controller(false);
             return;
         }
     }
@@ -1630,12 +1630,12 @@ Death_Controller :: class : Controller_Base {
 
     controller_update :: proc(using this: Death_Controller, dt: float) {
         if g_game.state == .GAMEPLAY {
-            time_until_respawn := 5.0 - elapsed_time;
+            time_until_respawn := 5.0 - this->get_elapsed_time();
             if player->is_local() {
                 draw_big_game_text("Respawning in %s", {time_until_respawn.(int) + 1});
             }
             if time_until_respawn <= 0 {
-                end_controller(player, false);
+                player.entity->end_controller(false);
             }
         }
     }
@@ -1732,7 +1732,7 @@ Player :: class : Player_Base {
         if health.is_dead {
             active_ability = null;
             controller := new(Death_Controller);
-            this->set_controller(controller);
+            entity->set_controller(controller);
         }
     }
 
