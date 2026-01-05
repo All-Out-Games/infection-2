@@ -25,8 +25,8 @@ Player_Team :: enum {
     SPECTATOR;
 }
 
-all_zombie_spawns: List(Entity);
-all_survivor_spawns: List(Entity);
+all_zombie_spawns: [..]Entity;
+all_survivor_spawns: [..]Entity;
 
 ROUND_TIME_LIMIT :: 300.0; // 5 minutes in seconds
 
@@ -195,11 +195,11 @@ draw_rect_grow_fade_out_effect :: proc(rect: Rect, time: float, color: v4) {
 }
 
 get_all_components :: proc($T: typeid) -> []T {
-    components: List(T);
+    components: [..]T;
     foreach c: component_iterator(T) {
         components->append(c);
     }
-    return components.elements;
+    return components;
 }
 
 try_get_random_component :: proc(rng: ref u64, $T: typeid) -> T {
@@ -616,13 +616,13 @@ respawn_player :: proc(using player: Player) {
 
     switch team {
         case .SURVIVOR: {
-            spawn := get_random(ref server_rng, all_survivor_spawns.elements);
+            spawn := get_random(ref server_rng, all_survivor_spawns);
             offset := v2{rng_range_float(ref server_rng, -0.5, 0.5), rng_range_float(ref server_rng, -0.5, 0.5)};
             player.entity->set_local_position(spawn.world_position + offset);
         }
         case .ZOMBIE: {
-            valid_spawns: List(Entity);
-            for spawn: all_zombie_spawns.elements {
+            valid_spawns: [..]Entity;
+            for spawn: all_zombie_spawns {
                 spawn_ok := true;
                 foreach player: component_iterator(Player) if player.team == .SURVIVOR {
                     if in_range(spawn.world_position - player.entity.world_position, 10) {
@@ -635,14 +635,14 @@ respawn_player :: proc(using player: Player) {
                 }
             }
 
-            if valid_spawns.elements.count > 0 {
-                index := rng_range_int(ref server_rng, 0, valid_spawns.elements.count-1);
-                spawn := valid_spawns.elements[index];
+            if valid_spawns.count > 0 {
+                index := rng_range_int(ref server_rng, 0, valid_spawns.count-1);
+                spawn := valid_spawns[index];
                 player.entity->set_local_position(spawn.world_position);
             }
             else {
-                index := rng_range_int(ref server_rng, 0, all_zombie_spawns.elements.count-1);
-                spawn := all_zombie_spawns.elements[index];
+                index := rng_range_int(ref server_rng, 0, all_zombie_spawns.count-1);
+                spawn := all_zombie_spawns[index];
                 player.entity->set_local_position(spawn.world_position);
             }
         }
@@ -850,7 +850,7 @@ Slash_Ability :: class : Ability_Base {
 Slash_Controller :: class : Controller_Base {
     direction: v2;
     original_friction: float;
-    already_hit_list: List(Player);
+    already_hit_list: [..]Player;
 
     controller_begin :: proc(using this: Slash_Controller) {
         player_specific.disable_movement_inputs = true;
@@ -874,7 +874,7 @@ Slash_Controller :: class : Controller_Base {
             if other.team != .SURVIVOR continue;
             if in_range(other.entity.world_position - player.entity.world_position, 0.75) {
                 already_hit := false;
-                for hit: already_hit_list.elements {
+                for hit: already_hit_list {
                     if hit == other {
                         already_hit = true;
                         break;
@@ -1672,7 +1672,7 @@ Player :: class : Player_Base {
 
     health: Health_Component;
 
-    notifications: List(Notification);
+    notifications: [..]Notification;
 
     // Ammo system
     current_ammo_float: float;
@@ -2344,7 +2344,7 @@ NPC :: class : Component {
 
     state_machine: State_Machine;
 
-    behaviour_stack: List(NPC_Behaviour);
+    behaviour_stack: [..]NPC_Behaviour;
     current_behaviour: NPC_Behaviour;
 
     home_position: v2;
@@ -2444,7 +2444,7 @@ NPC :: class : Component {
     }
 
     complete_current_behaviour :: proc(using this: NPC) {
-        if behaviour_stack.elements.count > 0 {
+        if behaviour_stack.count > 0 {
             current_behaviour = behaviour_stack->pop();
             current_behaviour.time_in_state = 0;
         }
@@ -2463,11 +2463,11 @@ NPC :: class : Component {
         }
 
         if current_behaviour == null {
-            if behaviour_stack.elements.count > 0 {
+            if behaviour_stack.count > 0 {
                 current_behaviour = behaviour_stack->pop();
             }
             if current_behaviour == null {
-                assert(behaviour_stack.elements.count == 0, "behaviour stack was empty");
+                assert(behaviour_stack.count == 0, "behaviour stack was empty");
                 current_behaviour = new(NPC_Behaviour);
                 current_behaviour.kind = .WANDERING;
             }
