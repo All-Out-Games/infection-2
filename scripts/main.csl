@@ -699,7 +699,7 @@ Interact_Ability :: class : Ability_Base {
         return get_clickable_in_range(player) != null || player.entity.controller != null;
     }
 
-    on_update :: proc(ability: Interact_Ability, player: Player, params: Ability_Update_Params) {
+    on_update :: proc(ability: Interact_Ability, player: Player, params: ref Ability_Update_Params) {
         if !params.can_use {
             return;
         }
@@ -798,8 +798,8 @@ Shoot_Ability :: class : Ability_Base {
         ability.is_aimed_ability = true;
     }
 
-    on_update :: proc(ability: Shoot_Ability, player: Player, params: Ability_Update_Params) {
-        activation := Ability_Utilities.full_update_aimed_ability(player, &params);
+    on_update :: proc(ability: Shoot_Ability, player: Player, params: ref Ability_Update_Params) {
+        activation := Ability_Utilities.full_update_aimed_ability(player, ref params);
         if activation.activate {
             ability.current_cooldown = 0.75;
             sfx := SFX.default_sfx_desc();
@@ -835,8 +835,8 @@ Slash_Ability :: class : Ability_Base {
         return true;
     }
 
-    on_update :: proc(ability: Slash_Ability, player: Player, params: Ability_Update_Params) {
-        activation := Ability_Utilities.full_update_aimed_ability(player, &params);
+    on_update :: proc(ability: Slash_Ability, player: Player, params: ref Ability_Update_Params) {
+        activation := Ability_Utilities.full_update_aimed_ability(player, ref params);
         if activation.activate {
             ability.current_cooldown = 1;
 
@@ -920,7 +920,7 @@ Drop_Item_Ability :: class : Ability_Base {
         return is_player_carrying_item(player);
     }
 
-    on_update :: proc(ability: Drop_Item_Ability, player: Player, params: Ability_Update_Params) {
+    on_update :: proc(ability: Drop_Item_Ability, player: Player, params: ref Ability_Update_Params) {
         if params.clicked && params.can_use {
             item := get_player_carried_item(player);
             if item != null {
@@ -946,8 +946,8 @@ Sprint_Ability :: class : Ability_Base {
         return player.team == .SURVIVOR && player.sprint_stamina > 0;
     }
 
-    on_update :: proc(ability: Sprint_Ability, player: Player, params: Ability_Update_Params) {
-        holding := Ability_Utilities.update_holding_ability(player, &params, keybind_sprint);
+    on_update :: proc(ability: Sprint_Ability, player: Player, params: ref Ability_Update_Params) {
+        holding := Ability_Utilities.update_holding_ability(player, ref params, keybind_sprint);
         if holding.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
             player.is_sprinting = true;
         }
@@ -966,8 +966,8 @@ Dodge_Roll :: class : Ability_Base {
         ability.keybind_override = keybind_dodge_roll;
     }
 
-    on_update :: proc(ability: Dodge_Roll, player: Player, params: Ability_Update_Params) {
-        activation := Ability_Utilities.full_update_targeted_aimed_ability(player, ability, &params);
+    on_update :: proc(ability: Dodge_Roll, player: Player, params: ref Ability_Update_Params) {
+        activation := Ability_Utilities.full_update_targeted_aimed_ability(player, ability, ref params);
         if activation.activate {
             ability.current_cooldown = 1.5;
             controller := new(Roll_Controller);
@@ -2666,7 +2666,7 @@ Food_Projectile :: class : Component {
             point: v2;
             // todo(josh): this crashes!!!:
             // if Game_Manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
-            if get_game_manager().bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point, &triangle_hint) {
+            if get_game_manager().bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, ref point, ref triangle_hint) {
                 if !in_range(point - entity.world_position, 0.01) {
                     destroy_self = true;
                 }
