@@ -656,7 +656,7 @@ Game_Manager :: class : Component {
 
     test_string: string @ao_serialize;
 
-    ao_start :: proc(using this: Game_Manager) {
+    ao_start :: method() {
         log("test string: %", {test_string});
     }
 }
@@ -690,16 +690,16 @@ get_clickable_in_range :: proc(player: Player) -> Clickable {
 }
 
 Interact_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Interact_Ability) {
-        ability.name = "Interact";
-        ability.icon = get_asset(Texture_Asset, "icons/burger.png");
+    on_init :: method() {
+        name = "Interact";
+        icon = get_asset(Texture_Asset, "icons/burger.png");
     }
 
-    can_use :: proc(ability: Interact_Ability, player: Player) -> bool {
+    can_use :: method() -> bool {
         return get_clickable_in_range(player) != null || player.entity.controller != null;
     }
 
-    on_update :: proc(ability: Interact_Ability, player: Player, params: ref Ability_Update_Params) {
+    on_update :: method(params: ref Ability_Update_Params) {
         if !params.can_use {
             return;
         }
@@ -792,16 +792,16 @@ Interact_Ability :: class : Ability_Base {
 // On mobile: press and and drag to aim, activate on release
 // On PC: always aiming, click to activate
 Shoot_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Shoot_Ability) {
-        ability.name = "Shoot";
-        ability.disable_keybind = true;
-        ability.is_aimed_ability = true;
+    on_init :: method() {
+        name = "Shoot";
+        disable_keybind = true;
+        is_aimed_ability = true;
     }
 
-    on_update :: proc(ability: Shoot_Ability, player: Player, params: ref Ability_Update_Params) {
+    on_update :: method(params: ref Ability_Update_Params) {
         activation := Ability_Utilities.full_update_aimed_ability(player, ref params);
         if activation.activate {
-            ability.current_cooldown = 0.75;
+            current_cooldown = 0.75;
             sfx := SFX.default_sfx_desc();
             sfx->set_position(player.entity.local_position);
             sfx.volume_perturb = 0.2;
@@ -824,21 +824,21 @@ Shoot_Ability :: class : Ability_Base {
 // On mobile: press and and drag to aim, activate on release
 // On PC: always aiming, click to activate
 Slash_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Slash_Ability) {
-        ability.name = "Slash";
-        // ability.icon = get_asset(Texture_Asset, "icons/coin.png");
-        ability.is_aimed_ability = true;
-        ability.disable_keybind = true;
+    on_init :: method() {
+        name = "Slash";
+        // icon = get_asset(Texture_Asset, "icons/coin.png");
+        is_aimed_ability = true;
+        disable_keybind = true;
     }
 
-    can_use :: proc(ability: Slash_Ability, player: Player) -> bool {
+    can_use :: method() -> bool {
         return true;
     }
 
-    on_update :: proc(ability: Slash_Ability, player: Player, params: ref Ability_Update_Params) {
+    on_update :: method(params: ref Ability_Update_Params) {
         activation := Ability_Utilities.full_update_aimed_ability(player, ref params);
         if activation.activate {
-            ability.current_cooldown = 1;
+            current_cooldown = 1;
 
             controller := new(Slash_Controller);
             controller.direction = activation.direction;
@@ -852,7 +852,7 @@ Slash_Controller :: class : Controller_Base {
     original_friction: float;
     already_hit_list: [..]Player;
 
-    controller_begin :: proc(using this: Slash_Controller) {
+    controller_begin :: method() {
         player_specific.disable_movement_inputs = true;
         player->player_set_trigger("attack");
         original_friction = player.agent.friction;
@@ -868,7 +868,7 @@ Slash_Controller :: class : Controller_Base {
         }
     }
 
-    controller_update :: proc(using this: Slash_Controller, dt: float) {
+    controller_update :: method(dt: float) {
         foreach other: component_iterator(Player) {
             if other.team == player.team continue;
             if other.team != .SURVIVOR continue;
@@ -902,7 +902,7 @@ Slash_Controller :: class : Controller_Base {
         }
     }
 
-    controller_end :: proc(using this: Slash_Controller, interrupt: bool) {
+    controller_end :: method(interrupt: bool) {
         player.agent.friction = original_friction;
         player->player_set_trigger("RESET");
     }
@@ -910,17 +910,17 @@ Slash_Controller :: class : Controller_Base {
 
 // Drop item ability - shown when carrying any item
 Drop_Item_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Drop_Item_Ability) {
-        ability.name = "Drop";
-        ability.icon = get_asset(Texture_Asset, "icons/fuel.png");
-        ability.keybind_override = keybind_drop_fuel;
+    on_init :: method() {
+        name = "Drop";
+        icon = get_asset(Texture_Asset, "icons/fuel.png");
+        keybind_override = keybind_drop_fuel;
     }
 
-    can_use :: proc(ability: Drop_Item_Ability, player: Player) -> bool {
+    can_use :: method() -> bool {
         return is_player_carrying_item(player);
     }
 
-    on_update :: proc(ability: Drop_Item_Ability, player: Player, params: ref Ability_Update_Params) {
+    on_update :: method(params: ref Ability_Update_Params) {
         if params.clicked && params.can_use {
             item := get_player_carried_item(player);
             if item != null {
@@ -936,17 +936,17 @@ SPRINT_REGEN_RATE :: 0.2;
 SPRINT_SPEED_BONUS :: 1.35;
 
 Sprint_Ability :: class : Ability_Base {
-    on_init :: proc(ability: Sprint_Ability) {
-        ability.name = "Sprint";
-        ability.keybind_override = keybind_sprint;
-        ability.draw_but_dont_use_keybind = true;
+    on_init :: method() {
+        name = "Sprint";
+        keybind_override = keybind_sprint;
+        draw_but_dont_use_keybind = true;
     }
 
-    can_use :: proc(ability: Sprint_Ability, player: Player) -> bool {
+    can_use :: method() -> bool {
         return player.team == .SURVIVOR && player.sprint_stamina > 0;
     }
 
-    on_update :: proc(ability: Sprint_Ability, player: Player, params: ref Ability_Update_Params) {
+    on_update :: method(params: ref Ability_Update_Params) {
         holding := Ability_Utilities.update_holding_ability(player, ref params, keybind_sprint);
         if holding.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
             player.is_sprinting = true;
@@ -960,16 +960,16 @@ Sprint_Ability :: class : Ability_Base {
 // On mobile: press and hold and drag to aim, activate on release
 // On PC: toggle on, click to activate
 Dodge_Roll :: class : Ability_Base {
-    on_init :: proc(ability: Dodge_Roll) {
-        ability.name = "Roll";
-        ability.is_aimed_ability = true;
-        ability.keybind_override = keybind_dodge_roll;
+    on_init :: method() {
+        name = "Roll";
+        is_aimed_ability = true;
+        keybind_override = keybind_dodge_roll;
     }
 
-    on_update :: proc(ability: Dodge_Roll, player: Player, params: ref Ability_Update_Params) {
-        activation := Ability_Utilities.full_update_targeted_aimed_ability(player, ability, ref params);
+    on_update :: method(params: ref Ability_Update_Params) {
+        activation := Ability_Utilities.full_update_targeted_aimed_ability(player, this, ref params);
         if activation.activate {
-            ability.current_cooldown = 1.5;
+            current_cooldown = 1.5;
             controller := new(Roll_Controller);
             controller.direction = activation.direction;
             player.entity->set_controller(controller);
@@ -981,7 +981,7 @@ Roll_Controller :: class : Controller_Base {
     direction: v2;
     original_friction: float;
 
-    controller_begin :: proc(using this: Roll_Controller) {
+    controller_begin :: method() {
         {
             sfx := SFX.default_sfx_desc();
             sfx->set_position(player.entity.world_position);
@@ -997,14 +997,14 @@ Roll_Controller :: class : Controller_Base {
         player->set_facing_right(direction.x > 0);
     }
 
-    controller_update :: proc(using this: Roll_Controller, dt: float) {
+    controller_update :: method(dt: float) {
         player.agent.velocity = direction * 8;
         if this->get_elapsed_time() > 0.5 {
             player.entity->end_controller(false);
         }
     }
 
-    controller_end :: proc(using this: Roll_Controller, interrupt: bool) {
+    controller_end :: method(interrupt: bool) {
         player.agent.friction = original_friction;
     }
 }
@@ -1016,12 +1016,12 @@ Clickable :: class : Component {
 Round_Start_Animation_Controller :: class : Controller_Base {
     hold_progress: float;
 
-    controller_begin :: proc(using this: Round_Start_Animation_Controller) {
+    controller_begin :: method() {
         player_specific.freeze_player = true;
         hold_progress = 0;
     }
 
-    controller_update :: proc(using this: Round_Start_Animation_Controller, dt: float) {
+    controller_update :: method(dt: float) {
         TOTAL_TIME :: 10.0;
 
         hold_progress += dt / TOTAL_TIME;
@@ -1096,7 +1096,7 @@ Round_Start_Animation_Controller :: class : Controller_Base {
         }
     }
 
-    controller_end :: proc(using this: Round_Start_Animation_Controller, interrupt: bool) {
+    controller_end :: method(interrupt: bool) {
         // Nothing special needed on end
     }
 }
@@ -1128,13 +1128,13 @@ Food :: class : Component {
     is_eaten: bool;
     locked: bool;
 
-    ao_start :: proc(using food: Food) {
+    ao_start :: method() {
         defn := get_food_definition(kind);
         health = entity->add_component(Health_Component);
         health->set_max_health(defn.health, true);
     }
 
-    ao_update :: proc(using food: Food, dt: float) {
+    ao_update :: method(dt: float) {
         if is_eaten {
             if get_time() > respawn_time {
                 is_eaten = false;
@@ -1144,7 +1144,7 @@ Food :: class : Component {
         }
     }
 
-    on_eaten :: proc(using food: Food, player: Player) {
+    on_eaten :: method(player: Player) {
         is_eaten = true;
         sprite.enabled = false;
         respawn_time = get_time() + 8;
@@ -1177,14 +1177,14 @@ Eating_Controller :: class : Controller_Base {
     original_food_position: v2;
     time_last_clicked: float;
 
-    controller_begin :: proc(using this: Eating_Controller) {
+    controller_begin :: method() {
         player_specific.freeze_player = true;
         food.locked = true;
         player->player_set_trigger("start_eating");
         original_food_position = food.entity.local_position;
     }
 
-    chomp :: proc(using this: Eating_Controller) {
+    chomp :: method() {
         time_last_clicked = get_time();
 
         // Apply player.chew_stat using Health_Component
@@ -1205,7 +1205,7 @@ Eating_Controller :: class : Controller_Base {
         }
     }
 
-    controller_update :: proc(using this: Eating_Controller, dt: float) {
+    controller_update :: method(dt: float) {
         rotation := Ease.jitter(Ease.T(get_time() - time_last_clicked, 0.5), 8);
         food.entity->set_local_rotation(rotation * 15);
 
@@ -1236,7 +1236,7 @@ Eating_Controller :: class : Controller_Base {
         // UI.quad(rect, white_sprite, {1-color_t, color_t, 0, 1});
     }
 
-    controller_end :: proc(using this: Eating_Controller, interrupt: bool) {
+    controller_end :: method(interrupt: bool) {
         food.locked = false;
         player->player_set_trigger("RESET");
         food.entity->set_local_position(original_food_position);
@@ -1252,7 +1252,7 @@ Chop_Tree_Controller :: class : Controller_Base {
     original_player_position: v2;
     chopping_position: v2;
 
-    controller_begin :: proc(using this: Chop_Tree_Controller) {
+    controller_begin :: method() {
         player_specific.freeze_player = true;
         tree.locked = true;
         player->player_set_trigger("start_eating"); // Reuse eating animation for now
@@ -1273,7 +1273,7 @@ Chop_Tree_Controller :: class : Controller_Base {
         }
     }
 
-    chop :: proc(using this: Chop_Tree_Controller) {
+    chop :: method() {
         time_last_clicked = get_time();
 
         // Apply damage using Health_Component
@@ -1297,11 +1297,11 @@ Chop_Tree_Controller :: class : Controller_Base {
         }
     }
 
-    controller_update :: proc(using this: Chop_Tree_Controller, dt: float) {
+    controller_update :: method(dt: float) {
         tree.health->draw_health_bar(tree.entity.world_position.y-0.001);
     }
 
-    controller_end :: proc(using this: Chop_Tree_Controller, interrupt: bool) {
+    controller_end :: method(interrupt: bool) {
         tree.locked = false;
         player->player_set_trigger("RESET");
         tree.sprite.entity->set_local_rotation(0);
@@ -1329,13 +1329,13 @@ Particle :: class : Component {
     lerp_start_time: float;
     lerp_t: float;
 
-    ao_start :: proc(using particle: Particle) {
+    ao_start :: method() {
     }
 
-    ao_end :: proc(using particle: Particle) {
+    ao_end :: method() {
     }
 
-    ao_update :: proc(using particle: Particle, dt: float) {
+    ao_update :: method(dt: float) {
         switch state {
             case .OUTWARD: {
                 if get_time() - spawn_time > 0.75 {
@@ -1430,14 +1430,14 @@ Health_Component :: class : Component {
     // Optional: show health bar above entity
     health_bar_offset: v2 @ao_serialize;
 
-    ao_start :: proc(using health: Health_Component) {
+    ao_start :: method() {
         current_health = max_health;
         if health_bar_offset.x == 0 && health_bar_offset.y == 0 {
             health_bar_offset = {0, 1.5};
         }
     }
 
-    draw_health_bar :: proc(using this: Health_Component, z: float) {
+    draw_health_bar :: method(z: float) {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
@@ -1445,7 +1445,7 @@ Health_Component :: class : Component {
         defer UI.pop_z();
 
         // Don't show health bar if at full health
-        health_percent := get_health_percent(this);
+        health_percent := get_health_percent();
         // if health_percent >= 1.0 return;
 
         bar_pos := entity.world_position + health_bar_offset;
@@ -1459,7 +1459,7 @@ Health_Component :: class : Component {
         UI.quad(fill_rect, white_sprite, color);
     }
 
-    take_damage :: proc(using health: Health_Component, amount: int) -> bool {
+    take_damage :: method(amount: int) -> bool {
         if is_dead return false;
 
         current_health -= amount;
@@ -1477,7 +1477,7 @@ Health_Component :: class : Component {
         return false; // still alive
     }
 
-    heal :: proc(using health: Health_Component, amount: int) {
+    heal :: method(amount: int) {
         if is_dead return;
 
         current_health += amount;
@@ -1486,17 +1486,17 @@ Health_Component :: class : Component {
         }
     }
 
-    get_health_percent :: proc(using health: Health_Component) -> float {
+    get_health_percent :: method() -> float {
         if max_health <= 0 return 0;
         return current_health.(float) / max_health.(float);
     }
 
-    reset :: proc(using health: Health_Component) {
+    reset :: method() {
         current_health = max_health;
         is_dead = false;
     }
 
-    set_max_health :: proc(using health: Health_Component, new_max: int, heal_to_full: bool) {
+    set_max_health :: method(new_max: int, heal_to_full: bool) {
         max_health = new_max;
         if heal_to_full {
             current_health = max_health;
@@ -1517,7 +1517,7 @@ Damage_Number :: class : Component {
     spawn_time: float;
     lifetime: float;
 
-    ao_update :: proc(using this: Damage_Number, dt: float) {
+    ao_update :: method(dt: float) {
         time_alive := get_time() - spawn_time;
         if time_alive >= lifetime {
             destroy_entity(entity);
@@ -1572,7 +1572,7 @@ Finder :: struct($T: typeid) {
     closest_distance: float;
     closest: T;
 
-    check :: proc(using f: ref Finder(T), item: T, item_position: v2, required_range: float = -1) {
+    check :: method(item: T, item_position: v2, required_range: float = -1) {
         distance := length_squared(position - item_position);
         if distance > (required_range*required_range) {
             return;
@@ -1583,7 +1583,7 @@ Finder :: struct($T: typeid) {
         }
     }
 
-    check :: proc(using f: ref Finder(T), item: T, required_range: float = -1) {
+    check :: method(item: T, required_range: float = -1) {
         distance := length_squared(position - item.entity.world_position);
         if distance > (required_range*required_range) {
             return;
@@ -1603,7 +1603,7 @@ make_finder :: proc($T: typeid, position: v2) -> Finder(T) {
 }
 
 Death_Controller :: class : Controller_Base {
-    controller_begin :: proc(using this: Death_Controller) {
+    controller_begin :: method() {
         player_specific.freeze_player = true;
         player->add_name_invisibility_reason("death");
         player->player_set_trigger("death");
@@ -1616,7 +1616,7 @@ Death_Controller :: class : Controller_Base {
         }
     }
 
-    controller_update :: proc(using this: Death_Controller, dt: float) {
+    controller_update :: method(dt: float) {
         if g_game.state == .GAMEPLAY {
             time_until_respawn := 5.0 - this->get_elapsed_time();
             if player->is_local() {
@@ -1628,7 +1628,7 @@ Death_Controller :: class : Controller_Base {
         }
     }
 
-    controller_end :: proc(using this: Death_Controller, interrupt: bool) {
+    controller_end :: method(interrupt: bool) {
         player->remove_name_invisibility_reason("death");
         if player.team == .SURVIVOR {
             player->set_team(.ZOMBIE);
@@ -1692,7 +1692,7 @@ Player :: class : Player_Base {
 
     running_state: State_Machine_State;
 
-    add_notification :: proc(using this: Player, text: string) {
+    add_notification :: method(text: string) {
         notification := new(Notification);
         notification.text = text;
         if first_notification == null {
@@ -1705,11 +1705,11 @@ Player :: class : Player_Base {
         }
     }
 
-    get_max_food :: proc(using this: Player) -> int {
+    get_max_food :: method() -> int {
         return 8 + (stomach_stat - 1) * 3;
     }
 
-    take_damage :: proc(using this: Player, damage: int) {
+    take_damage :: method(damage: int) {
         if health.is_dead {
             return;
         }
@@ -1724,7 +1724,7 @@ Player :: class : Player_Base {
         }
     }
 
-    draw_ammo_bar :: proc(using this: Player) {
+    draw_ammo_bar :: method() {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
@@ -1781,7 +1781,7 @@ Player :: class : Player_Base {
         UI.quad(no_ammo_rect, white_sprite, lerp(v4{1, 0, 0, 1}, v4{1, 0, 0, 0}, no_ammo_t));
     }
 
-    draw_stamina_bar :: proc(using this: Player) {
+    draw_stamina_bar :: method() {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
@@ -1827,7 +1827,7 @@ Player :: class : Player_Base {
         draw_rect_grow_fade_out_effect(bar_rect, time_since_recover, {0, 1, 0, 1});
     }
 
-    turn_into_spectator :: proc(using this: Player) {
+    turn_into_spectator :: method() {
         if team != .SPECTATOR {
             this->set_team(.SPECTATOR);
             this->add_ghost_reason("spectator");
@@ -1837,7 +1837,7 @@ Player :: class : Player_Base {
     ALIVE_CHANNEL :: 1u64 << 0;
     DEAD_CHANNEL  :: 1u64 << 1;
 
-    set_team :: proc(using this: Player, new_team: Player_Team) {
+    set_team :: method(new_team: Player_Team) {
         if new_team == .SPECTATOR {
             voice_channel_listen_mask = ALIVE_CHANNEL | DEAD_CHANNEL;
             voice_channel_speak_mask = DEAD_CHANNEL;
@@ -1849,7 +1849,7 @@ Player :: class : Player_Base {
         team = new_team;
     }
 
-    ao_start :: proc(using this: Player) {
+    ao_start :: method() {
         agent.lock_to_navmesh = true;
         agent->set_navmesh_to_lock_to(get_game_manager().main_navmesh);
 
@@ -1886,7 +1886,7 @@ Player :: class : Player_Base {
         }
     }
 
-    ao_update :: proc(using this: Player, dt: float) {
+    ao_update :: method(dt: float) {
         if Game.is_launched_from_editor() {
             if get_input_down(.F1, true) {
                 complete_current_task();
@@ -1979,7 +1979,7 @@ Player :: class : Player_Base {
         }
     }
 
-    ao_late_update :: proc(using this: Player, dt: float) {
+    ao_late_update :: method(dt: float) {
         if team == .SPECTATOR {
             agent.lock_to_navmesh = false;
             camera.size = 8;
@@ -2175,17 +2175,17 @@ Player :: class : Player_Base {
         }
     }
 
-    ao_end :: proc(using this: Player) {
+    ao_end :: method() {
     }
 
-    ao_can_use_interactable :: proc(using this: Player, interactable: Interactable) -> bool {
+    ao_can_use_interactable :: method(interactable: Interactable) -> bool {
         if health.is_dead {
             return false;
         }
         return true;
     }
 
-    ao_can_use_ability :: proc(using this: Player, ability: Ability_Base) -> bool {
+    ao_can_use_ability :: method(ability: Ability_Base) -> bool {
         if health.is_dead return false;
         return true;
     }
@@ -2200,11 +2200,11 @@ Sell_Zone :: class : Component {
     particle_target: Entity @ao_serialize;
     interactable: Interactable @ao_serialize;
 
-    ao_start :: proc(using this: Sell_Zone) {
+    ao_start :: method() {
         interactable->set_listener(this);
     }
 
-    can_use :: proc(using this: Sell_Zone, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         food_count := Economy.get_balance(player, "Food");
         if food_count <= 0 {
             return false;
@@ -2212,7 +2212,7 @@ Sell_Zone :: class : Component {
         return true;
     }
 
-    on_interact :: proc(using this: Sell_Zone, player: Player) {
+    on_interact :: method(player: Player) {
         food_count := Economy.get_balance(player, "Food");
         particle_count := max(1, sqrt(food_count.(float)).(int));
         coins_earned := food_count;
@@ -2246,7 +2246,7 @@ Tree :: class : Component {
 
     jiggle_time: float;
 
-    ao_start :: proc(using tree: Tree) {
+    ao_start :: method() {
         health = entity->add_component(Health_Component);
         health->set_max_health(10, true);
         health.health_bar_offset = {0, 2.0};
@@ -2254,7 +2254,7 @@ Tree :: class : Component {
         chopped_sprite.enabled = false;
     }
 
-    ao_update :: proc(using tree: Tree, dt: float) {
+    ao_update :: method(dt: float) {
         if is_chopped {
             if get_time() > respawn_time {
                 is_chopped = false;
@@ -2276,11 +2276,11 @@ Tree :: class : Component {
         }
     }
 
-    jiggle :: proc(using tree: Tree) {
+    jiggle :: method() {
         jiggle_time = get_time();
     }
 
-    on_chopped :: proc(using tree: Tree, player: Player) {
+    on_chopped :: method(player: Player) {
         is_chopped = true;
         sprite.enabled = false;
         chopped_sprite.enabled = true;
@@ -2300,7 +2300,7 @@ Tree :: class : Component {
 Duck :: class : Component {
     sprite: Sprite_Renderer @ao_serialize;
 
-    ao_update :: proc(using duck: Duck, dt: float) {
+    ao_update :: method(dt: float) {
         rng := rng_seed(entity.id);
         duck_time := get_time() * rng_range_float(ref rng, 0.8, 1.2);
         bob_amount := sin(duck_time * 2) * 0.05;
@@ -2352,7 +2352,7 @@ NPC :: class : Component {
 
     WANDER_SPEED :: 150.0;
 
-    ao_start :: proc(using this: NPC) {
+    ao_start :: method() {
         spine->awaken();
 
         state_machine = State_Machine.create();
@@ -2414,7 +2414,7 @@ NPC :: class : Component {
         wander_radius = 5.0;
     }
 
-    update_scale :: proc(using this: NPC, move_direction_x: float) {
+    update_scale :: method(move_direction_x: float) {
         new_scale := spine.entity.local_scale;
         if move_direction_x > 0.01 {
             new_scale.x = 1;
@@ -2425,7 +2425,7 @@ NPC :: class : Component {
         spine.entity->set_local_scale(new_scale);
     }
 
-    move_to_target :: proc(using this: NPC, target: v2, range: float) -> bool {
+    move_to_target :: method(target: v2, range: float) -> bool {
         if in_range(target - entity.world_position, range) {
             return true;
         }
@@ -2436,14 +2436,14 @@ NPC :: class : Component {
         return false;
     }
 
-    push_behaviour :: proc(using this: NPC, behaviour: NPC_Behaviour) {
+    push_behaviour :: method(behaviour: NPC_Behaviour) {
         if current_behaviour != null {
             behaviour_stack->append(current_behaviour);
         }
         current_behaviour = behaviour;
     }
 
-    complete_current_behaviour :: proc(using this: NPC) {
+    complete_current_behaviour :: method() {
         if behaviour_stack.count > 0 {
             current_behaviour = behaviour_stack->pop();
             current_behaviour.time_in_state = 0;
@@ -2453,7 +2453,7 @@ NPC :: class : Component {
         }
     }
 
-    ao_update :: proc(using this: NPC, dt: float) {
+    ao_update :: method(dt: float) {
         // Don't wander if dead
         agent.friction = 0.5;
 
@@ -2556,13 +2556,13 @@ NPC :: class : Component {
         state_machine->set_bool("is_moving", is_moving);
     }
 
-    ao_late_update :: proc(using this: NPC, dt: float) {
+    ao_late_update :: method(dt: float) {
         if !health.is_dead && health.current_health != health.max_health {
             health->draw_health_bar(entity.world_position.y-0.001);
         }
     }
 
-    damage :: proc(using this: NPC, amount: int, attacker: Player = null) {
+    damage :: method(amount: int, attacker: Player = null) {
         if health == null return;
 
         died := health->take_damage(amount);
@@ -2599,7 +2599,7 @@ Food_Projectile :: class : Component {
 
     triangle_hint: int;
 
-    ao_start :: proc(using this: Food_Projectile) {
+    ao_start :: method() {
         spawn_time = get_time();
         if hit_radius == 0 {
             hit_radius = 0.75;
@@ -2609,7 +2609,7 @@ Food_Projectile :: class : Component {
         start_rotation = rng_range_float(ref rng, 0, 360);
     }
 
-    ao_update :: proc(using this: Food_Projectile, dt: float) {
+    ao_update :: method(dt: float) {
         time_alive := get_time() - spawn_time;
         sprite.entity->set_local_rotation(start_rotation + time_alive * 1440);
 
@@ -2736,15 +2736,15 @@ Align_Takeoff_Station :: class : Component {
     is_aligned: bool;
     locked_in: bool;
 
-    ao_start :: proc(using this: Align_Takeoff_Station) {
+    ao_start :: method() {
         interactable->set_listener(this);
     }
 
-    can_use :: proc(using this: Align_Takeoff_Station, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         return g_game.current_task == .ALIGN_TAKEOFF && player.team == .SURVIVOR && is_aligned == false;
     }
 
-    on_interact :: proc(using this: Align_Takeoff_Station, player: Player) {
+    on_interact :: method(player: Player) {
         {
             sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
@@ -2772,15 +2772,15 @@ Align_Takeoff_Station :: class : Component {
 Takeoff_Station :: class : Component {
     interactable: Interactable @ao_serialize;
 
-    ao_start :: proc(using this: Takeoff_Station) {
+    ao_start :: method() {
         interactable->set_listener(this);
     }
 
-    can_use :: proc(using this: Takeoff_Station, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         return g_game.current_task == .TAKEOFF && player.team == .SURVIVOR && !player.is_on_boat;
     }
 
-    on_interact :: proc(using this: Takeoff_Station, player: Player) {
+    on_interact :: method(player: Player) {
         player.is_on_boat = true;
         player->turn_into_spectator();
         player->add_notification("You escaped!");
@@ -2818,11 +2818,11 @@ Carried_Item :: class : Component {
     drop_sfx: string;
     pickup_notification: string;
 
-    ao_start :: proc(using this: Carried_Item) {
+    ao_start :: method() {
         shadow_scale = shadow_sprite.entity.local_scale;
     }
 
-    ao_late_update :: proc(using this: Carried_Item, dt: float) {
+    ao_late_update :: method(dt: float) {
         if is_picked_up && carrier != null {
             if #alive(carrier) {
                 last_carrier_position = carrier.entity.world_position;
@@ -2916,31 +2916,31 @@ Fuel_Spawn_Point :: class : Component {
 Fuel_Canister :: class : Interactable {
     carried_item: Carried_Item @ao_serialize;
 
-    ao_start :: proc(using this: Fuel_Canister) {
+    ao_start :: method() {
         this->set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         carried_item.pickup_notification = "Bring the fuel canister to the trolley!";
     }
 
-    can_use :: proc(using this: Fuel_Canister, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         return g_game.current_task == .FUEL_CANISTERS
             && player.team == .SURVIVOR
             && !carried_item.is_picked_up
             && !is_player_carrying_item(player);
     }
 
-    on_interact :: proc(using this: Fuel_Canister, player: Player) {
+    on_interact :: method(player: Player) {
         pickup_carried_item(carried_item, player);
     }
 }
 
 Fuel_Delivery_Point :: class : Interactable {
-    ao_start :: proc(using this: Fuel_Delivery_Point) {
+    ao_start :: method() {
         this->set_listener(this);
     }
 
-    can_use :: proc(using this: Fuel_Delivery_Point, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         if g_game.current_task != .FUEL_CANISTERS return false;
         if player.team != .SURVIVOR return false;
 
@@ -2952,7 +2952,7 @@ Fuel_Delivery_Point :: class : Interactable {
         return canister != null;
     }
 
-    on_interact :: proc(using this: Fuel_Delivery_Point, player: Player) {
+    on_interact :: method(player: Player) {
         item := get_player_carried_item(player);
         if item == null return;
 
@@ -3017,14 +3017,14 @@ Boat_Battery :: class : Interactable {
     charge_t: float;
     charger: Battery_Charger;
 
-    ao_start :: proc(using this: Boat_Battery) {
+    ao_start :: method() {
         this->set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         state = .UNCHARGED;
     }
 
-    ao_update :: proc(using this: Boat_Battery, dt: float) {
+    ao_update :: method(dt: float) {
         if g_game.current_task != .CHARGE_BATTERY return;
 
         if state == .CHARGING {
@@ -3045,7 +3045,7 @@ Boat_Battery :: class : Interactable {
         }
     }
 
-    ao_late_update :: proc(using this: Boat_Battery, dt: float) {
+    ao_late_update :: method(dt: float) {
         if g_game.current_task != .CHARGE_BATTERY return;
 
         // Draw charging progress bar when charging
@@ -3058,7 +3058,7 @@ Boat_Battery :: class : Interactable {
         }
     }
 
-    can_use :: proc(using this: Boat_Battery, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         if g_game.current_task != .CHARGE_BATTERY return false;
         if player.team != .SURVIVOR return false;
         if is_player_carrying_item(player) return false;
@@ -3074,11 +3074,11 @@ Boat_Battery :: class : Interactable {
         return false;
     }
 
-    on_interact :: proc(using this: Boat_Battery, player: Player) {
+    on_interact :: method(player: Player) {
         pickup_carried_item(carried_item, player);
     }
 
-    start_charging :: proc(using this: Boat_Battery, target_charger: Battery_Charger) {
+    start_charging :: method(target_charger: Battery_Charger) {
         state = .CHARGING;
         charger = target_charger;
 
@@ -3097,11 +3097,11 @@ Boat_Battery :: class : Interactable {
 Battery_Charger :: class : Interactable {
     is_charging: bool;
 
-    ao_start :: proc(using this: Battery_Charger) {
+    ao_start :: method() {
         this->set_listener(this);
     }
 
-    can_use :: proc(using this: Battery_Charger, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         if g_game.current_task != .CHARGE_BATTERY return false;
         if player.team != .SURVIVOR return false;
         if is_charging return false;
@@ -3116,7 +3116,7 @@ Battery_Charger :: class : Interactable {
         return battery.state == .UNCHARGED;
     }
 
-    on_interact :: proc(using this: Battery_Charger, player: Player) {
+    on_interact :: method(player: Player) {
         item := get_player_carried_item(player);
         if item == null return;
 
@@ -3142,11 +3142,11 @@ get_boat_battery :: proc() -> Boat_Battery {
 }
 
 Battery_Delivery_Point :: class : Interactable {
-    ao_start :: proc(using this: Battery_Delivery_Point) {
+    ao_start :: method() {
         this->set_listener(this);
     }
 
-    can_use :: proc(using this: Battery_Delivery_Point, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         if g_game.current_task != .CHARGE_BATTERY return false;
         if player.team != .SURVIVOR return false;
 
@@ -3160,7 +3160,7 @@ Battery_Delivery_Point :: class : Interactable {
         return battery.state == .CHARGED;
     }
 
-    on_interact :: proc(using this: Battery_Delivery_Point, player: Player) {
+    on_interact :: method(player: Player) {
         item := get_player_carried_item(player);
         if item == null return;
 
@@ -3214,7 +3214,7 @@ Trolley :: class : Component {
     is_being_pushed: bool;
     has_reached_destination: bool;
 
-    ao_start :: proc(using this: Trolley) {
+    ao_start :: method() {
         g_trolley = this;
         agent = entity->get_component(Movement_Agent);
         agent->set_navmesh_to_lock_to(get_game_manager().trolley_navmesh);
@@ -3222,7 +3222,7 @@ Trolley :: class : Component {
         reset_trolley(this);
     }
 
-    ao_update :: proc(using this: Trolley, dt: float) {
+    ao_update :: method(dt: float) {
         if g_game.state != .GAMEPLAY return;
         if g_game.current_task != .PUSH_TROLLEY return;
         if has_reached_destination return;
@@ -3267,13 +3267,13 @@ Trolley :: class : Component {
 
                 // Check if reached destination
                 if in_range(entity.world_position - destination.world_position, 0.5) {
-                    on_reached_destination(this);
+                    on_reached_destination();
                 }
             }
         }
     }
 
-    ao_late_update :: proc(using this: Trolley, dt: float) {
+    ao_late_update :: method(dt: float) {
         if g_game.current_task != .PUSH_TROLLEY return;
         if has_reached_destination return;
 
@@ -3316,7 +3316,7 @@ Trolley :: class : Component {
         }
     }
 
-    on_reached_destination :: proc(using this: Trolley) {
+    on_reached_destination :: method() {
         has_reached_destination = true;
 
         // Hide the trolley sprite and all cargo sprites
@@ -3388,13 +3388,13 @@ Beacon :: class : Component {
     restore_progress: float; // 0 to BEACON_RESTORE_TIME
     survivor_nearby: bool;
 
-    ao_start :: proc(using this: Beacon) {
+    ao_start :: method() {
         interactable->set_listener(this);
         state = .INACTIVE;
         restore_progress = 0;
     }
 
-    ao_update :: proc(using this: Beacon, dt: float) {
+    ao_update :: method(dt: float) {
         if g_game.current_task != .RESTORE_BEACONS {
             sprite.color.w = 0;
             return;
@@ -3447,7 +3447,7 @@ Beacon :: class : Component {
         }
     }
 
-    ao_late_update :: proc(using this: Beacon, dt: float) {
+    ao_late_update :: method(dt: float) {
         if g_game.current_task != .RESTORE_BEACONS return;
         if state == .RESTORED return;
 
@@ -3485,13 +3485,13 @@ Beacon :: class : Component {
         }
     }
 
-    can_use :: proc(using this: Beacon, player: Player) -> bool {
+    can_use :: method(player: Player) -> bool {
         return g_game.current_task == .RESTORE_BEACONS
             && player.team == .SURVIVOR
             && state == .INACTIVE;
     }
 
-    on_interact :: proc(using this: Beacon, player: Player) {
+    on_interact :: method(player: Player) {
         state = .RESTORING;
         player->add_notification("Stay near the beacon to restore it!");
     }
