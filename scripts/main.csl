@@ -897,7 +897,7 @@ Slash_Controller :: class : Controller_Base {
         }
 
         player.agent.velocity = direction * 10;
-        if this->get_elapsed_time() > 0.3 {
+        if get_elapsed_time() > 0.3 {
             player.entity->end_controller(false);
         }
     }
@@ -999,7 +999,7 @@ Roll_Controller :: class : Controller_Base {
 
     controller_update :: method(dt: float) {
         player.agent.velocity = direction * 8;
-        if this->get_elapsed_time() > 0.5 {
+        if get_elapsed_time() > 0.5 {
             player.entity->end_controller(false);
         }
     }
@@ -1618,7 +1618,7 @@ Death_Controller :: class : Controller_Base {
 
     controller_update :: method(dt: float) {
         if g_game.state == .GAMEPLAY {
-            time_until_respawn := 5.0 - this->get_elapsed_time();
+            time_until_respawn := 5.0 - get_elapsed_time();
             if player->is_local() {
                 draw_big_game_text("Respawning in %s", {time_until_respawn.(int) + 1});
             }
@@ -1829,8 +1829,8 @@ Player :: class : Player_Base {
 
     turn_into_spectator :: method() {
         if team != .SPECTATOR {
-            this->set_team(.SPECTATOR);
-            this->add_ghost_reason("spectator");
+            set_team(.SPECTATOR);
+            add_ghost_reason("spectator");
         }
     }
 
@@ -1855,10 +1855,10 @@ Player :: class : Player_Base {
 
         switch g_game.state {
             case .GAMEPLAY: {
-                this->turn_into_spectator();
+                turn_into_spectator();
             }
             case: {
-                this->set_team(.SURVIVOR);
+                set_team(.SURVIVOR);
             }
         }
 
@@ -1989,7 +1989,7 @@ Player :: class : Player_Base {
             camera.size = 5;
         }
 
-        if this->is_local_or_server() && !health.is_dead {
+        if is_local_or_server() && !health.is_dead {
             if g_game.state == .WAITING_FOR_PLAYERS {
                 draw_ability_button(this, Shoot_Ability, 0);
                 draw_ability_button(this, Dodge_Roll, 1);
@@ -2019,13 +2019,13 @@ Player :: class : Player_Base {
             UI.push_world_draw_context();
             defer UI.pop_draw_context();
 
-            if team == .SURVIVOR && !health.is_dead && this->will_draw_name() {
-                this->draw_ammo_bar();
-                this->draw_stamina_bar();
+            if team == .SURVIVOR && !health.is_dead && will_draw_name() {
+                draw_ammo_bar();
+                draw_stamina_bar();
             }
 
             if g_game.state == .GAMEPLAY {
-                if this->is_local() {
+                if is_local() {
                     switch team {
                         case .SURVIVOR: {
                             tutorial_arrow_options := Tutorial_Arrow.default_options();
@@ -2159,7 +2159,7 @@ Player :: class : Player_Base {
             }
         }
 
-        if this->is_local_or_server() {
+        if is_local_or_server() {
             if first_notification != null {
                 first_notification.time += dt;
                 if first_notification.time > 3.0 {
@@ -2431,7 +2431,7 @@ NPC :: class : Component {
         }
 
         if result := agent->set_path_target(target, WANDER_SPEED); result.success {
-            this->update_scale(result.move_direction.x);
+            update_scale(result.move_direction.x);
         }
         return false;
     }
@@ -2489,7 +2489,7 @@ NPC :: class : Component {
                     aggro := new(NPC_Behaviour);
                     aggro.kind = .AGGRO;
                     aggro.target = finder.closest;
-                    this->push_behaviour(aggro);
+                    push_behaviour(aggro);
                 }
                 else {
                     current_time := get_time();
@@ -2502,7 +2502,7 @@ NPC :: class : Component {
                     }
 
                     if current_behaviour.wandering {
-                        if this->move_to_target(current_behaviour.wander_target, 0.25) {
+                        if move_to_target(current_behaviour.wander_target, 0.25) {
                             current_behaviour.wandering = false;
                         }
                         else {
@@ -2515,20 +2515,20 @@ NPC :: class : Component {
                 switch {
                     case !#alive(current_behaviour.target): {
                         // Target left the game
-                        this->complete_current_behaviour();
+                        complete_current_behaviour();
                     }
                     case !in_range(current_behaviour.target.entity.world_position - entity.world_position, 10): {
                         // Target is too far away, un-aggro
-                        this->complete_current_behaviour();
+                        complete_current_behaviour();
                     }
                     case: {
                         // Approach the target
-                        if this->move_to_target(current_behaviour.target.entity.world_position, 2.5) {
+                        if move_to_target(current_behaviour.target.entity.world_position, 2.5) {
                             attack := new(NPC_Behaviour);
                             attack.kind = .ATTACK;
                             attack.target = current_behaviour.target;
                             attack.attack_direction = normalize(current_behaviour.target.entity.world_position - entity.world_position);
-                            this->push_behaviour(attack);
+                            push_behaviour(attack);
                             state_machine->set_trigger("attack");
                         }
                         else {
@@ -2538,7 +2538,7 @@ NPC :: class : Component {
                 }
             }
             case .ATTACK: {
-                this->update_scale(current_behaviour.attack_direction.x);
+                update_scale(current_behaviour.attack_direction.x);
 
                 agent.friction = 0;
                 agent.velocity = {};
@@ -2548,7 +2548,7 @@ NPC :: class : Component {
                 }
                 if current_behaviour.time_in_state > 0.5 {
                     agent.velocity = {};
-                    this->complete_current_behaviour();
+                    complete_current_behaviour();
                 }
             }
         }
@@ -2577,7 +2577,7 @@ NPC :: class : Component {
                 aggro := new(NPC_Behaviour);
                 aggro.kind = .AGGRO;
                 aggro.target = attacker;
-                this->push_behaviour(aggro);
+                push_behaviour(aggro);
             }
         }
     }
@@ -2917,7 +2917,7 @@ Fuel_Canister :: class : Interactable {
     carried_item: Carried_Item @ao_serialize;
 
     ao_start :: method() {
-        this->set_listener(this);
+        set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         carried_item.pickup_notification = "Bring the fuel canister to the trolley!";
@@ -2937,7 +2937,7 @@ Fuel_Canister :: class : Interactable {
 
 Fuel_Delivery_Point :: class : Interactable {
     ao_start :: method() {
-        this->set_listener(this);
+        set_listener(this);
     }
 
     can_use :: method(player: Player) -> bool {
@@ -3018,7 +3018,7 @@ Boat_Battery :: class : Interactable {
     charger: Battery_Charger;
 
     ao_start :: method() {
-        this->set_listener(this);
+        set_listener(this);
         carried_item.pickup_sfx = "sfx/pickup_fuel.wav";
         carried_item.drop_sfx = "sfx/drop_fuel.wav";
         state = .UNCHARGED;
@@ -3098,7 +3098,7 @@ Battery_Charger :: class : Interactable {
     is_charging: bool;
 
     ao_start :: method() {
-        this->set_listener(this);
+        set_listener(this);
     }
 
     can_use :: method(player: Player) -> bool {
@@ -3143,7 +3143,7 @@ get_boat_battery :: proc() -> Boat_Battery {
 
 Battery_Delivery_Point :: class : Interactable {
     ao_start :: method() {
-        this->set_listener(this);
+        set_listener(this);
     }
 
     can_use :: method(player: Player) -> bool {
