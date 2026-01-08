@@ -259,8 +259,7 @@ ao_update :: proc(dt: float) {
                 canister_prefab := get_asset(Prefab_Asset, "fuel_canister.prefab");
                 for i: 0..canisters_to_spawn-1 {
                     spawn_point := fuel_spawn_points[i];
-                    canister_entity := instantiate(canister_prefab);
-                    canister_entity->set_local_position(spawn_point.entity.world_position);
+                    canister_entity := instantiate(canister_prefab, spawn_point.entity.world_position);
                 }
             }
 
@@ -303,8 +302,7 @@ ao_update :: proc(dt: float) {
                 #global prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
 
                 battery_spawn := try_get_random_component(ref server_rng, Boat_Battery_Spawn_Point);
-                battery := instantiate(prefab);
-                battery->set_local_position(battery_spawn.entity.world_position);
+                battery := instantiate(prefab, battery_spawn.entity.world_position);
             }
 
             g_game.state = .WAITING_FOR_PLAYERS;
@@ -2698,9 +2696,8 @@ Food_Projectile :: class : Component {
 }
 
 shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, lifetime: float, team: Player_Team, owner: Entity, texture_path: string = "icons/burger.png") -> Entity {
-    prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
-    entity := instantiate(prefab);
-    entity->set_local_position(spawn_position);
+    #global prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
+    entity := instantiate(prefab, spawn_position);
 
     projectile := entity->get_component(Food_Projectile);
     projectile.velocity = velocity;
