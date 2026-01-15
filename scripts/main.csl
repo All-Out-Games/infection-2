@@ -73,7 +73,7 @@ MAX_AMMO        :: 3;
 AMMO_PER_SECOND :: 0.5;
 
 get_game_manager :: proc() -> Game_Manager {
-    #global game_manager: Game_Manager;
+    #static game_manager: Game_Manager;
     if game_manager == null {
         foreach gm: component_iterator(Game_Manager) {
             game_manager = gm;
@@ -92,8 +92,8 @@ ao_before_scene_load :: proc() {
 
     dust_spine      = get_asset(Spine_Asset, "rigs/dust_running_spine/dust_running.spine");
 
-    Economy.register_currency("Food", "icons/burger.png");
-    Economy.register_currency("Coins", "icons/coin.png");
+    Economy.register_currency("Food",  get_asset(Texture_Asset, "icons/burger.png"));
+    Economy.register_currency("Coins", get_asset(Texture_Asset, "icons/coin.png"));
 
     keybind_dodge_roll = Keybinds.register("Roll", .SPACE);
     keybind_drop_fuel = Keybinds.register("Drop Fuel", .F);
@@ -152,7 +152,7 @@ draw_round_timer :: proc(time_remaining: float, paused: bool, pause_reason: stri
         ts.color = {1, 0.3, 0.3, 1};
     }
 
-    UI.text(timer_rect, ts, "%:%{02}", {minutes, seconds});
+    UI.text(timer_rect, ts, "%:%", {format_int(minutes, leading_zeroes=2), format_int(seconds, leading_zeroes=2)});
 
     if paused {
         // Draw pause reason indicator below timer
@@ -227,10 +227,10 @@ ao_update :: proc(dt: float) {
                 takeoff.locked_in = false;
             }
             foreach fuel: component_iterator(Fuel_Canister) {
-                destroy_entity(fuel.entity);
+                fuel.entity->destroy();
             }
             foreach fuel: component_iterator(Boat_Battery) {
-                destroy_entity(fuel.entity);
+                fuel.entity->destroy();
             }
             foreach charger: component_iterator(Battery_Charger) {
                 charger.is_charging = false;
@@ -259,7 +259,7 @@ ao_update :: proc(dt: float) {
                 canister_prefab := get_asset(Prefab_Asset, "fuel_canister.prefab");
                 for i: 0..canisters_to_spawn-1 {
                     spawn_point := fuel_spawn_points[i];
-                    canister_entity := instantiate(canister_prefab, spawn_point.entity.world_position);
+                    canister_entity := Scene.instantiate(canister_prefab, spawn_point.entity.world_position);
                 }
             }
 
@@ -289,7 +289,7 @@ ao_update :: proc(dt: float) {
 
             //     // Spawn beacons at the first REQUIRED_BEACONS spawn points
             //     beacons_to_spawn := min(REQUIRED_BEACONS, beacon_spawn_count);
-            //     #global beacon_prefab := get_asset(Prefab_Asset, "Beacon Task.prefab");
+            //     #static beacon_prefab := get_asset(Prefab_Asset, "Beacon Task.prefab");
             //     for i: 0..beacons_to_spawn-1 {
             //         spawn_point := beacon_spawns[i];
             //         beacon_entity := instantiate(beacon_prefab);
@@ -299,10 +299,10 @@ ao_update :: proc(dt: float) {
 
             // spawn battery
             {
-                #global prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
+                #static prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
 
                 battery_spawn := try_get_random_component(ref server_rng, Boat_Battery_Spawn_Point);
-                battery := instantiate(prefab, battery_spawn.entity.world_position);
+                battery := Scene.instantiate(prefab, battery_spawn.entity.world_position);
             }
 
             g_game.state = .WAITING_FOR_PLAYERS;
@@ -462,7 +462,7 @@ ao_update :: proc(dt: float) {
                     }
                 }
                 case: {
-                    local_player := Game.try_get_local_player();
+                    local_player, _ := Game.get_local_player();
 
                     // Draw round timer at top of screen
                     draw_round_timer(g_game.round_timer, timer_paused, timer_pause_reason);
@@ -500,7 +500,7 @@ ao_update :: proc(dt: float) {
                                                 }
                                                 case .CHARGING: {
                                                     progress := battery.charge_t * 100;
-                                                    draw_task_subtitle(ref rect, "Charging: %{.1}%%", {progress});
+                                                    draw_task_subtitle(ref rect, "Charging: %0%%", {format_float(progress, decimals=0)});
                                                 }
                                                 case .CHARGED: {
                                                     draw_task_subtitle(ref rect, "Bring battery to trolley!");
@@ -572,7 +572,7 @@ ao_update :: proc(dt: float) {
         }
         case .END_GAME_SCREEN: {
             g_game.end_game_screen_timer += dt;
-            maybe_local := Game.try_get_local_player();
+            maybe_local, _ := Game.get_local_player();
             if maybe_local != null {
                 UI.push_layer(-1000);
                 defer UI.pop_layer();
@@ -1373,7 +1373,7 @@ Particle :: class : Component {
                             }
                         }
                     }
-                    destroy_entity(entity);
+                    entity->destroy();
                 }
                 velocity *= 0.6; // extra friction
             }
@@ -1391,8 +1391,8 @@ Particle_State :: enum {
 
 spawn_particle :: proc(spawn_position: v2, target_entity: Entity, particle_type: Particle_Type, currency_value: int = 1) {
     prefab_asset := get_asset(Prefab_Asset, "Particle.prefab");
-    entity := instantiate(prefab_asset);
-    particle := get_component(entity, Particle);
+    entity := Scene.instantiate(prefab_asset);
+    particle := entity->get_component(Particle);
 
     // Set texture based on particle type
     asset_path: string;
@@ -1521,7 +1521,7 @@ Damage_Number :: class : Component {
     ao_update :: method(dt: float) {
         time_alive := get_time() - spawn_time;
         if time_alive >= lifetime {
-            destroy_entity(entity);
+            entity->destroy();
             return;
         }
 
@@ -1553,7 +1553,7 @@ Damage_Number :: class : Component {
 }
 
 spawn_damage_number :: proc(value: int, position: v2) {
-    entity := create_entity();
+    entity := Scene.create_entity();
     entity->set_local_position(position);
 
     damage_number := entity->add_component(Damage_Number);
@@ -1852,7 +1852,6 @@ Player :: class : Player_Base {
     }
 
     ao_start :: method() {
-        agent.lock_to_navmesh = true;
         agent->set_navmesh_to_lock_to(get_game_manager().main_navmesh);
 
         switch g_game.state {
@@ -1927,7 +1926,7 @@ Player :: class : Player_Base {
                 sprite_dust_timer = 0.15;
                 dust_serial += 1;
                 dust_rng := rng_seed(dust_serial);
-                e := create_entity();
+                e := Scene.create_entity();
                 e->set_local_position(entity.world_position);
                 e->set_local_scale(entity.local_scale * 1.5);
                 animator := e->add_component(Spine_Animator);
@@ -1983,11 +1982,11 @@ Player :: class : Player_Base {
 
     ao_late_update :: method(dt: float) {
         if team == .SPECTATOR {
-            agent.lock_to_navmesh = false;
+            agent->set_navmesh_to_lock_to(null);
             camera.size = 8;
         }
         else {
-            agent.lock_to_navmesh = true;
+            agent->set_navmesh_to_lock_to(get_game_manager().main_navmesh);
             camera.size = 5;
         }
 
@@ -2355,8 +2354,6 @@ NPC :: class : Component {
     WANDER_SPEED :: 150.0;
 
     ao_start :: method() {
-        spine->awaken();
-
         state_machine = State_Machine.create();
 
         // Create variables
@@ -2369,12 +2366,12 @@ NPC :: class : Component {
         layer := state_machine->create_layer("main", 0);
 
         // Create states
-        idle_state := layer->create_state("idle", 1.2, true);
-        walk_state := layer->create_state("walk", 0.5333, true);
-        attack_state := layer->create_state("bite_attack", 0.8333, false);
-        hit_state := layer->create_state("hit_react", 0.4667, false);
-        death_state := layer->create_state("death", 2.0333, false);
-        dead_idle_state := layer->create_state("dead_idle", 0.0333, true);
+        idle_state := layer->create_state("idle", true);
+        walk_state := layer->create_state("walk", true);
+        attack_state := layer->create_state("bite_attack", false);
+        hit_state := layer->create_state("hit_react", false);
+        death_state := layer->create_state("death", false);
+        dead_idle_state := layer->create_state("dead_idle", true);
 
         layer->set_initial_state(idle_state);
 
@@ -2401,6 +2398,7 @@ NPC :: class : Component {
         death_to_dead_idle := layer->create_transition(death_state, dead_idle_state, true);
 
         // Connect state machine to spine instance - it will handle animation playback automatically
+        spine->awaken();
         spine.instance->set_state_machine(state_machine, true);
 
         health = entity->add_component(Health_Component);
@@ -2677,27 +2675,27 @@ Food_Projectile :: class : Component {
 
         if destroy_self {
             hit_effect := get_asset(Prefab_Asset, "hit_effect.prefab");
-            effect := instantiate(hit_effect);
+            effect := Scene.instantiate(hit_effect);
             rng := rng_seed(entity.id);
             effect.first_child->set_local_rotation(rng_range_float(ref rng, 0, 360));
             effect->set_local_position(entity.world_position);
             effect->queue_for_destruction(0.5);
-            destroy_entity(entity);
+            entity->destroy();
 
-            #global sfx := SFX.default_sfx_desc();
+            #static sfx := SFX.default_sfx_desc();
             sfx->set_position(entity.world_position);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.1;
-            #global sfx_asset := get_asset(SFX_Asset, "sfx/pop.wav");
+            #static sfx_asset := get_asset(SFX_Asset, "sfx/pop.wav");
             SFX.play(sfx_asset, sfx);
         }
     }
 }
 
 shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, lifetime: float, team: Player_Team, owner: Entity, texture_path: string = "icons/burger.png") -> Entity {
-    #global prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
-    entity := instantiate(prefab, spawn_position);
+    #static prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
+    entity := Scene.instantiate(prefab, spawn_position);
 
     projectile := entity->get_component(Food_Projectile);
     projectile.velocity = velocity;
@@ -2991,7 +2989,7 @@ Fuel_Delivery_Point :: class : Interactable {
             }
         }
 
-        destroy_entity(canister.entity);
+        canister.entity->destroy();
     }
 }
 
@@ -3187,7 +3185,7 @@ Battery_Delivery_Point :: class : Interactable {
         }
 
         complete_current_task();
-        destroy_entity(battery.entity);
+        battery.entity->destroy();
     }
 }
 
