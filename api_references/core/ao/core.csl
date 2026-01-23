@@ -1250,6 +1250,7 @@ Economy :: struct {
     get_balance           :: proc(player: Player, currency: string)              -> s64  #foreign "economy_get_balance";
     can_withdraw_currency :: proc(player: Player, currency: string, amount: s64) -> bool #foreign "economy_can_withdraw_currency";
     withdraw_currency     :: proc(player: Player, currency: string, amount: s64)         #foreign "economy_withdraw_currency";
+    delete_save_data      :: proc(player: Player)                                        #foreign "economy_delete_save_data";
 }
 
 Ordered_Save_Entry :: struct {
@@ -1275,7 +1276,9 @@ Save :: struct {
     get_int    :: proc(player: Player, key: string, default: s64) -> s64       #foreign "save_get_int";
     set_f64    :: proc(player: Player, key: string, value: f64)                #foreign "save_set_f64";
     get_f64    :: proc(player: Player, key: string, default: f64) -> f64       #foreign "save_get_f64";
-    delete_key :: proc(player: Player, key: string)                            #foreign "save_delete_key";
+    delete_key     :: proc(player: Player, key: string)                         #foreign "save_delete_key";
+    delete_all_keys :: proc(player: Player)                                    #foreign "save_delete_all_keys";
+    get_all_keys   :: proc(player: Player) -> []string                         #foreign "save_get_all_keys";
 
     set_json_raw     :: proc(player: Player, key: string, data: *u8, t: typeid)              #foreign "save_set_json_raw";
     try_get_json_raw :: proc(player: Player, key: string, out_data: *u8, t: typeid) -> bool  #foreign "save_try_get_json_raw";
