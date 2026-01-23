@@ -1210,7 +1210,7 @@ Eating_Effect :: class : Effect_Base {
         rotation := Ease.jitter(Ease.T(get_time() - time_last_clicked, 0.5), 8);
         food.entity->set_local_rotation(rotation * 15);
 
-        bone_position := player.animator.instance->get_bone_position("Hand_R");
+        bone_position := player.animator.instance->get_bone_local_position("Hand_R");
         bone_position.x *= sign(player.entity.local_scale.x);
         food.entity->set_local_position(player.entity.local_position + bone_position);
 

@@ -31,24 +31,24 @@ Entity :: class {
     world_rotation:       float               #read_only #offset 56;
     local_scale:          v2                  #read_only #offset 72;
     world_scale:          v2                  #read_only #offset 64;
-    first_component:      Component           #read_only #offset 408 #gc_root;
-    last_component:       Component           #read_only #offset 416 #gc_root;
-    next_sibling:         Entity              #read_only #offset 376 #gc_root;
-    prev_sibling:         Entity              #read_only #offset 384 #gc_root;
-    first_child:          Entity              #read_only #offset 392 #gc_root;
-    last_child:           Entity              #read_only #offset 400 #gc_root;
-    parent:               Entity              #read_only #offset 368 #gc_root;
-    self:                 Entity              #read_only #offset 360 #gc_root;
+    first_component:      Component           #read_only #offset 408;
+    last_component:       Component           #read_only #offset 416;
+    next_sibling:         Entity              #read_only #offset 376;
+    prev_sibling:         Entity              #read_only #offset 384;
+    first_child:          Entity              #read_only #offset 392;
+    last_child:           Entity              #read_only #offset 400;
+    parent:               Entity              #read_only #offset 368;
+    self:                 Entity              #read_only #offset 360;
     active_effect:        Effect_Base         #read_only #offset 424;
     first_effect:         Effect_Base         #read_only #offset 432;
     last_effect:          Effect_Base         #read_only #offset 440;
     model_matrix:         Matrix4             #read_only #offset 88;
     inverse_model_matrix: Matrix4             #read_only #offset 152;
-} #foreign_struct "Entity" #size 456
+} #gc_root #foreign_struct "Entity" #size 456
 
 Entity_Iterator :: struct {
     next :: method() -> bool #foreign "entity_iterator_next";
-    current: Entity #read_only #offset 8 #gc_root;
+    current: Entity #read_only #offset 8;
 } #foreign_struct "New_Entity_Iterator" #size 32
 
 Component :: class {
@@ -64,26 +64,27 @@ Component :: class {
     #interface ao_on_state_sync           :: proc(using this: Component);
     enabled:                  bool                 #offset 116;
     component_id:             u64       #read_only #offset 0;
-    entity:                   Entity    #read_only #offset 40 #gc_root;
-    prev_component_on_entity: Component #read_only #offset 48 #gc_root;
-    next_component_on_entity: Component #read_only #offset 56 #gc_root;
-    self:                     Component #read_only #offset 32 #gc_root;
-} #foreign_struct "Component_Base" #size 120
+    entity:                   Entity    #read_only #offset 40;
+    prev_component_on_entity: Component #read_only #offset 48;
+    next_component_on_entity: Component #read_only #offset 56;
+    self:                     Component #read_only #offset 32;
+} #gc_root #foreign_struct "Component_Base" #size 120
 
 Component_Iterator :: struct($T: typeid) {
     component_iterator_next_raw :: method() -> bool #foreign "component_iterator_next";
-    current: T #read_only #offset 16 #gc_root;
+    current: T #read_only #offset 16;
 } #foreign_struct "Hierarchical_Component_Iterator<Component_Base>" #size 40
 
 Sprite_Renderer :: class : Component {
     set_texture :: method(texture: Texture_Asset) #foreign "sprite_renderer_set_texture";
     get_texture :: method() -> Texture_Asset #foreign "sprite_renderer_get_texture";
-    color: v4 #offset 128;
+    color: v4           #offset 128;
     depth_offset: float #offset 144;
-    layer: s32 #offset 148;
-    flip_x: bool #offset 154;
-    flip_y: bool #offset 155;
-} #foreign_struct "Sprite_Renderer" #size 216
+    layer: s32          #offset 148;
+    scale: v2           #offset 156;
+    flip_x: bool        #offset 154;
+    flip_y: bool        #offset 155;
+} #foreign_struct "Sprite_Renderer" #size 224
 
 Circle_Collider :: class : Component {
 } #foreign_struct "Circle_Collider" #size 288
@@ -114,7 +115,7 @@ Interactable :: class : Component {
     set_text      :: method(text: string) #foreign "interactable_set_text";
     get_hold_text :: method() -> string   #foreign "interactable_get_hold_text";
     set_hold_text :: method(text: string) #foreign "interactable_set_hold_text";
-    set_listener :: method(new_listener: Component) {
+    set_listener :: method(new_listener: Component) #unsafe {
         listener = new_listener;
         true_type := type_info_table[new_listener.#type.(int)];
         assert(true_type.kind == .CLASS, "% wasn't a class", {new_listener.#type});
@@ -127,31 +128,43 @@ Interactable :: class : Component {
     radius:             float     #offset 160;
     required_hold_time: float     #offset 164;
     priority:           s64       #offset 168;
-    listener: Component                                      #offset 232;
-    can_use_proc: proc(t: Component, player: Player) -> bool #offset 240;
-    on_interact_proc: proc(t: Component, player: Player)     #offset 248;
-    on_holding_proc: proc(t: Component, player: Player)      #offset 256;
+    listener: Component                                      #offset 232 #read_only;
+    can_use_proc: proc(t: Component, player: Player) -> bool #offset 240 #read_only;
+    on_interact_proc: proc(t: Component, player: Player)     #offset 248 #read_only;
+    on_holding_proc: proc(t: Component, player: Player)      #offset 256 #read_only;
     #interface on_interact                :: proc(t: Interactable, player: Player);
     #interface on_holding                 :: proc(t: Interactable, player: Player);
 } #foreign_struct "Interactable" #size 264
 
 Spine_Animator :: class : Component {
-    set_color_replace_color :: method(color: Color_Replace_Color) #foreign "spine_animator_set_color_replace_color";
     depth_offset: float #offset 120;
     layer: s32 #offset 128;
-    instance: Spine_Instance #read_only #offset 344 #gc_root;
-    color_replace_color: Color_Replace_Color #read_only #offset 184;
-} #foreign_struct "Spine_Animator" #size 352
+    instance: Spine_Instance #read_only #offset 328;
+} #foreign_struct "Spine_Animator" #size 336
+
+LOS_Caster :: class : Component {
+    radii: v2 #offset 120;
+} #foreign_struct "LOS_Caster" #size 144
+
+Shadow_Caster :: class : Component {
+    softness: v2 #offset 120;
+} #foreign_struct "Shadow_Caster" #size 184
+
+Light :: class : Component {
+    color:     v4    #offset 120;
+    radii:     v2    #offset 136;
+    intensity: float #offset 144;
+} #foreign_struct "Light" #size 176
 
 Spine_Instance_Base :: class {
     set_color_replace_color :: method(color: Color_Replace_Color) #foreign "spine_instance_set_color_replace_color";
-    self:             Spine_Instance #read_only #offset 152 #gc_root;
-    state_machine:    State_Machine  #read_only #offset 48 #gc_root;
+    self:             Spine_Instance #read_only #offset 152;
+    state_machine:    State_Machine  #read_only #offset 48;
     color_multiplier: v4                        #offset 72;
     scale:            v2                        #offset 32;
     speed_multiplier: float                     #offset 104;
     color_replace_color: Color_Replace_Color #read_only #offset 144;
-} #foreign_struct "Spine_Instance" #size 184
+} #gc_root #foreign_struct "Spine_Instance" #size 184
 
 Camera :: struct {
     position:            v2            #offset 0;
@@ -161,14 +174,14 @@ Camera :: struct {
 } #foreign_struct "Actual_Camera" #size 28
 
 AO_Player :: class : Component {
-    animator:               Spine_Animator      #read_only #offset 28456 #gc_root;
-    agent:                  Movement_Agent      #read_only #offset 176 #gc_root;
+    animator:               Spine_Animator      #read_only #offset 28456;
+    agent:                  Movement_Agent      #read_only #offset 176;
     camera:                 Camera                         #offset 1112;
     device_kind:            Device_Kind         #read_only #offset 1144;
     do_name_color_override: bool                           #offset 27520;
     name_color_override:    v4                             #offset 27524;
     avatar_color:           Color_Replace_Color #read_only #offset 152;
-    default_inventory:      Inventory           #read_only #offset 28336 #gc_root;
+    default_inventory:      Inventory           #read_only #offset 28336;
     voice_channel_listen_mask: u64                         #offset 1272;
     voice_channel_speak_mask:  u64                         #offset 1280;
 } #foreign_struct "Player" #size 28608
@@ -188,25 +201,25 @@ Movement_Agent :: class : Component {
 } #foreign_struct "Movement_Agent" #size 7976
 
 Asset :: class {
-} #foreign_struct "Asset_Base" #size 240
+} #gc_root #foreign_struct "Asset_Base" #size 296
 
 Texture_Asset :: class : Asset {
     get_width :: method() -> s64 #foreign "texture_asset_get_width";
     get_height :: method() -> s64 #foreign "texture_asset_get_height";
     get_aspect :: method() -> float #foreign "texture_asset_get_aspect";
-} #foreign_struct "Texture" #size 368
+} #foreign_struct "Texture" #size 424
 
 SFX_Asset :: class : Asset {
-} #foreign_struct "SFX_Asset" #size 272
+} #foreign_struct "SFX_Asset" #size 328
 
 Spine_Asset :: class : Asset {
-} #foreign_struct "Spine_Skeleton_Data" #size 392
+} #foreign_struct "Spine_Skeleton_Data" #size 448
 
 Prefab_Asset :: class : Asset {
-} #foreign_struct "Prefab" #size 240
+} #foreign_struct "Prefab" #size 296
 
 Font_Asset :: class : Asset {
-} #foreign_struct "Font" #size 448
+} #foreign_struct "Font" #size 504
 
 State_Machine :: class {
     create :: proc() -> State_Machine #foreign "state_machine_create";
@@ -220,9 +233,9 @@ State_Machine :: class {
     create_layer     :: method(layer_name: string, track: s64) -> State_Machine_Layer #foreign "state_machine_create_layer";
     create_variable  :: method(variable_name: string, kind: State_Machine_Variable.Kind) -> State_Machine_Variable #foreign "state_machine_create_variable";
     try_get_variable :: method(variable_name: string) -> State_Machine_Variable #foreign "state_machine_try_get_variable";
-    self: State_Machine #read_only #gc_root #offset 120;
-    debug_enabled: bool                     #offset 128;
-} #foreign_struct "State_Machine" #size 160
+    self: State_Machine #read_only #offset 120;
+    debug_enabled: bool            #offset 128;
+} #gc_root #foreign_struct "State_Machine" #size 160
 
 State_Machine_Layer :: class {
     get_state_machine        :: method() -> State_Machine #foreign "state_machine_layer_get_state_machine";
@@ -236,13 +249,13 @@ State_Machine_Layer :: class {
     get_current_state_length :: method() -> float #foreign "state_machine_layer_get_current_state_length";
     reset_to_initial_state   :: method() #foreign "state_machine_layer_reset_to_initial_state";
     self: State_Machine_Layer #read_only #offset 136;
-} #foreign_struct "State_Machine_Layer" #size 168
+} #gc_root #foreign_struct "State_Machine_Layer" #size 168
 
 State_Machine_State :: class {
     get_name :: method() -> string #foreign "state_machine_state_get_name";
-    self:  State_Machine_State #read_only #offset 48 #gc_root;
+    self:  State_Machine_State #read_only #offset 48;
     speed: float                          #offset 72;
-} #foreign_struct "State_Machine_State" #size 120
+} #gc_root #foreign_struct "State_Machine_State" #size 120
 
 State_Machine_Variable :: class {
     Kind :: enum {
@@ -252,8 +265,8 @@ State_Machine_Variable :: class {
         FLOAT;
         INT;
     }
-    self: State_Machine_Variable #read_only #offset 48 #gc_root;
-} #foreign_struct "State_Machine_Variable" #size 80
+    self: State_Machine_Variable #read_only #offset 48;
+} #gc_root #foreign_struct "State_Machine_Variable" #size 80
 
 State_Machine_Transition :: class {
     Numeric_Condition_Kind :: enum {
@@ -268,12 +281,12 @@ State_Machine_Transition :: class {
     create_bool_condition    :: method(variable: State_Machine_Variable, value: bool) -> State_Machine_Transition_Condition #foreign "state_machine_transition_create_bool_condition";
     create_float_condition   :: method(variable: State_Machine_Variable, value: float, kind: Numeric_Condition_Kind) -> State_Machine_Transition_Condition #foreign "state_machine_transition_create_float_condition";
     create_int_condition     :: method(variable: State_Machine_Variable, value: int, kind: Numeric_Condition_Kind) -> State_Machine_Transition_Condition #foreign "state_machine_transition_create_int_condition";
-    self: State_Machine_Transition #read_only #offset 24 #gc_root;
-} #foreign_struct "State_Machine_Transition" #size 96
+    self: State_Machine_Transition #read_only #offset 24;
+} #gc_root #foreign_struct "State_Machine_Transition" #size 96
 
 State_Machine_Transition_Condition :: class {
-    self: State_Machine_Transition_Condition #read_only #offset 32 #gc_root;
-} #foreign_struct "State_Machine_Transition_Condition" #size 64
+    self: State_Machine_Transition_Condition #read_only #offset 32;
+} #gc_root #foreign_struct "State_Machine_Transition_Condition" #size 64
 
 SFX_Desc_Flags :: enum {
     POSITIONAL :: 1 << 0;
@@ -314,7 +327,7 @@ Text_Settings :: struct {
         CENTER;
         RIGHT;
     }
-    font:                   Font_Asset           #offset 0 #gc_root;
+    font:                   Font_Asset           #offset 0;
     size:                   float                #offset 8;
     color:                  v4                   #offset 12;
     valign:                 Vertical_Alignment   #offset 32;
@@ -352,15 +365,15 @@ Button_Settings :: struct {
     color_multiplier:            v4                      #offset 64;
     background_color_multiplier: v4                      #offset 80;
     press_scaling:               float                   #offset 96;
-    sprite:                      Texture_Asset           #offset 104 #gc_root;
-    sprite_hovered:              Texture_Asset           #offset 112 #gc_root;
-    sprite_pressed:              Texture_Asset           #offset 120 #gc_root;
+    sprite:                      Texture_Asset           #offset 104;
+    sprite_hovered:              Texture_Asset           #offset 112;
+    sprite_pressed:              Texture_Asset           #offset 120;
     sprite_padding:              v4                      #offset 128;
     nine_slice_data:             Texture_Nine_Slice_Data #offset 144;
     hover_offset:                v2                      #offset 164;
     text_pressed_offset:         v2                      #offset 172;
     text_unpressed_offset:       v2                      #offset 180;
-    click_sound:                 SFX_Asset               #offset 192 #gc_root;
+    click_sound:                 SFX_Asset               #offset 192;
     click_sound_speed:           float                   #offset 200;
     stay_hot_while_active:       bool                    #offset 204;
     return_to_center_to_cancel:  bool                    #offset 205;
@@ -418,22 +431,22 @@ Item_Definition_Desc :: struct {
 } #foreign_struct "CSL_Item_Definition_Desc" #size 56
 
 Item_Definition_Base :: class {
-    self: Item_Definition #read_only #offset 88 #gc_root;
+    self: Item_Definition #read_only #offset 88;
     type: typeid          #read_only #offset 96;
     instance_type: typeid #read_only #offset 104;
     tier: Item_Tier       #read_only #offset 72;
-} #foreign_struct "Item_Definition" #size 128
+} #gc_root #foreign_struct "Item_Definition" #size 128
 
 Item_Instance_Base :: class {
-    self: Item_Instance   #read_only #offset 144 #gc_root;
-    inventory: Inventory  #read_only #offset 152 #gc_root;
+    self: Item_Instance   #read_only #offset 144;
+    inventory: Inventory  #read_only #offset 152;
     slot_index: s64       #read_only #offset 56;
-} #foreign_struct "Item_Instance" #size 160
+} #gc_root #foreign_struct "Item_Instance" #size 160
 
 Inventory_Base :: class {
-    self: Inventory #read_only #offset 88 #gc_root;
+    self: Inventory #read_only #offset 88;
     capacity: s64   #read_only #offset 32;
-} #foreign_struct "Inventory" #size 96
+} #gc_root #foreign_struct "Inventory" #size 96
 
 Inventory_Draw_Options :: struct {
     title:                      string  #offset 0;
@@ -465,9 +478,9 @@ Inventory_Draw_Options :: struct {
 } #foreign_struct "Inventory_Draw_Options" #size 80
 
 Draw_Hotbar_Result :: struct {
-    selected_item:       Item_Instance #offset 0 #gc_root;
+    selected_item:       Item_Instance #offset 0;
     selected_item_index: s64           #offset 8;
-    dropped_item:        Item_Instance #offset 16 #gc_root;
+    dropped_item:        Item_Instance #offset 16;
     entire_rect:         Rect          #offset 24;
     inventory_open:      bool          #offset 40;
     inventory_open_t:    float         #offset 44;

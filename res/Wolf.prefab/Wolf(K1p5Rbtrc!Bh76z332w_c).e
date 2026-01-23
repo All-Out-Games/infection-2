@@ -27,7 +27,7 @@
   "cid": 2,
   "aoid": "3110429850233743:1764278042001311000",
   "component_type": "Internal_Component",
-  "internal_component_type": "NPC",
+  "internal_component_type": "Enemy",
   "data": {
     "spine": "3050893509318728:1764262374714010800",
     "agent": "3050745118667978:1764262335664265300"

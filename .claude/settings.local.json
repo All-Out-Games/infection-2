@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Write",
+      "AskUserQuestion",
+      "Grep",
+      "Glob",
+      "TodoWrite",
+      "Skill(*)",
+      "Skill(abilities)",
+      "Skill(client-specific-state)",
+      "Skill(effects)",
+      "Skill(format-strings)",
+      "Skill(interactables)",
+      "Skill(inventory)",
+      "Skill(inventory-droppable-items)",
+      "Skill(logging)",
+      "Skill(navmeshes-and-collision)",
+      "Skill(save)",
+      "Skill(spine)",
+      "Skill(syntax)",
+      "Skill(ui)",
+      "Skill(ui-scroll-grid)",
+      "Skill(ui-specific-examples)",
+      "Skill(game-design)",
+      "mcp__allout__assets_list",
+      "mcp__allout__rig_animations",
+      "mcp__allout__rig_skins",
+      "mcp__allout__rig_bones",
+      "mcp__allout__rig_events",
+      "mcp__allout__compile",
+      "mcp__allout__products_list"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "allout"
+  ]
+}
