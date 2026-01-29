@@ -8,6 +8,9 @@ Game :: struct {
     is_launched_from_editor :: proc() -> bool #foreign "is_launched_from_editor";
     is_server :: proc() -> bool #foreign "game_is_server";
     is_predicted_frame :: proc() -> bool #foreign "game_is_predicted_frame";
+
+    get_game_id :: proc() -> string #foreign "game_get_game_id";
+    get_server_id :: proc() -> string #foreign "game_get_server_id";
 }
 
 Server :: struct {
@@ -1445,7 +1448,7 @@ Ease :: struct {
 }
 
 Keybinds :: struct {
-    register                   :: proc(name: string, default: Input)              -> Keybind    #foreign "keybinds_register";
+    register                   :: proc(name: string, default: Input)     -> Keybind             #foreign "keybinds_register";
     get_sprite_for_keybind     :: proc(player: Player, keybind: Keybind) -> Texture_Asset, bool #foreign "keybinds_get_sprite_for_keybind";
     get_keybind_string         :: proc(player: Player, keybind: Keybind) -> string              #foreign "keybinds_get_keybind_string";
 
@@ -2061,23 +2064,25 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
             case was_aiming && index != player.was_aiming_ability_index: disabled = true;
         }
 
-        // UI.push_disabled_visuals(disabled);
-        // defer UI.pop_disabled_visuals();
+        UI.push_disabled(disabled);
+        defer UI.pop_disabled();
 
-        // UI.push_color_multiplier({1, 1, 1, 0.5}, disabled);
-        // defer UI.pop_color_multiplier();
+        UI.push_color_multiplier({0.2, 0.2, 0.2, 1.0}, disabled);
+        defer UI.pop_color_multiplier();
 
         should_draw_keybind := false;
         keybind: u64;
-        if !ability.disable_keybind {
-            keybind = core_globals.ability_keybinds[index];
-            if ability.keybind_override != 0 {
-                keybind = ability.keybind_override;
-            }
-            should_draw_keybind = true;
-
-            if !ability.draw_but_dont_use_keybind {
+        if player.device_kind == .PC {
+            if !ability.disable_keybind {
+                keybind = core_globals.ability_keybinds[index];
+                if ability.keybind_override != 0 {
+                    keybind = ability.keybind_override;
+                }
                 should_draw_keybind = true;
+
+                if !ability.draw_but_dont_use_keybind {
+                    should_draw_keybind = true;
+                }
             }
         }
 

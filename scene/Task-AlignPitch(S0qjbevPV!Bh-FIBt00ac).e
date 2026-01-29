@@ -28,15 +28,4 @@
     "radius": 1.5000000000000000,
     "required_hold_time": 1
   }
-},
-{
-  "cid": 2,
-  "aoid": "5298172259593439:1765152120783506900",
-  "component_type": "Internal_Component",
-  "internal_component_type": "Align_Takeoff_Station",
-  "data": {
-    "interactable": "5298172259533171:1765152120783491100",
-    "other": "5298035588748409:1765152084817887600",
-    "axis": 1
-  }
 }

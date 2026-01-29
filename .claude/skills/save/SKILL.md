@@ -240,3 +240,89 @@ reset_player_progress :: proc(player: Player) {
     Save.set_int(player, "version", 0);
 }
 ```
+
+## Game-Level Save API
+
+For data that should be shared across all players (not per-player), use the game-level save APIs. This is useful for global game state like world records, server settings, or shared progression.
+
+### Game Save API Reference
+
+```csl
+Save :: struct {
+    // Strings
+    set_game_string      :: proc(key: string, value: string);
+    get_game_string      :: proc(key: string, default: string) -> string;
+    get_all_game_strings :: proc() -> []Save_Game_String;
+    
+    // Integers (with atomic increment)
+    increment_game_int   :: proc(key: string, amount: s64, optimistic_update: bool = true);
+    get_game_int         :: proc(key: string, default: s64) -> s64;
+    get_all_game_ints    :: proc() -> []Save_Game_Int;
+}
+
+Save_Game_String :: struct {
+    key: string;
+    value: string;
+}
+
+Save_Game_Int :: struct {
+    key: string;
+    value: s64;
+}
+```
+
+### Game-Level Usage
+
+```csl
+// Set a global high score
+Save.set_game_string("world_record_holder", player->get_username());
+
+// Get a global setting
+difficulty := Save.get_game_string("server_difficulty", "normal");
+
+// Atomically increment a global counter (safe for concurrent updates)
+Save.increment_game_int("total_games_played", 1);
+
+// Get a global counter
+total_games := Save.get_game_int("total_games_played", 0);
+```
+
+### Atomic Integer Increments
+
+Use `increment_game_int` for counters that multiple players might update simultaneously. The `optimistic_update` parameter (default `true`) immediately updates the local value while the server confirms the change.
+
+```csl
+// Track total kills across all players
+on_enemy_killed :: proc() {
+    Save.increment_game_int("global_kills", 1);
+}
+
+// Display on a leaderboard
+total_kills := Save.get_game_int("global_kills", 0);
+```
+
+### Iterating All Game Data
+
+```csl
+// Get all stored game strings
+all_strings := Save.get_all_game_strings();
+for entry: all_strings {
+    log_info("Key: %, Value: %", {entry.key, entry.value});
+}
+
+// Get all stored game integers
+all_ints := Save.get_all_game_ints();
+for entry: all_ints {
+    log_info("Key: %, Value: %", {entry.key, entry.value});
+}
+```
+
+### When to Use Game-Level vs Player-Level
+
+| Use Case | API |
+|----------|-----|
+| Player XP, level, inventory | `Save.set_int(player, ...)` |
+| Player preferences | `Save.set_string(player, ...)` |
+| World records / high scores | `Save.set_game_string(...)` |
+| Global kill counters | `Save.increment_game_int(...)` |
+| Server configuration | `Save.set_game_string(...)` |
