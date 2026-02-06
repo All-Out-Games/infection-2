@@ -1282,12 +1282,12 @@ Player :: class : Player_Base {
 
     set_team :: method(new_team: Player_Team) {
         if new_team == .SPECTATOR {
-            voice_channel_listen_mask = ALIVE_CHANNEL | DEAD_CHANNEL;
-            voice_channel_speak_mask = DEAD_CHANNEL;
+            comms_channel_listen_mask = ALIVE_CHANNEL | DEAD_CHANNEL;
+            comms_channel_speak_mask = DEAD_CHANNEL;
         }
         else {
-            voice_channel_listen_mask = ALIVE_CHANNEL;
-            voice_channel_speak_mask = ALIVE_CHANNEL;
+            comms_channel_listen_mask = ALIVE_CHANNEL;
+            comms_channel_speak_mask = ALIVE_CHANNEL;
         }
         team = new_team;
     }

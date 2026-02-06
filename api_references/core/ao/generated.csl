@@ -124,17 +124,18 @@ Interactable :: class : Component {
         on_interact_proc = try_get_constant_procedure(struct_type, "on_interact", proc(t: Component, player: Player));
         on_holding_proc = try_get_constant_procedure(struct_type, "on_holding", proc(t: Component, player: Player));
     }
-    prompt_offset:      v2        #offset 152;
-    radius:             float     #offset 160;
-    required_hold_time: float     #offset 164;
-    priority:           s64       #offset 168;
-    listener: Component                                      #offset 232 #read_only;
-    can_use_proc: proc(t: Component, player: Player) -> bool #offset 240 #read_only;
-    on_interact_proc: proc(t: Component, player: Player)     #offset 248 #read_only;
-    on_holding_proc: proc(t: Component, player: Player)      #offset 256 #read_only;
+    offset:             v2        #offset 152;
+    prompt_offset:      v2        #offset 160;
+    radius:             float     #offset 168;
+    required_hold_time: float     #offset 172;
+    priority:           s64       #offset 176;
+    listener: Component                                      #offset 240 #read_only;
+    can_use_proc: proc(t: Component, player: Player) -> bool #offset 248 #read_only;
+    on_interact_proc: proc(t: Component, player: Player)     #offset 256 #read_only;
+    on_holding_proc: proc(t: Component, player: Player)      #offset 264 #read_only;
     #interface on_interact                :: proc(t: Interactable, player: Player);
     #interface on_holding                 :: proc(t: Interactable, player: Player);
-} #foreign_struct "Interactable" #size 264
+} #foreign_struct "Interactable" #size 272
 
 Spine_Animator :: class : Component {
     depth_offset: float #offset 120;
@@ -164,7 +165,7 @@ Spine_Instance_Base :: class {
     scale:            v2                        #offset 32;
     speed_multiplier: float                     #offset 104;
     color_replace_color: Color_Replace_Color #read_only #offset 144;
-} #gc_root #foreign_struct "Spine_Instance" #size 184
+} #gc_root #foreign_struct "Spine_Instance" #size 200
 
 Camera :: struct {
     position:            v2            #offset 0;
@@ -174,17 +175,19 @@ Camera :: struct {
 } #foreign_struct "Actual_Camera" #size 28
 
 AO_Player :: class : Component {
-    animator:               Spine_Animator      #read_only #offset 28848;
+    animator:               Spine_Animator      #read_only #offset 31496;
     agent:                  Movement_Agent      #read_only #offset 176;
-    camera:                 Camera                         #offset 1504;
-    device_kind:            Device_Kind         #read_only #offset 1536;
-    do_name_color_override: bool                           #offset 27912;
-    name_color_override:    v4                             #offset 27916;
+    camera:                 Camera                         #offset 1592;
+    device_kind:            Device_Kind         #read_only #offset 1624;
+    do_name_color_override: bool                           #offset 30560;
+    name_color_override:    v4                             #offset 30564;
     avatar_color:           Color_Replace_Color #read_only #offset 152;
-    default_inventory:      Inventory           #read_only #offset 28728;
-    voice_channel_listen_mask: u64                         #offset 1664;
-    voice_channel_speak_mask:  u64                         #offset 1672;
-} #foreign_struct "Player" #size 29000
+    default_inventory:      Inventory           #read_only #offset 31376;
+    comms_channel_listen_mask: u64                         #offset 1752;
+    comms_channel_speak_mask:  u64                         #offset 1760;
+    username_rect:             Rect                        #offset 31452;
+    full_nameplate_rect:       Rect                        #offset 31468;
+} #foreign_struct "Player" #size 31640
 
 Movement_Agent :: class : Component {
     Set_Path_Target_Result :: struct {
@@ -201,25 +204,25 @@ Movement_Agent :: class : Component {
 } #foreign_struct "Movement_Agent" #size 7976
 
 Asset :: class {
-} #gc_root #foreign_struct "Asset_Base" #size 296
+} #gc_root #foreign_struct "Asset_Base"
 
 Texture_Asset :: class : Asset {
     get_width :: method() -> s64 #foreign "texture_asset_get_width";
     get_height :: method() -> s64 #foreign "texture_asset_get_height";
     get_aspect :: method() -> float #foreign "texture_asset_get_aspect";
-} #foreign_struct "Texture" #size 424
+} #foreign_struct "Texture"
 
 SFX_Asset :: class : Asset {
-} #foreign_struct "SFX_Asset" #size 328
+} #foreign_struct "SFX_Asset"
 
 Spine_Asset :: class : Asset {
-} #foreign_struct "Spine_Skeleton_Data" #size 448
+} #foreign_struct "Spine_Skeleton_Data"
 
 Prefab_Asset :: class : Asset {
-} #foreign_struct "Prefab" #size 296
+} #foreign_struct "Prefab"
 
 Font_Asset :: class : Asset {
-} #foreign_struct "Font" #size 504
+} #foreign_struct "Font"
 
 State_Machine :: class {
     create :: proc() -> State_Machine #foreign "state_machine_create";
@@ -288,33 +291,29 @@ State_Machine_Transition_Condition :: class {
     self: State_Machine_Transition_Condition #read_only #offset 32;
 } #gc_root #foreign_struct "State_Machine_Transition_Condition" #size 64
 
-SFX_Desc_Flags :: enum {
-    POSITIONAL :: 1 << 0;
-}
-
 SFX_Channel :: enum {
     SFX;
     MUSIC;
 }
 
 SFX_Desc :: struct {
-    flags:            SFX_Desc_Flags             #offset 0;
-    position:         v2              #read_only #offset 8;
-    delay:            float                      #offset 16;
-    volume:           float                      #offset 20;
-    speed:            float                      #offset 24;
-    volume_perturb:   float                      #offset 28;
-    speed_perturb:    float                      #offset 32;
-    range_multiplier: float                      #offset 36;
-    loop_timeout:     float                      #offset 40;
-    entity_to_follow: u64                        #offset 48;
-    loop:             bool                       #offset 56;
-    channel:          SFX_Channel                #offset 64;
+    positional:       bool                       #offset 0;
+    position:         v2              #read_only #offset 4;
+    delay:            float                      #offset 12;
+    volume:           float                      #offset 16;
+    speed:            float                      #offset 20;
+    volume_perturb:   float                      #offset 24;
+    speed_perturb:    float                      #offset 28;
+    range_multiplier: float                      #offset 32;
+    loop_timeout:     float                      #offset 36;
+    entity_to_follow: u64                        #offset 40;
+    loop:             bool                       #offset 48;
+    channel:          SFX_Channel                #offset 56;
     set_position :: method(p: v2) {
-        flags |= SFX_Desc_Flags.POSITIONAL;
+        positional = true;
         #unsafe position = p;
     }
-} #foreign_struct "SFX::Play_Sound_Desc" #size 72
+} #foreign_struct "SFX::Play_Sound_Desc" #size 64
 
 Text_Settings :: struct {
     Vertical_Alignment :: enum {
@@ -374,12 +373,12 @@ Button_Settings :: struct {
     text_pressed_offset:         v2                      #offset 172;
     text_unpressed_offset:       v2                      #offset 180;
     click_sound:                 SFX_Asset               #offset 192;
-    click_sound_speed:           float                   #offset 200;
-    stay_hot_while_active:       bool                    #offset 204;
-    return_to_center_to_cancel:  bool                    #offset 205;
-    sprite_fit_aspect:           bool                    #offset 206;
-    keybind:                     u64                     #offset 208;
-} #foreign_struct "UI::Button_Settings" #size 216
+    click_sound_desc:            SFX_Desc                #offset 208;
+    stay_hot_while_active:       bool                    #offset 272;
+    return_to_center_to_cancel:  bool                    #offset 273;
+    sprite_fit_aspect:           bool                    #offset 274;
+    keybind:                     u64                     #offset 280;
+} #foreign_struct "UI::Button_Settings" #size 288
 
 Interact_Mouse_Button :: struct {
     time_last_clicked: float #offset 0;
@@ -442,6 +441,7 @@ Item_Instance_Base :: class {
     self: Item_Instance   #read_only #offset 144;
     inventory: Inventory  #read_only #offset 152;
     slot_index: s64       #read_only #offset 56;
+    quantity:   s64       #read_only #offset 40;
 } #gc_root #foreign_struct "Item_Instance" #size 160
 
 Inventory_Base :: class {
