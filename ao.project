@@ -1,10 +1,13 @@
 {
-    csl: true,
-    projects:
-    [
-        {
-            name: "Infection"
-            id: "6935dcc718506c430b35c652"
-        }
-    ]
+  "csl": true,
+  "projects": [
+    {
+      "name": "Infection",
+      "id": "698a72b5bec3a37de86775c7"
+    },
+    {
+      "name": "Infection (Staging)",
+      "id": "6935dcc718506c430b35c652"
+    }
+  ]
 }

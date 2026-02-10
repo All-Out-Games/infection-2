@@ -68,8 +68,8 @@ server_rng: u64;
 ROUND_COUNTDOWN_TIMER                           :: 10;
 ROUND_COUNTDOWN_TIMER_WHEN_PLAYER_COUNT_CHANGES :: 5;
 
-MAX_AMMO        :: 3;
-AMMO_PER_SECOND :: 0.5;
+MAX_AMMO        :: 4;
+AMMO_PER_SECOND :: 0.6;
 
 get_game_manager :: proc() -> Game_Manager {
     #static game_manager: Game_Manager;
@@ -302,7 +302,7 @@ ao_update :: proc(dt: float) {
                     }
 
                     rng_shuffle(ref server_rng, players);
-                    zombie_count := max(1, player_count / 4);
+                    zombie_count := max(1, player_count / 5);
                     for i: 0..zombie_count-1 {
                         players[i]->set_team(.ZOMBIE);
                     }
@@ -359,6 +359,18 @@ ao_update :: proc(dt: float) {
 
             end_game :: proc(winner: Player_Team) {
                 g_game.winner = winner;
+
+                if Game.is_server() {
+                    switch winner {
+                        case .SURVIVOR: {
+                            Save.increment_game_int("survivor_wins_v5", 1);
+                        }
+                        case .ZOMBIE: {
+                            Save.increment_game_int("zombie_wins_v5", 1);
+                        }
+                    }
+                }
+
                 g_game.state = .END_GAME_SCREEN;
                 foreach player: component_iterator(Player) {
                     switch winner {
@@ -607,7 +619,7 @@ Shoot_Ability :: class : Ability_Base {
     on_update :: method(params: ref Ability_Update_Params) {
         activation := Ability_Utilities.full_update_aimed_ability(player, ref params);
         if activation.activate {
-            current_cooldown = 0.75;
+            current_cooldown = 0.5;
             sfx := SFX.default_sfx_desc();
             sfx->set_position(player.entity.local_position);
             sfx.volume_perturb = 0.2;
@@ -702,8 +714,8 @@ Slash_Effect :: class : Effect_Base {
             }
         }
 
-        player.agent.velocity = direction * 10;
-        if get_elapsed_time() > 0.3 {
+        player.agent.velocity = direction * 8;
+        if get_elapsed_time() > 0.25 {
             remove_effect(false);
             return;
         }

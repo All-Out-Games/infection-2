@@ -15,3 +15,5 @@ res/.preprocessed
 .asset_manifest.txt
 *.psd
 .cursor
+ao_debug.lock
+debug.lock
