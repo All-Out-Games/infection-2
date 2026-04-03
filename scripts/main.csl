@@ -61,6 +61,11 @@ complete_current_task :: proc() {
 
     // Bonus time for completing a task
     g_game.round_timer += TASK_COMPLETION_TIME_BONUS;
+
+    if Game.is_server() {
+        sfx := SFX.default_sfx_desc();
+        SFX.play(get_asset(SFX_Asset, "sfx/beacon_restore.wav"), sfx);
+    }
 }
 
 server_rng: u64;
@@ -770,7 +775,9 @@ Slash_Effect :: class : Effect_Base {
             sfx.volume = 0.75;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.2;
-            SFX.play(get_asset(SFX_Asset, "sfx/slash.wav"), sfx);
+            rng := rng_seed_time();
+            bite_index := rng_range_int(ref rng, 1, 5);
+            SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", {bite_index})), sfx);
         }
     }
 
@@ -1721,6 +1728,36 @@ Player :: class : Player_Base {
             }
         }
 
+        // Spectator HUD
+        if is_local() && team == .SPECTATOR && g_game.state == .GAMEPLAY {
+            UI.push_screen_draw_context();
+            defer UI.pop_draw_context();
+            UI.push_layer(100);
+            defer UI.pop_layer();
+
+            ts := UI.default_text_settings();
+            ts.halign = .CENTER;
+            ts.valign = .CENTER;
+
+            // "SPECTATING" pill at top-center, below the round timer
+            top_pill := UI.get_safe_screen_rect()->top_center_rect()->grow(24, 140, 24, 140)->offset(0, -120);
+            UI.quad(top_pill, white_sprite, {0, 0, 0, 0.55});
+            ts.size = 26;
+            ts.color = {0.8, 0.8, 0.8, 1};
+            ts.do_outline = true;
+            ts.outline_thickness = 2;
+            ts.outline_color = {0, 0, 0, 1};
+            UI.text(top_pill, ts, "SPECTATING");
+
+            // Waiting message at bottom-center
+            bottom_rect := UI.get_safe_screen_rect()->bottom_center_rect()->grow(20, 260, 20, 260)->offset(0, 55);
+            UI.quad(bottom_rect, white_sprite, {0, 0, 0, 0.5});
+            ts.size = 22;
+            ts.color = {0.85, 0.85, 0.85, 1};
+            ts.do_outline = false;
+            UI.text(bottom_rect, ts, "You'll rejoin automatically next round.");
+        }
+
         // Victory spine for win screen
         if is_local() {
             if g_game.state == .END_GAME_SCREEN {
@@ -2153,6 +2190,10 @@ Boat_Battery :: class : Interactable {
                 state = .CHARGED;
                 charger.is_charging = false;
                 carried_item.pickup_notification = "Bring the charged battery to the trolley!";
+                if Game.is_server() {
+                    sfx := SFX.default_sfx_desc();
+                    SFX.play(get_asset(SFX_Asset, "sfx/beacon_restore.wav"), sfx);
+                }
                 foreach player: component_iterator(Player) if player.team == .SURVIVOR {
                     player->add_notification("Battery fully charged! Bring it to the trolley!");
                 }
