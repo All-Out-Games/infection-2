@@ -1,21 +1,32 @@
 You will be developing a multiplayer game in a custom scripting language (.csl)
 
 ## Networking
-- All gameplay state is automatically synced from the server to the client. You do not need to write RPCs or network spawn things. 
-- Do not forget that **multiple players will be connecting**. Avoid global state that will break with multiple players. Store these as fields on the player. 
+
+> **NEVER wrap gameplay logic in `Game.is_server()`.** The engine uses client-side prediction with automatic server reconciliation. If you only run gameplay code on the server, the client won't predict anything and all actions will feel delayed by a full round-trip. Gameplay code **must** run on both client and server for smooth behavior.
+
+- All gameplay state is automatically synced. You do not need to write RPCs or manually replicate state.
+- The client runs the same gameplay code as the server and predicts outcomes immediately. The server's authoritative result is reconciled automatically — you get correctness **and** responsiveness for free, but **only if the code runs on both sides**.
+- Do not forget that **multiple players will be connecting**. Avoid global state that will break with multiple players. Store these as fields on the player.
+
+### When to use `Game.is_server()`
+`Game.is_server()` is **only** for side-effects that would be wrong if double-fired (client + server), such as:
+- Playing long/important sound effects (to prevent mispredicted playback)
+- One-shot economy transactions (deposits/withdrawals)
+- Spawning entities that the server will replicate anyway
+
+It is **never** for gating core gameplay logic like movement, health, scoring, cooldowns, or state machines.
 
 ### is_local_or_server() vs is_local()
 ```csl
 Player :: class : Player_Base {
     ao_late_update :: method(dt: float) {
-        // Use for gameplay UI and inputs (runs on server + local client)
+        // Use for gameplay UI and inputs (runs on server + local client only, 
+        // skips remote clients who don't need this player's UI/input)
         if is_local_or_server() {
             draw_ability_button(this, Shoot_Ability, 0);
-            // Handle inputs that affect game state
-            // Movement is handled automatically
         }
         
-        // Use for purely cosmetic effects (runs only on local client)
+        // Use for purely cosmetic/local-only effects (runs only on local client)
         if is_local() {
             UI.text(..., "Waiting for host to start the game...");
             // Particle effects, cosmetic UI, etc.
@@ -26,18 +37,12 @@ Player :: class : Player_Base {
 ```
 
 ## Imports
+All imports go in main.csl only. Do not import anywhere else.
 ```csl
 // main.csl
 import "core:ao"
+import "ui" // add folder imports here as needed
 ```
-
-If you create a new folder (e.g. `/ui`), import once in your main.csl to bring all those files into scope. 
-```csl
-// main.csl
-import "core:ao"
-import "ui"
-```
-You should not import anything anywhere else. 
 
 ## Assets/Resources
 - Game assets are available in the /res directory. 
@@ -75,6 +80,17 @@ entity->destroy();
 foreach entity: entity_iterator() {
 }
 ```
+
+#### Iterating Children
+visit :: proc(entity: Entity) {
+    // <do something>
+
+    current := entity.first_child;
+    while current != null {
+        visit(current);
+        current = current.next_sibling;
+    }
+}
 
 ## Components
 
@@ -146,25 +162,10 @@ foreach player: component_iterator(My_Player) {
 #### Finding components close to the player
 > csl does not have collision callbacks. To know when a player collides with something get components near them and check distance
 ```csl
-Scene.get_all_components_in_range :: proc(position: v2, range: float, results: ref [..]$T)
-Scene.get_closest_component_in_range :: proc(position: v2, range: float, $T: typeid) -> T
-```
+nearby: [..]Enemy;
+Scene.get_all_components_in_range(player_pos, 5.0, ref nearby);
 
-Example usage:
-```csl
-// Get all enemies within 5 units of the player
-nearby_enemies: [..]Enemy;
-Scene.get_all_components_in_range(player_pos, 5.0, ref nearby_enemies);
-
-for enemy: nearby_enemies {
-    
-}
-
-// Get the single closest pickup within 2 units
-closest_pickup := Scene.get_closest_component_in_range(player_pos, 2.0, Pickup);
-if closest_pickup != null {
-
-}
+closest, found := Scene.get_closest_component_in_range(player_pos, 2.0, Pickup);
 ```
 
 ## Random Numbers
@@ -214,7 +215,7 @@ sound_id := SFX.play(sound_asset, desc);
 // Stop sound
 SFX.stop(sound_id);
 ```
-> Play important long sounds server-only using Game.is_server() to prevent mispredicted playback of music, death sfx, etc...
+> Long/important sounds (music, death SFX) are one of the few things that **should** be gated with `Game.is_server()` to prevent mispredicted double-playback. Short feedback sounds (footsteps, clicks) are fine ungated.
 
 ## Economy
 > Automatically persist currencies (cash, points, etc...)
@@ -233,24 +234,9 @@ if Economy.can_withdraw_currency(player, "Coins", COST) {
 ```
 
 ## Math Functions
-```csl
-angle_rad := sin(x);
-angle_cos := cos(x);
+> These are the **only** math functions available. Do not assume others exist.
 
-result := pow(2.0, 3.0);  // 8.0
-root := sqrt(16.0);       // 4.0
-
-value := lerp(0.0, 100.0, 0.5);     // 50.0
-clamped := clamp(value, 0.0, 10.0); // Limit range
-absolute := abs(-5);                 // 5
-minimum := min(5, 10);               // 5
-maximum := max(5, 10);               // 10
-
-len := length(vector);
-len_sq := length_squared(vector);
-normalized := normalize(vector);
-```
-> ^ These are the only math functions available to you. 
+`sin`, `cos`, `pow`, `sqrt`, `lerp`, `clamp`, `abs`, `min`, `max`, `length`, `length_squared`, `normalize` there are no other math functions. 
 
 ### Player_Base Reference
 - p->get_username() -> string
@@ -258,7 +244,7 @@ normalized := normalize(vector);
 - p.avatar_color -> Color_Replace_Color 
 - p.device_kind -> .PHONE, .TABLET, .PC 
 - p->add_freeze_reason(reason: string)
-- p-> add_invisibility_reason(reason: string)
+- p->add_invisibility_reason(reason: string)
 
 ### Serialized fields
 Use `@ao_serialize` to expose a field to the user in the editor. 
@@ -273,4 +259,5 @@ Use `@ao_serialize` to expose a field to the user in the editor.
 - If the task you're working on requires any UI, you **must** use the ui skill. 
 - If designing new gameplay systems, you **must** use the game-design skill.
 
-After you make changes you **must** run the All Out MCP compile tool.
+After you make script changes you **must** run the All Out MCP compile tool.
+When the prompt requires building a game world, prefer doing so using the allout MCP scene editing tools instead of scripts. 

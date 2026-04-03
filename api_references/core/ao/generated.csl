@@ -5,6 +5,8 @@ Entity :: class {
     queue_for_destruction      :: method(after_seconds: float)                                                                                                          #foreign "entity_queue_for_destruction";
     calculate_visual_position  :: method() -> v2                                                                                                                        #foreign "entity_calculate_visual_position";
     calculate_predictive_error :: method() -> v2                                                                                                                        #foreign "entity_calculate_predictive_error";
+    calculate_interpolation_offset :: method() -> v2                                                                                                                    #foreign "entity_calculate_interpolation_offset";
+    mark_teleported            :: method()                                                                                                                              #foreign "entity_mark_teleported";
     get_name                   :: method() -> string                                                                                                                    #foreign "entity_get_name";
     set_parent                 :: method(new_parent: Entity, keep_world_position: bool)                                                                                 #foreign "entity_set_parent";
     set_local_position         :: method(p: v2)                                                                                                                         #foreign "entity_set_local_position";
@@ -31,20 +33,20 @@ Entity :: class {
     world_rotation:       float               #read_only #offset 56;
     local_scale:          v2                  #read_only #offset 72;
     world_scale:          v2                  #read_only #offset 64;
-    first_component:      Component           #read_only #offset 408;
-    last_component:       Component           #read_only #offset 416;
-    next_sibling:         Entity              #read_only #offset 376;
-    prev_sibling:         Entity              #read_only #offset 384;
-    first_child:          Entity              #read_only #offset 392;
-    last_child:           Entity              #read_only #offset 400;
-    parent:               Entity              #read_only #offset 368;
-    self:                 Entity              #read_only #offset 360;
-    active_effect:        Effect_Base         #read_only #offset 424;
-    first_effect:         Effect_Base         #read_only #offset 432;
-    last_effect:          Effect_Base         #read_only #offset 440;
+    first_component:      Component           #read_only #offset 416;
+    last_component:       Component           #read_only #offset 424;
+    next_sibling:         Entity              #read_only #offset 384;
+    prev_sibling:         Entity              #read_only #offset 392;
+    first_child:          Entity              #read_only #offset 400;
+    last_child:           Entity              #read_only #offset 408;
+    parent:               Entity              #read_only #offset 376;
+    self:                 Entity              #read_only #offset 368;
+    active_effect:        Effect_Base         #read_only #offset 432;
+    first_effect:         Effect_Base         #read_only #offset 440;
+    last_effect:          Effect_Base         #read_only #offset 448;
     model_matrix:         Matrix4             #read_only #offset 88;
     inverse_model_matrix: Matrix4             #read_only #offset 152;
-} #gc_root #foreign_struct "Entity" #size 456
+} #gc_root #foreign_struct "Entity" #size 464
 
 Entity_Iterator :: struct {
     next :: method() -> bool #foreign "entity_iterator_next";
@@ -76,8 +78,9 @@ Component_Iterator :: struct($T: typeid) {
 } #foreign_struct "Hierarchical_Component_Iterator<Component_Base>" #size 40
 
 Sprite_Renderer :: class : Component {
-    set_texture :: method(texture: Texture_Asset) #foreign "sprite_renderer_set_texture";
-    get_texture :: method() -> Texture_Asset #foreign "sprite_renderer_get_texture";
+    set_texture  :: method(texture: Texture_Asset) #foreign "sprite_renderer_set_texture";
+    get_texture  :: method() -> Texture_Asset #foreign "sprite_renderer_get_texture";
+    set_material :: method(material: Material, transfer_ownership: bool) #foreign "sprite_renderer_set_material";
     color: v4           #offset 128;
     depth_offset: float #offset 144;
     layer: s32          #offset 148;
@@ -110,6 +113,12 @@ Navmesh :: class : Component {
 Navmesh_Loop :: class : Component {
 } #foreign_struct "Navmesh_Loop" #size 168
 
+Tilemap_Component :: class : Component {
+} #foreign_struct "Tilemap_Component" #size 256
+
+Terrain_Component :: class : Component {
+} #foreign_struct "Terrain_Component" #size 376
+
 Interactable :: class : Component {
     get_text      :: method() -> string   #foreign "interactable_get_text";
     set_text      :: method(text: string) #foreign "interactable_set_text";
@@ -129,13 +138,13 @@ Interactable :: class : Component {
     radius:             float     #offset 168;
     required_hold_time: float     #offset 172;
     priority:           s64       #offset 176;
-    listener: Component                                      #offset 240 #read_only;
-    can_use_proc: proc(t: Component, player: Player) -> bool #offset 248 #read_only;
-    on_interact_proc: proc(t: Component, player: Player)     #offset 256 #read_only;
-    on_holding_proc: proc(t: Component, player: Player)      #offset 264 #read_only;
+    listener: Component                                      #offset 320 #read_only;
+    can_use_proc: proc(t: Component, player: Player) -> bool #offset 328 #read_only;
+    on_interact_proc: proc(t: Component, player: Player)     #offset 336 #read_only;
+    on_holding_proc: proc(t: Component, player: Player)      #offset 344 #read_only;
     #interface on_interact                :: proc(t: Interactable, player: Player);
     #interface on_holding                 :: proc(t: Interactable, player: Player);
-} #foreign_struct "Interactable" #size 272
+} #foreign_struct "Interactable" #size 360
 
 Spine_Animator :: class : Component {
     depth_offset: float #offset 120;
@@ -159,13 +168,14 @@ Light :: class : Component {
 
 Spine_Instance_Base :: class {
     set_color_replace_color :: method(color: Color_Replace_Color) #foreign "spine_instance_set_color_replace_color";
+    set_material            :: method(material: Material, transfer_ownership: bool) #foreign "spine_instance_set_material";
     self:             Spine_Instance #read_only #offset 152;
     state_machine:    State_Machine  #read_only #offset 48;
     color_multiplier: v4                        #offset 72;
     scale:            v2                        #offset 32;
     speed_multiplier: float                     #offset 104;
     color_replace_color: Color_Replace_Color #read_only #offset 144;
-} #gc_root #foreign_struct "Spine_Instance" #size 200
+} #gc_root #foreign_struct "Spine_Instance" #size 208
 
 Camera :: struct {
     position:            v2            #offset 0;
@@ -175,19 +185,19 @@ Camera :: struct {
 } #foreign_struct "Actual_Camera" #size 28
 
 AO_Player :: class : Component {
-    animator:               Spine_Animator      #read_only #offset 31496;
+    animator:               Spine_Animator      #read_only #offset 31512;
     agent:                  Movement_Agent      #read_only #offset 176;
-    camera:                 Camera                         #offset 1592;
-    device_kind:            Device_Kind         #read_only #offset 1624;
-    do_name_color_override: bool                           #offset 30560;
-    name_color_override:    v4                             #offset 30564;
+    camera:                 Camera                         #offset 1608;
+    device_kind:            Device_Kind         #read_only #offset 1640;
+    do_name_color_override: bool                           #offset 30576;
+    name_color_override:    v4                             #offset 30580;
     avatar_color:           Color_Replace_Color #read_only #offset 152;
-    default_inventory:      Inventory           #read_only #offset 31376;
-    comms_channel_listen_mask: u64                         #offset 1752;
-    comms_channel_speak_mask:  u64                         #offset 1760;
-    username_rect:             Rect                        #offset 31452;
-    full_nameplate_rect:       Rect                        #offset 31468;
-} #foreign_struct "Player" #size 31640
+    default_inventory:      Inventory           #read_only #offset 31392;
+    comms_channel_listen_mask: u64                         #offset 1768;
+    comms_channel_speak_mask:  u64                         #offset 1776;
+    username_rect:             Rect                        #offset 31468;
+    full_nameplate_rect:       Rect                        #offset 31484;
+} #foreign_struct "Player" #size 31656
 
 Movement_Agent :: class : Component {
     Set_Path_Target_Result :: struct {
@@ -223,6 +233,20 @@ Prefab_Asset :: class : Asset {
 
 Font_Asset :: class : Asset {
 } #foreign_struct "Font"
+
+Shader_Asset :: class : Asset {
+} #foreign_struct "Shader"
+
+Material :: class {
+    create      :: proc(shader: Shader_Asset) -> Material #foreign "material_create";
+    destroy     :: method() #foreign "material_destroy";
+    set_float   :: method(name: string, value: float) #foreign "material_set_float";
+    set_float2  :: method(name: string, value: v2) #foreign "material_set_float2";
+    set_float3  :: method(name: string, value: v3) #foreign "material_set_float3";
+    set_float4  :: method(name: string, value: v4) #foreign "material_set_float4";
+    set_int     :: method(name: string, value: int) #foreign "material_set_int";
+    set_texture :: method(name: string, texture: Texture_Asset) #foreign "material_set_texture";
+} #gc_root #foreign_struct "Pooled_User_Material" #size 32
 
 State_Machine :: class {
     create :: proc() -> State_Machine #foreign "state_machine_create";

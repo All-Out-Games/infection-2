@@ -1,0 +1,42 @@
+6861ed96a11f4beb.png
+	size: 4096, 4096
+	filter: Linear, Linear
+#1
+	bounds: 1526, 2630, 322, 374
+	offsets: 1, 2, 324, 377
+bg
+	bounds: 2, 3006, 1920, 1080
+	offsets: 1, 1, 1922, 1082
+blue
+	bounds: 1084, 1853, 1151, 440
+	offsets: 1, 1, 1153, 442
+	rotate: 90
+explosion/frame_1
+	bounds: 1924, 32, 1920, 1050
+	offsets: 1, 1, 1922, 1052
+explosion/frame_2
+	bounds: 1924, 2166, 1920, 1080
+	offsets: 1, 1, 1922, 1082
+	rotate: 90
+explosion/frame_3
+	bounds: 2, 1084, 1920, 1080
+	offsets: 1, 1, 1922, 1082
+	rotate: 90
+explosion/frame_4
+	bounds: 1526, 1084, 1920, 1080
+	offsets: 1, 1, 1922, 1082
+explosion/frame_5
+	bounds: 3006, 2166, 1920, 1080
+	offsets: 1, 1, 1922, 1082
+	rotate: 90
+explosion/frame_6
+	bounds: 2, 2, 1920, 1080
+	offsets: 1, 1, 1922, 1082
+impostor_wins
+	bounds: 3448, 1145, 1019, 242
+	offsets: 1, 1, 1022, 245
+	rotate: 90
+victory_royale
+	bounds: 1084, 1183, 668, 358
+	offsets: 2, 1, 671, 360
+	rotate: 90

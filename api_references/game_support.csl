@@ -1,5 +1,0 @@
-import "core:ao"
-import "core:dropped_items"
-
-Player :: class : Player_Base {
-}

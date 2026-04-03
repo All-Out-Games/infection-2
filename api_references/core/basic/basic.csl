@@ -41,6 +41,8 @@ format_float :: proc(v: f32, decimals: int = 6, leading_zeroes: int = 0) -> Form
 
 assert :: proc(condition: bool, fmt: string, args: [^]any = {}) #foreign "csl_assert";
 
+memcpy :: proc(dst: *u8, src: *u8, count: int) #foreign "csl_memcpy";
+
 
 
 sin   :: proc(v: float) -> float #foreign;
@@ -72,6 +74,11 @@ Matrix4 :: struct {
 }
 
 
+
+new_string  :: proc(count: int)  -> string #foreign;
+copy_string :: proc(str: string) -> string #foreign;
+to_lower    :: proc(str: string) -> string #foreign;
+to_upper    :: proc(str: string) -> string #foreign;
 
 rng_seed        :: proc(seed: u64)                          -> u64   #foreign;
 rng_range_float :: proc(rng: ref u64, lo: float, hi: float) -> float #foreign;
@@ -118,8 +125,8 @@ append :: proc(list: ref [..]$T, element: T) {
 reserve :: proc(list: ref [..]$T, new_capacity: int) {
     if new_capacity > list.capacity {
         new_elements := new(T, new_capacity);
-        for i: 0..list.count-1 {
-            new_elements[i] = list[i]; // todo(josh): @Speed: could use memcpy here!
+        if list.data != null {
+            memcpy((&new_elements.data.*).(*u8), (&list.data.*).(*u8), list.count * #size_of(T));
         }
         #unsafe list.data = new_elements.data;
         #unsafe list.capacity = new_capacity;

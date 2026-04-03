@@ -17,3 +17,8 @@ res/.preprocessed
 .cursor
 ao_debug.lock
 debug.lock
+.agents
+.claude
+.mcp.json
+AGENTS.md
+CLAUDE.md

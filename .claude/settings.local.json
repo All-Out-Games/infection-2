@@ -24,11 +24,8 @@
       "Skill(ui-scroll-grid)",
       "Skill(ui-specific-examples)",
       "Skill(game-design)",
-      "mcp__allout__assets_list",
-      "mcp__allout__rig_animations",
-      "mcp__allout__rig_skins",
-      "mcp__allout__rig_bones",
-      "mcp__allout__rig_events",
+      "mcp__allout__asset_local_search",
+      "mcp__allout__spine_rig_info",
       "mcp__allout__compile",
       "mcp__allout__products_list"
     ]

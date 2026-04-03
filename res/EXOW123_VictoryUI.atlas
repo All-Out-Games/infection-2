@@ -1,0 +1,135 @@
+c5b85a356f844461.png
+	size: 2620, 2620
+	filter: Linear, Linear
+Fireworks assets/Blue/blue_firework_explosion_frame_1
+	bounds: 6, 129, 300, 297
+	offsets: 1, 1, 302, 299
+Fireworks assets/Blue/blue_firework_explosion_frame_2
+	bounds: 1097, 445, 501, 492
+	offsets: 2, 1, 505, 494
+	rotate: 90
+Fireworks assets/Blue/blue_firework_explosion_frame_3
+	bounds: 560, 979, 538, 540
+	offsets: 2, 2, 541, 543
+Fireworks assets/Blue/blue_firework_explosion_frame_4
+	bounds: 6, 2072, 548, 541
+	offsets: 1, 1, 550, 543
+Fireworks assets/Green/green_firework_explosion_frame_1
+	bounds: 2212, 2316, 300, 297
+	offsets: 1, 1, 302, 299
+Fireworks assets/Green/green_firework_explosion_frame_2
+	bounds: 1595, 472, 501, 492
+	offsets: 2, 1, 505, 494
+	rotate: 90
+Fireworks assets/Green/green_firework_explosion_frame_3
+	bounds: 1114, 1526, 538, 540
+	offsets: 2, 2, 541, 543
+Fireworks assets/Green/green_firework_explosion_frame_4
+	bounds: 6, 1525, 548, 541
+	offsets: 1, 1, 550, 543
+Fireworks assets/Orange/orange_firework_explosion_frame_1
+	bounds: 2212, 2013, 300, 297
+	offsets: 1, 1, 302, 299
+Fireworks assets/Orange/orange_firework_explosion_frame_2
+	bounds: 1658, 1565, 501, 492
+	offsets: 2, 1, 505, 494
+	rotate: 90
+Fireworks assets/Orange/orange_firework_explosion_frame_3
+	bounds: 1668, 2073, 538, 540
+	offsets: 2, 2, 541, 543
+Fireworks assets/Orange/orange_firework_explosion_frame_4
+	bounds: 560, 2072, 548, 541
+	offsets: 1, 1, 550, 543
+Fireworks assets/Purple/purple_firework_explosion_frame_1
+	bounds: 2156, 1710, 300, 297
+	offsets: 1, 1, 302, 299
+Fireworks assets/Purple/purple_firework_explosion_frame_2
+	bounds: 1658, 1067, 501, 492
+	offsets: 2, 1, 505, 494
+Fireworks assets/Purple/purple_firework_explosion_frame_3
+	bounds: 1104, 979, 538, 540
+	offsets: 2, 2, 541, 543
+Fireworks assets/Purple/purple_firework_explosion_frame_4
+	bounds: 6, 978, 548, 541
+	offsets: 1, 1, 550, 543
+Fireworks assets/Red/red_firework_explosion_frame_1
+	bounds: 539, 105, 300, 297
+	offsets: 1, 1, 302, 299
+Fireworks assets/Red/red_firework_explosion_frame_2
+	bounds: 2093, 560, 501, 492
+	offsets: 2, 1, 505, 494
+	rotate: 90
+Fireworks assets/Red/red_firework_explosion_frame_3
+	bounds: 551, 408, 538, 540
+	offsets: 2, 2, 541, 543
+	rotate: 90
+Fireworks assets/Red/red_firework_explosion_frame_4
+	bounds: 560, 1525, 548, 541
+	offsets: 1, 1, 550, 543
+Fireworks assets/Yellow/yellow_firework_explosion_frame_1
+	bounds: 845, 105, 300, 297
+	offsets: 1, 1, 302, 299
+Fireworks assets/Yellow/yellow_firework_explosion_frame_2
+	bounds: 2093, 62, 501, 492
+	offsets: 2, 1, 505, 494
+Fireworks assets/Yellow/yellow_firework_explosion_frame_3
+	bounds: 6, 432, 539, 540
+	offsets: 1, 2, 541, 543
+Fireworks assets/Yellow/yellow_firework_explosion_frame_4
+	bounds: 1114, 2072, 548, 541
+	offsets: 1, 1, 550, 543
+balloon_black/balloon_head
+	bounds: 312, 163, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_black/balloon_knot
+	bounds: 1151, 127, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_black/ribbon
+	bounds: 6, 46, 41, 77
+	offsets: 1, 1, 43, 79
+balloon_black/string
+	bounds: 560, 952, 21, 684
+	offsets: 1, 1, 23, 686
+	rotate: 90
+balloon_blue/balloon_head
+	bounds: 1151, 176, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_blue/balloon_knot
+	bounds: 2165, 1123, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_green/balloon_head
+	bounds: 1378, 176, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_green/balloon_knot
+	bounds: 2518, 2570, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_orange/balloon_head
+	bounds: 1605, 203, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_orange/balloon_knot
+	bounds: 2462, 1964, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_purple/balloon_head
+	bounds: 1832, 203, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_purple/balloon_knot
+	bounds: 2392, 1392, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_red/balloon_head
+	bounds: 2165, 1441, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_red/balloon_knot
+	bounds: 53, 80, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_white/balloon_head
+	bounds: 2165, 1172, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_white/balloon_knot
+	bounds: 1200, 127, 43, 43
+	offsets: 1, 1, 45, 45
+balloon_yellow/balloon_head
+	bounds: 2392, 1441, 221, 263
+	offsets: 1, 1, 223, 265
+balloon_yellow/balloon_knot
+	bounds: 2165, 1074, 43, 43
+	offsets: 1, 1, 45, 45

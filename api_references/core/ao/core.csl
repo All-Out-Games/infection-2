@@ -13,11 +13,15 @@ Game :: struct {
 
     get_game_id :: proc() -> string #foreign "game_get_game_id";
 
+    lookup_player_name :: proc(user_id: string) -> string #foreign "game_lookup_player_name";
+
     #deprecate_soft "Use Server.get_id()"
     get_server_id :: proc() -> string #foreign "server_get_id";
 }
 
 Server :: struct {
+    set_matchmaking_priority   :: proc(priority: int) #foreign "server_set_matchmaking_priority";
+
     kick_player :: proc(player: Player, reason: string = "Kicked.") #foreign "server_kick_player";
 
     queue_add_player           :: proc(queue: string, player: Player)    #foreign "server_queue_add_player";
@@ -405,10 +409,6 @@ get_mouse_world_position :: proc() -> v2 #foreign;
 
 get_frame_number :: proc() -> u64 #foreign;
 
-Material :: class {
-    // todo(josh): @Incomplete: @CSL: we haven't exposed material stuff yet!
-}
-
 Scroll_View_Result :: struct {
     internal_content_rect: Rect;
     content_rect:          Rect;
@@ -446,6 +446,12 @@ UI :: struct {
 
     push_matrix :: proc(matrix: Matrix4) #foreign "ui_push_matrix";
     pop_matrix :: proc() #foreign "ui_pop_matrix";
+
+    begin_world_space_ui :: proc(entity: Entity) {
+        push_interpolation_offset(entity->calculate_interpolation_offset());
+    }
+
+    end_world_space_ui :: pop_interpolation_offset;
 
     get_current_camera_size :: proc() -> float #foreign "ui_get_current_camera_size";
 
@@ -887,7 +893,6 @@ Render_Interpolation_Helper :: struct {
         current_frame := get_frame_number();
         offset: v2;
         if last_frame_rendered == (current_frame - 1) {
-            // we rendered last frame, compute the offset
             offset = position - last_position;
         }
         last_frame_rendered = current_frame;
@@ -921,7 +926,7 @@ Product :: struct {
 Purchasing :: struct {
     prompt_purchase :: proc(player: Player, id: string)         #foreign "purchasing_prompt_purchase";
     owns_product    :: proc(player: Player, id: string) -> bool #foreign "purchasing_owns_product";
-    get_product     :: proc(id: string) -> Product                       #foreign "purchasing_get_product";
+    get_product     :: proc(id: string) -> Product              #foreign "purchasing_get_product";
 }
 
 core_purchase_handler :: proc(player: Player, id: string) -> bool {
@@ -938,6 +943,73 @@ Economy :: struct {
     can_withdraw_currency :: proc(player: Player, currency: string, amount: s64) -> bool #foreign "economy_can_withdraw_currency";
     withdraw_currency     :: proc(player: Player, currency: string, amount: s64)         #foreign "economy_withdraw_currency";
     delete_save_data      :: proc(player: Player)                                        #foreign "economy_delete_save_data";
+    create_shop           :: proc(id: string)                                    -> u64  #foreign "economy_create_shop";
+}
+
+Item_Rarity :: enum {
+    COMMON;
+    UNCOMMON;
+    RARE;
+    EPIC;
+    LEGENDARY;
+    MYTHIC;
+}
+
+Shop_Product_Description :: struct {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    currency: string;
+    price: s64;
+    sub_category: string;
+    rarity: Item_Rarity;
+    sparks_product_id: string;
+}
+
+Purchase_Button_Color :: enum {
+    ORANGE;
+    GREEN;
+    RED;
+    YELLOW;
+    LIGHT_BLUE;
+    BLUE;
+    PINK;
+    GREY;
+    BLACK;
+    WHITE;
+}
+
+Shop_Purchase_Modification :: struct {
+    modify_product: bool;
+    price: s64;
+    button_text: string;
+    button_color: Purchase_Button_Color;
+}
+
+Game_Product :: struct {
+    get_id                :: proc(product_handle: u64) -> string #foreign "game_product_get_id";
+    get_name              :: proc(product_handle: u64) -> string #foreign "game_product_get_name";
+    get_description       :: proc(product_handle: u64) -> string #foreign "game_product_get_description";
+    get_icon              :: proc(product_handle: u64) -> string #foreign "game_product_get_icon";
+    get_currency          :: proc(product_handle: u64) -> string #foreign "game_product_get_currency";
+    get_price             :: proc(product_handle: u64) -> s64    #foreign "game_product_get_price";
+    get_rarity            :: proc(product_handle: u64) -> s64    #foreign "game_product_get_rarity";
+    get_sparks_product_id :: proc(product_handle: u64) -> string #foreign "game_product_get_sparks_product_id";
+}
+
+Shop_Category :: struct {
+    add_product      :: proc(category_handle: u64, id: string, name: string, description: string, icon: string, currency: string, price: s64, sub_category: string, rarity: s64, sparks_product_id: string) -> u64 #foreign "shop_category_add_product";
+    clear_products   :: proc(category_handle: u64)  #foreign "shop_category_clear_products";
+}
+
+Shop :: struct {
+    add_category          :: proc(shop_handle: u64, id: string) -> u64                    #foreign "shop_add_category";
+    draw                  :: proc(shop_handle: u64, rect: Rect) -> bool                   #foreign "shop_draw";
+    purchase              :: proc(shop_handle: u64, player: Player, product_handle: u64)  #foreign "shop_purchase";
+    set_purchase_handler  :: proc(shop_handle: u64, userdata: Object, handler: proc(player: Player, product_handle: u64, userdata: Object) -> bool)  #foreign "shop_set_purchase_handler";
+    set_purchase_modifier :: proc(shop_handle: u64, userdata: Object, modifier: proc(player: Player, product_handle: u64, userdata: Object) -> Shop_Purchase_Modification)  #foreign "shop_set_purchase_modifier";
+    set_custom_display    :: proc(shop_handle: u64, userdata: Object, display: proc(product_handle: u64, rect: Rect, userdata: Object))  #foreign "shop_set_custom_display";
 }
 
 Ordered_Save_Entry :: struct {
@@ -2025,9 +2097,12 @@ Tutorial_Arrow :: struct {
         alpha: float;
         far: bool;
         near: bool;
+        fade_out_based_on_aim_direction: bool;
         bob_scale: float;
         bob_bias: float;
         arrow_sprite_override: Texture_Asset;
+        far_layer: int;
+        near_layer: int;
     }
 
     default_options :: proc() -> Tutorial_Arrow_Options {
@@ -2038,6 +2113,7 @@ Tutorial_Arrow :: struct {
         result.bob_scale = 0.5;
         result.bob_bias = 1.5;
         result.arrow_sprite_override = null;
+        result.far_layer = 100;
         return result;
     }
 
@@ -2049,10 +2125,12 @@ Tutorial_Arrow :: struct {
         offset_to_target := normalize_vector_to_radius(target_position - player.entity.world_position, max_distance) * max_distance;
         arrow_position := player.entity.world_position + offset_to_target;
 
-        aim_d := dot(player.last_aim_direction, normalize(target_position - player.entity.world_position));
-        alpha_t := linear_step(0.85, 1.0, aim_d);
-        alpha := lerp(1.0, 0.25, alpha_t);
-        alpha *= options.alpha;
+        alpha := options.alpha;
+        if options.fade_out_based_on_aim_direction {
+            aim_d := dot(player.last_aim_direction, normalize(target_position - player.entity.world_position));
+            alpha_t := linear_step(0.85, 1.0, aim_d);
+            alpha *= lerp(1.0, 0.25, alpha_t);
+        }
 
         UI.push_color_multiplier({1, 1, 1, alpha});
         defer UI.pop_color_multiplier();
@@ -2066,8 +2144,11 @@ Tutorial_Arrow :: struct {
 
         if length_squared(arrow_position - target_position) > 0.1 {
             if options.far {
-                UI.push_layer(100);
+                UI.push_layer(options.far_layer);
                 defer UI.pop_layer();
+
+                UI.push_z(target_position.y);
+                defer UI.pop_z();
 
                 dir := normalize(offset_to_target);
                 rads := atan2(dir.y, dir.x);
@@ -2078,6 +2159,9 @@ Tutorial_Arrow :: struct {
         }
         else {
             if options.near {
+                UI.push_layer(options.near_layer);
+                defer UI.pop_layer();
+
                 UI.push_z(target_position.y);
                 defer UI.pop_z();
 

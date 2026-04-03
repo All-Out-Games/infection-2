@@ -110,6 +110,46 @@ ao_start :: proc() {
     }
 }
 
+draw_killed_by_screen :: proc(player: Player, elapsed: float, respawn_secs: int) {
+    fade := clamp(elapsed / 0.8, 0, 1);
+
+    screen := UI.get_screen_rect();
+
+    // Dark red overlay
+    UI.push_layer(200); defer UI.pop_layer();
+    overlay_color := v4{0.08, 0, 0, 0.82 * fade};
+    UI.quad(screen, core_globals.white_sprite, overlay_color);
+
+    // "KILLED BY" label
+    ts := UI.default_text_settings();
+    ts.font = get_asset(Font_Asset, "$AO/fonts/Barlow-Black.ttf");
+    ts.halign = .CENTER;
+    ts.valign = .CENTER;
+    ts.color = v4{0.75, 0.1, 0.1, fade};
+    ts.size = 52;
+    ts.do_outline = true;
+    ts.outline_thickness = 3;
+    ts.outline_color = v4{0, 0, 0, fade};
+    label_rect := screen->center_rect()->offset(0, 60)->grow(30, 400, 30, 400);
+    UI.text(label_rect, ts, "KILLED BY");
+
+    // Killer name — big and bold
+    ts.size = 96;
+    ts.color = v4{1, 1, 1, fade};
+    ts.outline_color = v4{0.5, 0, 0, fade};
+    ts.outline_thickness = 5;
+    name_rect := screen->center_rect()->offset(0, -40)->grow(60, 600, 60, 600);
+    UI.text(name_rect, ts, player.killer_name);
+
+    // Respawn timer at the bottom
+    ts.size = 36;
+    ts.color = v4{0.8, 0.8, 0.8, fade};
+    ts.outline_thickness = 2;
+    ts.outline_color = v4{0, 0, 0, fade};
+    timer_rect := screen->bottom_center_rect()->offset(0, 80)->grow(30, 300, 30, 300);
+    UI.text(timer_rect, ts, "Respawning in %s", {respawn_secs});
+}
+
 draw_big_game_text :: proc(str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 64;
@@ -446,15 +486,37 @@ ao_update :: proc(dt: float) {
                                 }
 
                                 rect := begin_task_ui();
-                                draw_task_title(ref rect, "Eliminate all Survivors");
+                                {
+                                    ts := UI.default_text_settings();
+                                    ts.size = 48;
+                                    ts.halign = .LEFT;
+                                    ts.valign = .CENTER;
+                                    ts.color = {1, 0.2, 0.2, 1};
+                                    UI.text(rect->cut_top(50), ts, "Eliminate all Survivors");
+                                }
                                 draw_task_subtitle(ref rect, "Survivors left: %", {survivors_left});
                             }
                             case .SURVIVOR: {
                                 switch g_game.current_task {
                                     case .FUEL_CANISTERS: {
                                         rect := begin_task_ui();
-                                        draw_task_title(ref rect, "Collect Fuel Canisters");
-                                        draw_task_subtitle(ref rect, "Fuel: % / %", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
+                                        {
+                                            ts := UI.default_text_settings();
+                                            ts.size = 48;
+                                            ts.halign = .LEFT;
+                                            ts.valign = .CENTER;
+                                            ts.color = {1, 0.85, 0, 1};
+                                            UI.text(rect->cut_top(50), ts, "Collect Fuel Cans");
+                                        }
+                                        subtitle_rect := rect->cut_top(35);
+                                        fuel_icon := get_asset(Texture_Asset, "fuel_canister.png");
+                                        icon_rect := subtitle_rect->cut_left(46)->center_rect()->grow(23);
+                                        UI.quad(icon_rect->fit_aspect(fuel_icon->get_aspect()), fuel_icon);
+                                        ts := UI.default_text_settings();
+                                        ts.size = 36;
+                                        ts.halign = .LEFT;
+                                        ts.valign = .CENTER;
+                                        UI.text(subtitle_rect, ts, "% / %", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS});
                                     }
                                     case .CHARGE_BATTERY: {
                                         rect := begin_task_ui();
@@ -522,29 +584,54 @@ ao_update :: proc(dt: float) {
             g_game.end_game_screen_timer += dt;
             maybe_local, _ := Game.get_local_player();
             if maybe_local != null {
-                UI.push_layer(-1000);
+                player_won := g_game.winner == maybe_local.team;
+                fade := clamp(g_game.end_game_screen_timer / 0.5, 0, 1);
+
+                UI.push_layer(500);
                 defer UI.pop_layer();
+
+                // Overlay
+                if player_won {
+                    UI.quad(UI.get_screen_rect(), white_sprite, {0, 0.05, 0, 0.5 * fade});
+                }
+                else {
+                    UI.quad(UI.get_screen_rect(), white_sprite, {0.08, 0, 0, 0.75 * fade});
+                }
+
+                // Main win/lose text
+                ts := UI.default_text_settings();
+                ts.font = get_asset(Font_Asset, "$AO/fonts/Barlow-Black.ttf");
+                ts.halign = .CENTER;
+                ts.valign = .CENTER;
+                ts.do_outline = true;
+                ts.outline_thickness = 4;
+                ts.outline_color = {0, 0, 0, fade};
+                ts.size = 120;
+                if player_won {
+                    ts.color = {1, 0.9, 0.1, fade};
+                    UI.text(UI.get_screen_rect()->center_rect()->offset(0, 80)->grow(70, 700, 70, 700), ts, "YOU WIN!");
+                }
+                else {
+                    ts.color = {0.9, 0.1, 0.1, fade};
+                    UI.text(UI.get_screen_rect()->center_rect()->offset(0, 80)->grow(70, 700, 70, 700), ts, "YOU LOSE!");
+                }
+
+                // Subtitle
+                ts.size = 48;
+                ts.outline_thickness = 2;
                 switch g_game.winner {
                     case .SURVIVOR: {
-                        if maybe_local.team == .ZOMBIE {
-                            UI.quad(UI.get_screen_rect(), white_sprite, {1, 0, 0, 0.1});
-                        }
-                        else {
-                            UI.quad(UI.get_screen_rect(), white_sprite, {0, 1, 0, 0.1});
-                        }
+                        ts.color = {0.3, 1, 0.3, fade};
+                        UI.text(UI.get_screen_rect()->center_rect()->offset(0, -30)->grow(30, 500, 30, 500), ts, "Survivors Escaped!");
                     }
                     case .ZOMBIE: {
-                        if maybe_local.team == .ZOMBIE {
-                            UI.quad(UI.get_screen_rect(), white_sprite, {0, 1, 0, 0.1});
-                        }
-                        else {
-                            UI.quad(UI.get_screen_rect(), white_sprite, {1, 0, 0, 0.1});
-                        }
+                        ts.color = {1, 0.4, 0.4, fade};
+                        UI.text(UI.get_screen_rect()->center_rect()->offset(0, -30)->grow(30, 500, 30, 500), ts, "Zombies Win!");
                     }
                 }
             }
 
-            if g_game.end_game_screen_timer >= 5.0 {
+            if g_game.end_game_screen_timer >= 7.0 {
                 g_game = {};
             }
         }
@@ -612,6 +699,7 @@ Game_Manager :: class : Component {
 Shoot_Ability :: class : Ability_Base {
     on_init :: method() {
         name = "Shoot";
+        icon = get_asset(Texture_Asset, "revolver_icon.png");
         disable_keybind = true;
         is_aimed_ability = true;
     }
@@ -701,7 +789,7 @@ Slash_Effect :: class : Effect_Base {
                 if already_hit {
                     continue;
                 }
-                other->take_damage(1);
+                other->take_damage_from(1, player);
                 already_hit_list->append(other);
                 {
                     sfx := SFX.default_sfx_desc();
@@ -1087,7 +1175,12 @@ Death_Effect :: class : Effect_Base {
         if g_game.state == .GAMEPLAY {
             time_until_respawn := 5.0 - get_elapsed_time();
             if player->is_local() {
-                draw_big_game_text("Respawning in %s", {time_until_respawn.(int) + 1});
+                if player.killer_name.count > 0 {
+                    draw_killed_by_screen(player, get_elapsed_time(), time_until_respawn.(int) + 1);
+                }
+                else {
+                    draw_big_game_text("Respawning in %s", {time_until_respawn.(int) + 1});
+                }
             }
             if time_until_respawn <= 0 {
                 remove_effect(false);
@@ -1098,12 +1191,18 @@ Death_Effect :: class : Effect_Base {
 
     effect_end :: method(interrupt: bool) {
         player->remove_name_invisibility_reason("death");
-        if player.team == .SURVIVOR {
+        became_zombie := player.team == .SURVIVOR;
+        if became_zombie {
             player->set_team(.ZOMBIE);
         }
         respawn_player(player);
         player.health->reset();
         player->player_set_trigger("RESET");
+        player.killer_name = "";
+        if became_zombie {
+            intro_effect := new(Round_Start_Animation_Effect);
+            player.entity->set_active_effect(intro_effect);
+        }
     }
 }
 
@@ -1130,6 +1229,10 @@ Player :: class : Player_Base {
     is_on_boat: bool;
 
     health: Health_Component;
+    killer_name: string;
+
+    victory_spine: Spine_Instance;
+    victory_spine_ready: bool;
 
     notifications: [..]Notification;
 
@@ -1176,6 +1279,15 @@ Player :: class : Player_Base {
             active_ability = null;
             effect := new(Death_Effect);
             entity->set_active_effect(effect);
+        }
+    }
+
+    take_damage_from :: method(damage: int, attacker: Player) {
+        if health.is_dead return;
+        was_dead := health.is_dead;
+        take_damage(damage);
+        if health.is_dead && !was_dead && attacker.team == .ZOMBIE {
+            killer_name = attacker->get_username();
         }
     }
 
@@ -1608,9 +1720,38 @@ Player :: class : Player_Base {
                 }
             }
         }
+
+        // Victory spine for win screen
+        if is_local() {
+            if g_game.state == .END_GAME_SCREEN {
+                player_won := g_game.winner == team;
+                if player_won && !victory_spine_ready {
+                    victory_spine_ready = true;
+                    victory_spine = Spine_Instance.create();
+                    victory_spine->set_skeleton(get_asset(Spine_Asset, "EXOW123_VictoryUI.spine"));
+                    victory_spine->set_animation("appear", false, 0);
+                }
+                if victory_spine_ready {
+                    victory_spine->update(dt);
+                    UI.push_screen_draw_context();
+                    defer UI.pop_draw_context();
+                    UI.push_layer(600);
+                    defer UI.pop_layer();
+                    UI.spine(UI.get_screen_rect()->center(), victory_spine, {1000, 1000}, 0.0);
+                }
+            }
+            else if victory_spine_ready {
+                victory_spine->destroy();
+                victory_spine_ready = false;
+            }
+        }
     }
 
     ao_end :: method() {
+        if victory_spine_ready {
+            victory_spine->destroy();
+            victory_spine_ready = false;
+        }
     }
 
     ao_can_use_interactable :: method(interactable: Interactable) -> bool {

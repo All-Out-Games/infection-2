@@ -4,19 +4,10 @@ description: Reference this when implementing player abilities.
 ---
 # CSL Ability System
 
-The ability system provides a framework for creating player abilities with cooldowns, input handling, and UI buttons.
-
-## Core Concepts
-
-1. **Abilities are per-player** - Each player has their own list of abilities
-2. **Draw in `ao_late_update`** - Ability buttons are drawn in the player's late update inside `is_local_or_server()` check
-3. **Implement callbacks** - Abilities define `on_init`, `on_update`, and optionally `can_use` and `on_draw_button`
-
-## Creating a Basic Ability
+## Creating an Ability
 
 ```csl
 My_Ability :: class : Ability_Base {
-    // Called once when a player joins and ability instances are created for them
     on_init :: method() {
         name = "My Ability";
         icon = get_asset(Texture_Asset, "icons/my_ability.png");
@@ -27,15 +18,10 @@ My_Ability :: class : Ability_Base {
         return player.some_resource > 0;
     }
 
-    // Called every frame when the ability button exists
     on_update :: method(params: ref Ability_Update_Params) {
-        // Always check can_use here, which will automatically check cooldown etc...
         if params.clicked && params.can_use {
-            // Activate the ability
             do_ability_effect(player);
-
-            // You always need to set the cooldown after activating an ability
-            current_cooldown = 2.0;
+            current_cooldown = 2.0;  // Must set cooldown after activating
         }
     }
 }
@@ -43,13 +29,12 @@ My_Ability :: class : Ability_Base {
 
 ## Drawing Abilities
 
-Abilities must be drawn in the player's `ao_late_update` using the `draw_ability_button` helper function. You do not need to make your own UI for ability buttons. 
+Draw in the player's `ao_late_update` inside `is_local_or_server()`. Do not make custom UI for ability buttons.
+
 ```csl
 Player :: class : Player_Base {
     ao_late_update :: method(dt: float) {
-        // Always check `is_local_or_server`! 
         if this->is_local_or_server() && !health.is_dead {
-            // Draw ability buttons - index 0 is the big primary button
             draw_ability_button(this, Shoot_Ability, 0);
             draw_ability_button(this, Dodge_Roll, 1);
             draw_ability_button(this, Sprint_Ability, 4);
@@ -60,73 +45,41 @@ Player :: class : Player_Base {
 
 ## Button Layout
 
-The ability button indices correspond to fixed screen positions:
-
 - **Index 0**: Large primary button (bottom-right, closest to corner)
 - **Index 1-5**: Smaller secondary buttons arranged around index 0
 
-```csl
-// Button positions (offsets from bottom-right):
-// Index 0: {-105, 90}   - Big button
-// Index 1: {-295, 40}   - Small, left of big
-// Index 2: {-290, 180}  - Small, upper-left
-// Index 3: {-180, 290}  - Small, upper
-// Index 4: {-40, 295}   - Small, upper-right
-// Index 5: {-440, 40}   - Small, far left
+```
+// Offsets from bottom-right:
+// 0: {-105, 90}   Big     1: {-295, 40}   Small, left
+// 2: {-290, 180}  Upper-left   3: {-180, 290}  Upper
+// 4: {-40, 295}   Upper-right  5: {-440, 40}   Far left
 ```
 
 ## Ability_Update_Params
 
-The `params` passed to `on_update` contains interaction state:
-
 ```csl
 on_update :: method(params: ref Ability_Update_Params) {
-    // Basic interaction (inherited from Interact_Result)
     params.hovering;        // Mouse over button
-    params.just_pressed;    // Just started pressing
+    params.just_pressed;
     params.active;          // Being held
-    params.released;        // Just released
-    params.clicked;         // Was clicked (pressed and released)
-
-    // Ability-specific
-    params.can_use;         // True if ability passed can_use check and not on cooldown
-    params.drag_offset;     // Normalized drag vector for aimed abilities (0-1)
+    params.released;
+    params.clicked;         // Pressed and released
+    params.can_use;         // Passed can_use check and not on cooldown
+    params.drag_offset;     // Normalized drag vector (0-1) for aimed abilities
     params.drag_direction;  // Unit direction of drag
 }
 ```
 
-## Ability Types
+## Hold Ability
 
-### Simple Click Ability
-
-Activates immediately on click:
-
-```csl
-Simple_Ability :: class : Ability_Base {
-    on_init :: method() {
-        name = "Simple";
-        icon = get_asset(Texture_Asset, "icons/simple.png");
-    }
-
-    on_update :: method(params: ref Ability_Update_Params) {
-        if params.clicked && params.can_use {
-            // Do the thing
-            current_cooldown = 1.0;
-        }
-    }
-}
-```
-
-### Hold Ability
-
-Active while the button is held. Use `Ability_Utilities.update_holding_ability` to handle both PC keybind and mobile button holding.
+Use `Ability_Utilities.update_holding_ability` for abilities active while held. Handles both PC keybind and mobile button.
 
 ```csl
 Sprint_Ability :: class : Ability_Base {
     on_init :: method() {
         name = "Sprint";
-        keybind_override = keybind_sprint;    // Must be registered in ao_before_scene_load
-        draw_but_dont_use_keybind = true;     // Show keybind but handle input via update_holding_ability
+        keybind_override = keybind_sprint;
+        draw_but_dont_use_keybind = true;  // Show keybind but handle input via update_holding_ability
     }
 
     can_use :: method() -> bool {
@@ -135,32 +88,26 @@ Sprint_Ability :: class : Ability_Base {
 
     on_update :: method(params: ref Ability_Update_Params) {
         holding := Ability_Utilities.update_holding_ability(player, ref params, keybind_sprint);
-        
-        if holding.active && player.stamina > 0 {
-            player.is_sprinting = true;
-        }
-        else {
-            player.is_sprinting = false;
-        }
+        player.is_sprinting = holding.active && player.stamina > 0;
     }
 }
 ```
 
-### Aimed Ability (Always Aiming on PC)
+## Aimed Ability (Always Aiming on PC)
 
-Use `Ability_Utilities.full_update_aimed_ability`. On PC, mouse position determines aim and click activates. On mobile, press-drag-release to aim and activate.
+`Ability_Utilities.full_update_aimed_ability` -- PC: mouse aim + click. Mobile: press-drag-release.
+Returns `{ direction: v2, activate: bool }`.
 
 ```csl
 Shoot_Ability :: class : Ability_Base {
     on_init :: method() {
         name = "Shoot";
-        disable_keybind = true;       // No keybind shown (always aiming)
-        is_aimed_ability = true;      // Shows aim indicator on button
+        disable_keybind = true;
+        is_aimed_ability = true;
     }
 
     on_update :: method(params: ref Ability_Update_Params) {
         activation := Ability_Utilities.full_update_aimed_ability(player, ref params);
-        
         if activation.activate {
             current_cooldown = 0.5;
             shoot_projectile(player.entity.world_position, activation.direction * 10.0);
@@ -169,9 +116,10 @@ Shoot_Ability :: class : Ability_Base {
 }
 ```
 
-### Targeted Aimed Ability (Click to Enter Aim Mode)
+## Targeted Aimed Ability (Click to Enter Aim Mode)
 
-Use `Ability_Utilities.full_update_targeted_aimed_ability`. On PC, click button to enter aim mode, then click to activate (right-click to cancel). On mobile, press-drag-release.
+`Ability_Utilities.full_update_targeted_aimed_ability` -- PC: click button to aim, click to fire, right-click to cancel. Mobile: press-drag-release.
+Returns `{ direction: v2, activate: bool }`.
 
 ```csl
 Dodge_Roll :: class : Ability_Base {
@@ -183,81 +131,32 @@ Dodge_Roll :: class : Ability_Base {
 
     on_update :: method(params: ref Ability_Update_Params) {
         activation := Ability_Utilities.full_update_targeted_aimed_ability(player, this, ref params);
-        
         if activation.activate {
             current_cooldown = 1.5;
-            
-            // Start an effect for the roll (see effects.mdc)
             effect := new(Roll_Effect);
             effect.direction = activation.direction;
-            player.entity->set_active_effect(effect);
+            player.entity->set_active_effect(effect);  // See effects skill
         }
     }
 }
 ```
 
-## Ability_Utilities Reference
+## Low-Level Utilities
 
-### full_update_aimed_ability
-
-Complete solution for "always aiming" abilities. Draws the aiming line automatically.
-
-- **PC:** Mouse position determines aim direction. Click anywhere on screen to activate.
-- **Mobile:** Press and hold ability button, drag to aim. Release to activate (if dragged far enough).
-
-Returns `Full_Aimed_Ability_Result`:
-- `direction: v2` - Unit vector of aim direction
-- `activate: bool` - Should activate this frame
-
-### full_update_targeted_aimed_ability
-
-Complete solution for "click to aim" abilities. Draws the aiming line automatically.
-
-- **PC:** Click ability button to enter aim mode. Move mouse to aim. Click to activate, right-click to cancel.
-- **Mobile:** Press and hold ability button, drag to aim. Release to activate (if dragged far enough).
-
-Returns `Full_Targeted_Aimed_Ability_Result`:
-- `direction: v2` - Unit vector of aim direction
-- `activate: bool` - Should activate this frame
-
-### update_holding_ability
-
-For abilities that are active while held (e.g., sprint).
-
-- **PC:** Active while keybind is held down.
-- **Mobile:** Active while ability button is held down.
-
-Returns `Holding_Ability_Result`:
-- `active: bool` - Currently being held
-
-### update_aiming_ability (Low-level)
-
-Low-level helper for custom aiming implementations. Generally use `full_update_aimed_ability` or `full_update_targeted_aimed_ability` instead.
-
-Returns `Aiming_Ability_Result`:
-- `aim: bool` - Currently aiming
-- `activate: bool` - Should activate this frame
-- `cancel: bool` - Right-clicked to cancel (PC only)
-- `aim_direction: v2` - Unit vector of aim direction
-
-### update_targeted_ability (Low-level)
-
-Low-level helper for custom targeting implementations. Sets `player.active_ability` to this ability.
-
-Returns `Targeted_Ability_Result`:
-- `targeting: bool` - Currently in targeting mode
+- `update_aiming_ability` -- Returns `{ aim: bool, activate: bool, cancel: bool, aim_direction: v2 }`. Use `full_update_aimed_ability` unless you need custom aiming UI.
+- `update_targeted_ability` -- Returns `{ targeting: bool }`. Sets `player.active_ability` to this ability.
 
 ## Ability_Base Fields
 
 ```csl
 Ability_Base :: class {
-    player: Player;                    // The owning player
-    name: string;                      // Display name
-    icon: Texture_Asset;               // Button icon
+    player: Player;
+    name: string;
+    icon: Texture_Asset;
     current_cooldown: float;           // Remaining cooldown (0 = ready)
-    type: typeid;                      // The ability's type
+    type: typeid;
     is_aimed_ability: bool;            // Show aim indicator on button
-    mouse_position_on_press: v2;       // Mouse pos when button was pressed
+    mouse_position_on_press: v2;
 
     keybind_override: Keybind;         // Custom keybind (0 = use default)
     disable_keybind: bool;             // Don't show or use any keybind
@@ -265,12 +164,11 @@ Ability_Base :: class {
 }
 ```
 
-## Keybinds (not required)
+## Keybinds
 
-Keybinds must be registered in `ao_before_scene_load`:
+Register in `ao_before_scene_load`, then reference via `keybind_override`:
 
 ```csl
-// Global keybind variable
 keybind_dodge_roll: Keybind;
 
 ao_before_scene_load :: proc() {
@@ -278,48 +176,16 @@ ao_before_scene_load :: proc() {
 }
 ```
 
-Then reference in the ability:
-
-```csl
-Dodge_Roll :: class : Ability_Base {
-    on_init :: method() {
-        keybind_override = keybind_dodge_roll;
-    }
-}
-```
-
-Default ability keybinds (if no override):
-- Index 0: Q
-- Index 1: Z
-- Index 2: X
-- Index 3: C
-- Index 4: R
-- Index 5: F
-
-## Effects for Complex Abilities
-
-For abilities that take control of the player (dashes, channels, etc.), use Effects. See `effects.mdc` for full documentation.
-
-```csl
-// In ability on_update:
-if activation.activate {
-    effect := new(Roll_Effect);
-    effect.direction = activation.direction;
-    player.entity->set_active_effect(effect);
-}
-```
+Default keybinds by button index: 0=Q, 1=Z, 2=X, 3=C, 4=R, 5=F.
 
 ## Conditional Ability Display
-
-Show different abilities based on game state:
 
 ```csl
 ao_late_update :: method(dt: float) {
     if this->is_local_or_server() && !health.is_dead {
         if is_carrying_item {
             draw_ability_button(this, Drop_Item_Ability, 0);
-        }
-        else {
+        } else {
             switch team {
                 case .SURVIVOR: {
                     draw_ability_button(this, Shoot_Ability, 0);
@@ -336,7 +202,7 @@ ao_late_update :: method(dt: float) {
 
 ## Player Ability Restrictions
 
-Define `ao_can_use_ability` on your Player to add game-wide restrictions. Called after the ability's `can_use` and cooldown checks.
+`ao_can_use_ability` on your Player adds game-wide restrictions, called after the ability's own `can_use` and cooldown checks. Use for global rules (dead, cutscene). Use ability's `can_use` for ability-specific rules (stamina, ammo).
 
 ```csl
 Player :: class : Player_Base {
@@ -348,6 +214,20 @@ Player :: class : Player_Base {
 }
 ```
 
-**When to use `ao_can_use_ability` vs ability's `can_use`:**
-- Use `ao_can_use_ability` for game-wide rules (dead players can't use abilities, abilities blocked during cutscenes)
-- Use ability's `can_use` for ability-specific rules (sprint needs stamina, shoot needs ammo)
+## Custom Button Drawing
+
+Implement `on_draw_button` on your ability class to draw custom content on the ability button (e.g., ammo count, charge indicator):
+
+```csl
+My_Ability :: class : Ability_Base {
+    ammo: int;
+
+    on_draw_button :: method(rect: Rect) {
+        ts := UI.default_text_settings();
+        ts.size = 24;
+        ts.halign = .RIGHT;
+        ts.valign = .BOTTOM;
+        UI.text(rect->inset(5), ts, "%", {ammo});
+    }
+}
+```
