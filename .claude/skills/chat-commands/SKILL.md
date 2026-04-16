@@ -1,6 +1,6 @@
 ---
 name: chat-commands
-description: "For creating in-game chat commands that players can invoke."
+description: For creating in-game chat commands that admins can invoke to help make playtesting easier.
 ---
 # Chat Commands
 
@@ -12,8 +12,6 @@ heal_player :: proc(player: Player, amount: int = 50) {
     Notifier.notify(player, "Healed for %!", {amount});
 } @chat_command @any
 ```
-
-Use `Notifier.notify(player, ...)` to send feedback -- it sends an RPC to that player's client.
 
 ## Permission Annotations
 

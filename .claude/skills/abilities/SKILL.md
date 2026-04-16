@@ -21,7 +21,7 @@ My_Ability :: class : Ability_Base {
     on_update :: method(params: ref Ability_Update_Params) {
         if params.clicked && params.can_use {
             do_ability_effect(player);
-            current_cooldown = 2.0;  // Must set cooldown after activating
+            current_cooldown = 2.0; // Must set cooldown after activating
         }
     }
 }
@@ -34,7 +34,7 @@ Draw in the player's `ao_late_update` inside `is_local_or_server()`. Do not make
 ```csl
 Player :: class : Player_Base {
     ao_late_update :: method(dt: float) {
-        if this->is_local_or_server() && !health.is_dead {
+        if this.is_local_or_server() && !health.is_dead {
             draw_ability_button(this, Shoot_Ability, 0);
             draw_ability_button(this, Dodge_Roll, 1);
             draw_ability_button(this, Sprint_Ability, 4);
@@ -59,14 +59,14 @@ Player :: class : Player_Base {
 
 ```csl
 on_update :: method(params: ref Ability_Update_Params) {
-    params.hovering;        // Mouse over button
+    params.hovering; // Mouse over button
     params.just_pressed;
-    params.active;          // Being held
+    params.active; // Being held
     params.released;
-    params.clicked;         // Pressed and released
-    params.can_use;         // Passed can_use check and not on cooldown
-    params.drag_offset;     // Normalized drag vector (0-1) for aimed abilities
-    params.drag_direction;  // Unit direction of drag
+    params.clicked; // Pressed and released
+    params.can_use; // Passed can_use check and not on cooldown
+    params.drag_offset; // Normalized drag vector (0-1) for aimed abilities
+    params.drag_direction; // Unit direction of drag
 }
 ```
 
@@ -79,7 +79,7 @@ Sprint_Ability :: class : Ability_Base {
     on_init :: method() {
         name = "Sprint";
         keybind_override = keybind_sprint;
-        draw_but_dont_use_keybind = true;  // Show keybind but handle input via update_holding_ability
+        draw_but_dont_use_keybind = true; // Show keybind but handle input via update_holding_ability
     }
 
     can_use :: method() -> bool {
@@ -135,7 +135,7 @@ Dodge_Roll :: class : Ability_Base {
             current_cooldown = 1.5;
             effect := new(Roll_Effect);
             effect.direction = activation.direction;
-            player.entity->set_active_effect(effect);  // See effects skill
+            player.entity.set_active_effect(effect); // See effects skill
         }
     }
 }
@@ -153,14 +153,14 @@ Ability_Base :: class {
     player: Player;
     name: string;
     icon: Texture_Asset;
-    current_cooldown: float;           // Remaining cooldown (0 = ready)
+    current_cooldown: float; // Remaining cooldown (0 = ready)
     type: typeid;
-    is_aimed_ability: bool;            // Show aim indicator on button
+    is_aimed_ability: bool; // Show aim indicator on button
     mouse_position_on_press: v2;
 
-    keybind_override: Keybind;         // Custom keybind (0 = use default)
-    disable_keybind: bool;             // Don't show or use any keybind
-    draw_but_dont_use_keybind: bool;   // Show keybind but handle input manually
+    keybind_override: Keybind; // Custom keybind (0 = use default)
+    disable_keybind: bool; // Don't show or use any keybind
+    draw_but_dont_use_keybind: bool; // Show keybind but handle input manually
 }
 ```
 
@@ -182,7 +182,7 @@ Default keybinds by button index: 0=Q, 1=Z, 2=X, 3=C, 4=R, 5=F.
 
 ```csl
 ao_late_update :: method(dt: float) {
-    if this->is_local_or_server() && !health.is_dead {
+    if this.is_local_or_server() && !health.is_dead {
         if is_carrying_item {
             draw_ability_button(this, Drop_Item_Ability, 0);
         } else {
@@ -227,7 +227,7 @@ My_Ability :: class : Ability_Base {
         ts.size = 24;
         ts.halign = .RIGHT;
         ts.valign = .BOTTOM;
-        UI.text(rect->inset(5), ts, "%", {ammo});
+        UI.text(rect.inset(5), ts, "%", {ammo});
     }
 }
 ```

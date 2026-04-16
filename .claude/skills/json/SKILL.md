@@ -4,7 +4,7 @@ description: "For serializing and deserializing data to/from JSON strings."
 ---
 # JSON Serialization
 
-Only fields marked with `@ao_serialize` are serialized/deserialized.
+Only fields marked with `@ao_serialize` are serialized/deserialized. This is a huge footgun you have to pay close attention to mark your fields with this. 
 
 ## API Reference
 
@@ -13,13 +13,9 @@ JSON :: struct {
     serialize       :: proc(value: ref $T) -> string;
     try_deserialize :: proc(json: string, out: ref $T) -> bool;
 }
-
-// Direct Save integration (preferred for persistence — avoids intermediate string allocation)
-Save :: struct {
-    set_json     :: proc(player: Player, key: string, value: ref $T);
-    try_get_json :: proc(player: Player, key: string, out: ref $T) -> bool;
-}
 ```
+
+For persistence, prefer `Save.set_json` / `Save.try_get_json` (see the save skill)
 
 ## Basic Usage
 
@@ -28,7 +24,7 @@ Player_Stats :: class {
     name: string @ao_serialize;
     level: int @ao_serialize;
     health: float @ao_serialize;
-    internal_id: int;  // Not serialized (no @ao_serialize)
+    internal_id: int; // Not serialized (no @ao_serialize)
 }
 
 stats := new(Player_Stats);
@@ -76,7 +72,7 @@ JSON works with primitive types directly:
 
 ```csl
 pos := v2{10.5, 20.0};
-json := JSON.serialize(ref pos);  // {"x": 10.5, "y": 20.0}
+json := JSON.serialize(ref pos); // {"x": 10.5, "y": 20.0}
 
 loaded_pos: v2;
 JSON.try_deserialize(json, ref loaded_pos);
@@ -99,44 +95,4 @@ JSON.try_deserialize(json, ref loaded_pos);
 
 ## Schema Versioning
 
-Include a version field to handle migrations when structures change:
-
-```csl
-Player_Progress :: class {
-    version: int @ao_serialize;
-    max_health: int @ao_serialize;
-    max_stamina: int @ao_serialize;
-    unlocked_abilities: [..]string @ao_serialize;
-}
-
-CURRENT_PROGRESS_VERSION :: 3;
-
-load_progress :: proc(player: Player) -> Player_Progress {
-    progress: Player_Progress;
-    if !Save.try_get_json(player, "progress", ref progress) {
-        progress.version = CURRENT_PROGRESS_VERSION;
-        progress.max_health = 100;
-        progress.max_stamina = 50;
-        return progress;
-    }
-
-    if progress.version < 2 {
-        progress.version = 2;
-        progress.max_health = 100;
-    }
-
-    if progress.version < 3 {
-        progress.version = 3;
-        progress.max_stamina = 50;
-    }
-
-    if progress.version != CURRENT_PROGRESS_VERSION {
-        progress.version = CURRENT_PROGRESS_VERSION;
-        Save.set_json(player, "progress", ref progress);
-    }
-
-    return progress;
-}
-```
-
-Run migrations in order (v1->v2, then v2->v3). Save immediately after migration.
+Include a `version: int @ao_serialize` field. On load, run migrations in order (`v < 2`, then `v < 3`, etc.) and save after migrating. See the save skill's versioning section for the full pattern.

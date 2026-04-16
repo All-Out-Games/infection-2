@@ -26,7 +26,7 @@ Dropped_Item :: class : Component {
                 }
             }
         }
-        entity->set_local_enabled(visible);
+        entity.set_local_enabled(visible);
     }
 }
 ```

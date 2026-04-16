@@ -79,7 +79,7 @@ AMMO_PER_SECOND :: 0.6;
 get_game_manager :: proc() -> Game_Manager {
     #static game_manager: Game_Manager;
     if game_manager == null {
-        foreach gm: component_iterator(Game_Manager) {
+        for gm: component_iterator(Game_Manager) {
             game_manager = gm;
             break;
         }
@@ -100,18 +100,18 @@ ao_before_scene_load :: proc() {
     keybind_drop_fuel = Keybinds.register("Drop Fuel", .F);
     keybind_sprint = Keybinds.register("Sprint", .LEFT_SHIFT);
 
-    server_rng = rng_seed((get_real_time() * 1000000000).(u64));
+    server_rng = rng_seed(rng_root_seed());
 }
 
 Zombie_Spawn_Point :: class : Component { }
 Survivor_Spawn_Point :: class : Component { }
 
 ao_start :: proc() {
-    foreach spawn: component_iterator(Zombie_Spawn_Point) {
-        all_zombie_spawns->append(spawn.entity);
+    for spawn: component_iterator(Zombie_Spawn_Point) {
+        all_zombie_spawns.append(spawn.entity);
     }
-    foreach spawn: component_iterator(Survivor_Spawn_Point) {
-        all_survivor_spawns->append(spawn.entity);
+    for spawn: component_iterator(Survivor_Spawn_Point) {
+        all_survivor_spawns.append(spawn.entity);
     }
 }
 
@@ -135,7 +135,7 @@ draw_killed_by_screen :: proc(player: Player, elapsed: float, respawn_secs: int)
     ts.do_outline = true;
     ts.outline_thickness = 3;
     ts.outline_color = v4{0, 0, 0, fade};
-    label_rect := screen->center_rect()->offset(0, 60)->grow(30, 400, 30, 400);
+    label_rect := screen.center_rect().offset(0, 60).grow(30, 400, 30, 400);
     UI.text(label_rect, ts, "KILLED BY");
 
     // Killer name — big and bold
@@ -143,7 +143,7 @@ draw_killed_by_screen :: proc(player: Player, elapsed: float, respawn_secs: int)
     ts.color = v4{1, 1, 1, fade};
     ts.outline_color = v4{0.5, 0, 0, fade};
     ts.outline_thickness = 5;
-    name_rect := screen->center_rect()->offset(0, -40)->grow(60, 600, 60, 600);
+    name_rect := screen.center_rect().offset(0, -40).grow(60, 600, 60, 600);
     UI.text(name_rect, ts, player.killer_name);
 
     // Respawn timer at the bottom
@@ -151,21 +151,21 @@ draw_killed_by_screen :: proc(player: Player, elapsed: float, respawn_secs: int)
     ts.color = v4{0.8, 0.8, 0.8, fade};
     ts.outline_thickness = 2;
     ts.outline_color = v4{0, 0, 0, fade};
-    timer_rect := screen->bottom_center_rect()->offset(0, 80)->grow(30, 300, 30, 300);
+    timer_rect := screen.bottom_center_rect().offset(0, 80).grow(30, 300, 30, 300);
     UI.text(timer_rect, ts, "Respawning in %s", {respawn_secs});
 }
 
 draw_big_game_text :: proc(str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 64;
-    text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 150);
+    text_rect := UI.get_screen_rect().bottom_center_rect().offset(0, 150);
     UI.text(text_rect, ts, str, args);
 }
 
 draw_small_game_text :: proc(str: string, args: [^]any = {}) {
     ts := UI.default_text_settings();
     ts.size = 48;
-    text_rect := UI.get_screen_rect()->bottom_center_rect()->offset(0, 75);
+    text_rect := UI.get_screen_rect().bottom_center_rect().offset(0, 75);
     UI.text(text_rect, ts, str, args);
 }
 
@@ -176,7 +176,7 @@ draw_round_timer :: proc(time_remaining: float, paused: bool, pause_reason: stri
     seconds := total_seconds % 60;
 
     // Draw timer background
-    timer_rect := UI.get_safe_screen_rect()->top_center_rect()->offset(0, -60)->grow(80, 40, 20, 40);
+    timer_rect := UI.get_safe_screen_rect().top_center_rect().offset(0, -60).grow(80, 40, 20, 40);
     UI.quad(timer_rect, white_sprite, {0, 0, 0, 0.6});
 
     // Draw timer text
@@ -200,12 +200,12 @@ draw_round_timer :: proc(time_remaining: float, paused: bool, pause_reason: stri
         pause_ts := UI.default_text_settings();
         pause_ts.size = 24;
         pause_ts.color = {1, 0.9, 0.3, 1};
-        UI.text(timer_rect->offset(0, -35), pause_ts, pause_reason);
+        UI.text(timer_rect.offset(0, -35), pause_ts, pause_reason);
     }
 }
 
 begin_task_ui :: proc() -> Rect {
-    return UI.get_safe_screen_rect()->left_center_rect()->offset(20, 25);
+    return UI.get_safe_screen_rect().left_center_rect().offset(20, 25);
 }
 
 draw_task_title :: proc(rect: ref Rect, str: string, args: [^]any = {}) {
@@ -213,7 +213,7 @@ draw_task_title :: proc(rect: ref Rect, str: string, args: [^]any = {}) {
     ts.size = 48;
     ts.halign = .LEFT;
     ts.valign = .CENTER;
-    text_rect := rect->cut_top(50);
+    text_rect := rect.cut_top(50);
     UI.text(text_rect, ts, str, args);
 }
 
@@ -222,23 +222,23 @@ draw_task_subtitle :: proc(rect: ref Rect, str: string, args: [^]any = {}) {
     ts.size = 36;
     ts.halign = .LEFT;
     ts.valign = .CENTER;
-    text_rect := rect->cut_top(35);
+    text_rect := rect.cut_top(35);
     UI.text(text_rect, ts, str, args);
 }
 
 draw_rect_grow_fade_out_effect :: proc(rect: Rect, time: float, color: v4) {
     effect_t := Ease.out_quart(Ease.T(time, 0.35));
     if effect_t >= 1 return;
-    growth := min(rect->width() * 0.5, rect->height() * 0.5) * effect_t;
-    effect_rect := rect->grow_unscaled(growth);
+    growth := min(rect.width() * 0.5, rect.height() * 0.5) * effect_t;
+    effect_rect := rect.grow_unscaled(growth);
     color.w = 1 - effect_t;
     UI.quad(effect_rect, white_sprite, color);
 }
 
 get_all_components :: proc($T: typeid) -> []T {
     components: [..]T;
-    foreach c: component_iterator(T) {
-        components->append(c);
+    for c: component_iterator(T) {
+        components.append(c);
     }
     return components;
 }
@@ -255,21 +255,21 @@ try_get_random_component :: proc(rng: ref u64, $T: typeid) -> T {
 ao_update :: proc(dt: float) {
     switch g_game.state {
         case .RESET_MAP: {
-            foreach player: component_iterator(Player) {
-                player.entity->remove_all_effects();
-                player->remove_ghost_reason("spectator");
-                player->remove_ghost_reason("escaped");
-                player->set_team(.SURVIVOR);
+            for player: component_iterator(Player) {
+                player.entity.remove_all_effects();
+                player.remove_ghost_reason("spectator");
+                player.remove_ghost_reason("escaped");
+                player.set_team(.SURVIVOR);
                 player.is_on_boat = false;
                 respawn_player(player);
             }
-            foreach fuel: component_iterator(Fuel_Canister) {
-                fuel.entity->destroy();
+            for fuel: component_iterator(Fuel_Canister) {
+                fuel.entity.destroy();
             }
-            foreach fuel: component_iterator(Boat_Battery) {
-                fuel.entity->destroy();
+            for fuel: component_iterator(Boat_Battery) {
+                fuel.entity.destroy();
             }
-            foreach charger: component_iterator(Battery_Charger) {
+            for charger: component_iterator(Battery_Charger) {
                 charger.is_charging = false;
             }
 
@@ -309,7 +309,7 @@ ao_update :: proc(dt: float) {
         }
         case .WAITING_FOR_PLAYERS: {
             player_count := 0;
-            foreach player: component_iterator(Player) {
+            for player: component_iterator(Player) {
                 player_count += 1;
             }
             defer g_game.player_count_last_frame = player_count;
@@ -340,16 +340,16 @@ ao_update :: proc(dt: float) {
                     g_game.round_countdown_timer = 0;
                     players := new(Player, player_count);
                     player_index := 0;
-                    foreach player: component_iterator(Player) {
+                    for player: component_iterator(Player) {
                         players[player_index] = player;
                         player_index += 1;
-                        player->set_team(.SURVIVOR);
+                        player.set_team(.SURVIVOR);
                     }
 
                     rng_shuffle(ref server_rng, players);
                     zombie_count := max(1, player_count / 5);
                     for i: 0..zombie_count-1 {
-                        players[i]->set_team(.ZOMBIE);
+                        players[i].set_team(.ZOMBIE);
                     }
                     g_game.state = .GAMEPLAY;
 
@@ -358,7 +358,7 @@ ao_update :: proc(dt: float) {
 
                         // Show round start intro animation
                         intro_effect := new(Round_Start_Animation_Effect);
-                        player.entity->set_active_effect(intro_effect);
+                        player.entity.set_active_effect(intro_effect);
                     }
 
                     g_game.tasks[0] = .FUEL_CANISTERS;
@@ -393,7 +393,7 @@ ao_update :: proc(dt: float) {
 
             survivors_left := 0;
             zombies_left := 0;
-            foreach player: component_iterator(Player) {
+            for player: component_iterator(Player) {
                 if player.team == .SURVIVOR && player.health.is_dead == false {
                     survivors_left += 1;
                 }
@@ -417,22 +417,22 @@ ao_update :: proc(dt: float) {
                 }
 
                 g_game.state = .END_GAME_SCREEN;
-                foreach player: component_iterator(Player) {
+                for player: component_iterator(Player) {
                     switch winner {
                         case .SURVIVOR: {
                             if player.team == .ZOMBIE {
-                                player->add_notification("Zombies lose!");
+                                player.add_notification("Zombies lose!");
                             }
                             else {
-                                player->add_notification("Survivors win!");
+                                player.add_notification("Survivors win!");
                             }
                         }
                         case .ZOMBIE: {
                             if player.team == .ZOMBIE {
-                                player->add_notification("Zombies win!");
+                                player.add_notification("Zombies win!");
                             }
                             else {
-                                player->add_notification("Survivors lose!");
+                                player.add_notification("Survivors lose!");
                             }
                         }
                     }
@@ -441,7 +441,7 @@ ao_update :: proc(dt: float) {
 
             // Count survivors who escaped
             survivors_escaped := 0;
-            foreach player: component_iterator(Player) {
+            for player: component_iterator(Player) {
                 if player.is_on_boat {
                     survivors_escaped += 1;
                 }
@@ -473,7 +473,7 @@ ao_update :: proc(dt: float) {
                         end_game(.ZOMBIE);
                     }
                 }
-                case: {
+                default: {
                     local_player, _ := Game.get_local_player();
 
                     // Draw round timer at top of screen
@@ -484,7 +484,7 @@ ao_update :: proc(dt: float) {
                         switch local_player.team {
                             case .ZOMBIE: {
                                 survivors_left := 0;
-                                foreach player: component_iterator(Player) {
+                                for player: component_iterator(Player) {
                                     if player.team == .SURVIVOR && player.health.is_dead == false {
                                         survivors_left += 1;
                                     }
@@ -497,7 +497,7 @@ ao_update :: proc(dt: float) {
                                     ts.halign = .LEFT;
                                     ts.valign = .CENTER;
                                     ts.color = {1, 0.2, 0.2, 1};
-                                    UI.text(rect->cut_top(50), ts, "Eliminate all Survivors");
+                                    UI.text(rect.cut_top(50), ts, "Eliminate all Survivors");
                                 }
                                 draw_task_subtitle(ref rect, "Survivors left: %", {survivors_left});
                             }
@@ -511,12 +511,12 @@ ao_update :: proc(dt: float) {
                                             ts.halign = .LEFT;
                                             ts.valign = .CENTER;
                                             ts.color = {1, 0.85, 0, 1};
-                                            UI.text(rect->cut_top(50), ts, "Collect Fuel Cans");
+                                            UI.text(rect.cut_top(50), ts, "Collect Fuel Cans");
                                         }
-                                        subtitle_rect := rect->cut_top(35);
+                                        subtitle_rect := rect.cut_top(35);
                                         fuel_icon := get_asset(Texture_Asset, "fuel_canister.png");
-                                        icon_rect := subtitle_rect->cut_left(46)->center_rect()->grow(23);
-                                        UI.quad(icon_rect->fit_aspect(fuel_icon->get_aspect()), fuel_icon);
+                                        icon_rect := subtitle_rect.cut_left(46).center_rect().grow(23);
+                                        UI.quad(icon_rect.fit_aspect(fuel_icon.get_aspect()), fuel_icon);
                                         ts := UI.default_text_settings();
                                         ts.size = 36;
                                         ts.halign = .LEFT;
@@ -556,7 +556,7 @@ ao_update :: proc(dt: float) {
                                     }
                                     case .TAKEOFF: {
                                         takeoff: Takeoff_Station;
-                                        foreach c: component_iterator(Takeoff_Station) {
+                                        for c: component_iterator(Takeoff_Station) {
                                             takeoff = c;
                                             break;
                                         }
@@ -567,7 +567,7 @@ ao_update :: proc(dt: float) {
                                         // Count escaped survivors
                                         escaped_count := 0;
                                         alive_count := 0;
-                                        foreach p: component_iterator(Player) {
+                                        for p: component_iterator(Player) {
                                             if p.is_on_boat {
                                                 escaped_count += 1;
                                             }
@@ -614,11 +614,11 @@ ao_update :: proc(dt: float) {
                 ts.size = 120;
                 if player_won {
                     ts.color = {1, 0.9, 0.1, fade};
-                    UI.text(UI.get_screen_rect()->center_rect()->offset(0, 80)->grow(70, 700, 70, 700), ts, "YOU WIN!");
+                    UI.text(UI.get_screen_rect().center_rect().offset(0, 80).grow(70, 700, 70, 700), ts, "YOU WIN!");
                 }
                 else {
                     ts.color = {0.9, 0.1, 0.1, fade};
-                    UI.text(UI.get_screen_rect()->center_rect()->offset(0, 80)->grow(70, 700, 70, 700), ts, "YOU LOSE!");
+                    UI.text(UI.get_screen_rect().center_rect().offset(0, 80).grow(70, 700, 70, 700), ts, "YOU LOSE!");
                 }
 
                 // Subtitle
@@ -627,11 +627,11 @@ ao_update :: proc(dt: float) {
                 switch g_game.winner {
                     case .SURVIVOR: {
                         ts.color = {0.3, 1, 0.3, fade};
-                        UI.text(UI.get_screen_rect()->center_rect()->offset(0, -30)->grow(30, 500, 30, 500), ts, "Survivors Escaped!");
+                        UI.text(UI.get_screen_rect().center_rect().offset(0, -30).grow(30, 500, 30, 500), ts, "Survivors Escaped!");
                     }
                     case .ZOMBIE: {
                         ts.color = {1, 0.4, 0.4, fade};
-                        UI.text(UI.get_screen_rect()->center_rect()->offset(0, -30)->grow(30, 500, 30, 500), ts, "Zombies Win!");
+                        UI.text(UI.get_screen_rect().center_rect().offset(0, -30).grow(30, 500, 30, 500), ts, "Zombies Win!");
                     }
                 }
             }
@@ -649,39 +649,39 @@ get_random :: proc(rng: ref u64, array: []$T) -> T {
 }
 
 respawn_player :: proc(using player: Player) {
-    player.entity->remove_all_effects();
-    player.health->set_max_health(1, true);
+    player.entity.remove_all_effects();
+    player.health.set_max_health(1, true);
 
     switch team {
         case .SURVIVOR: {
             spawn := get_random(ref server_rng, all_survivor_spawns);
             offset := v2{rng_range_float(ref server_rng, -0.5, 0.5), rng_range_float(ref server_rng, -0.5, 0.5)};
-            player.entity->set_local_position(spawn.world_position + offset);
+            player.entity.set_local_position(spawn.world_position + offset);
         }
         case .ZOMBIE: {
             valid_spawns: [..]Entity;
             for spawn: all_zombie_spawns {
                 spawn_ok := true;
-                foreach player: component_iterator(Player) if player.team == .SURVIVOR {
+                for player: component_iterator(Player) if player.team == .SURVIVOR {
                     if in_range(spawn.world_position - player.entity.world_position, 10) {
                         spawn_ok = false;
                         break;
                     }
                 }
                 if spawn_ok {
-                    valid_spawns->append(spawn);
+                    valid_spawns.append(spawn);
                 }
             }
 
             if valid_spawns.count > 0 {
                 index := rng_range_int(ref server_rng, 0, valid_spawns.count-1);
                 spawn := valid_spawns[index];
-                player.entity->set_local_position(spawn.world_position);
+                player.entity.set_local_position(spawn.world_position);
             }
             else {
                 index := rng_range_int(ref server_rng, 0, all_zombie_spawns.count-1);
                 spawn := all_zombie_spawns[index];
-                player.entity->set_local_position(spawn.world_position);
+                player.entity.set_local_position(spawn.world_position);
             }
         }
     }
@@ -714,7 +714,7 @@ Shoot_Ability :: class : Ability_Base {
         if activation.activate {
             current_cooldown = 0.5;
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(player.entity.local_position);
+            sfx.set_position(player.entity.local_position);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
             if player.current_ammo > 0 {
@@ -753,7 +753,7 @@ Slash_Ability :: class : Ability_Base {
 
             effect := new(Slash_Effect);
             effect.direction = activation.direction;
-            player.entity->set_active_effect(effect);
+            player.entity.set_active_effect(effect);
         }
     }
 }
@@ -765,24 +765,24 @@ Slash_Effect :: class : Effect_Base {
 
     effect_start :: method() {
         player_specific.disable_movement_inputs = true;
-        player->player_set_trigger("attack");
+        player.player_set_trigger("attack");
         original_friction = player.agent.friction;
         player.agent.friction = 0;
-        player->set_facing_right(direction.x > 0);
+        player.set_facing_right(direction.x > 0);
         {
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(player.entity.world_position);
+            sfx.set_position(player.entity.world_position);
             sfx.volume = 0.75;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.2;
-            rng := rng_seed_time();
+            rng := rng_seed(rng_root_seed());
             bite_index := rng_range_int(ref rng, 1, 5);
             SFX.play(get_asset(SFX_Asset, format_string("sfx/character_single_bite_0%.wav", {bite_index})), sfx);
         }
     }
 
     effect_update :: method(dt: float) {
-        foreach other: component_iterator(Player) {
+        for other: component_iterator(Player) {
             if other.team == player.team continue;
             if other.team != .SURVIVOR continue;
             if in_range(other.entity.world_position - player.entity.world_position, 0.75) {
@@ -796,11 +796,11 @@ Slash_Effect :: class : Effect_Base {
                 if already_hit {
                     continue;
                 }
-                other->take_damage_from(1, player);
-                already_hit_list->append(other);
+                other.take_damage_from(1, player);
+                already_hit_list.append(other);
                 {
                     sfx := SFX.default_sfx_desc();
-                    sfx->set_position(other.entity.world_position);
+                    sfx.set_position(other.entity.world_position);
                     sfx.volume = 0.75;
                     sfx.volume_perturb = 0.1;
                     sfx.speed_perturb = 0.2;
@@ -818,7 +818,7 @@ Slash_Effect :: class : Effect_Base {
 
     effect_end :: method(interrupt: bool) {
         player.agent.friction = original_friction;
-        player->player_set_trigger("RESET");
+        player.player_set_trigger("RESET");
     }
 }
 
@@ -886,7 +886,7 @@ Dodge_Roll :: class : Ability_Base {
             current_cooldown = 1.5;
             effect := new(Roll_Effect);
             effect.direction = activation.direction;
-            player.entity->set_active_effect(effect);
+            player.entity.set_active_effect(effect);
         }
     }
 }
@@ -898,17 +898,17 @@ Roll_Effect :: class : Effect_Base {
     effect_start :: method() {
         {
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(player.entity.world_position);
+            sfx.set_position(player.entity.world_position);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/dodge_roll.wav"), sfx);
         }
         player_specific.disable_movement_inputs = true;
-        player->player_set_trigger("dodge_roll");
+        player.player_set_trigger("dodge_roll");
         original_friction = player.agent.friction;
         player.agent.friction = 0;
-        player->set_facing_right(direction.x > 0);
+        player.set_facing_right(direction.x > 0);
     }
 
     effect_update :: method(dt: float) {
@@ -938,7 +938,7 @@ Round_Start_Animation_Effect :: class : Effect_Base {
         hold_progress += dt / TOTAL_TIME;
         hold_progress = clamp(hold_progress, 0, 1);
 
-        if player->is_local_or_server() {
+        if player.is_local_or_server() {
             bg_tint_01 := Ease.fade_in_and_out(0.1, 1.0, hold_progress);
 
             UI.push_layer(1000);
@@ -954,26 +954,26 @@ Round_Start_Animation_Effect :: class : Effect_Base {
             ts.size = 52;
             ts.color = {1, 1, 1, 1};
             ts.word_wrap = true;
-            rect := UI.get_safe_screen_rect()->offset(pos_01 * 100, 0);
+            rect := UI.get_safe_screen_rect().offset(pos_01 * 100, 0);
 
             switch player.team {
                 case .SURVIVOR: {
                     actual_rect := UI.text_sync(rect, ts, "Restore the boat to escape before time runs out!");
                     ts.size = 64;
                     ts.color = {0.2, 1, 0.2, 1};
-                    UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are a Survivor.\n\n");
+                    UI.text(actual_rect.top_rect().grow(100, 500, 0, 500), ts, "You are a Survivor.\n\n");
                 }
                 case .ZOMBIE: {
                     actual_rect := UI.text_sync(rect, ts, "Hunt down all survivors!\nInfect them before they escape!");
                     ts.size = 64;
                     ts.color = {1, 0.2, 0.2, 1};
-                    UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are Infected.\n\n");
+                    UI.text(actual_rect.top_rect().grow(100, 500, 0, 500), ts, "You are Infected.\n\n");
                 }
                 case .SPECTATOR: {
                     actual_rect := UI.text_sync(rect, ts, "Watch the action unfold!");
                     ts.size = 64;
                     ts.color = {0.7, 0.7, 0.7, 1};
-                    UI.text(actual_rect->top_rect()->grow(100, 500, 0, 500), ts, "You are Spectating.\n\n");
+                    UI.text(actual_rect.top_rect().grow(100, 500, 0, 500), ts, "You are Spectating.\n\n");
                 }
             }
 
@@ -987,10 +987,10 @@ Round_Start_Animation_Effect :: class : Effect_Base {
 
             // Draw hold progress bar
             ts.color = {1, 1, 1, 1};
-            hold_rect_bg := UI.get_safe_screen_rect()->bottom_center_rect()->offset(0, 200)->grow(10, 150, 10, 150);
+            hold_rect_bg := UI.get_safe_screen_rect().bottom_center_rect().offset(0, 200).grow(10, 150, 10, 150);
 
             // Calculate the filled portion width based on hold_progress
-            hold_rect := hold_rect_bg->inset(2)->subrect(0, 0, hold_progress, 1);
+            hold_rect := hold_rect_bg.inset(2).subrect(0, 0, hold_progress, 1);
             UI.quad(hold_rect_bg, white_sprite, {0.8, 0.8, 0.8, 1});
             UI.quad(hold_rect, white_sprite, {0.1, 0.1, 0.1, 1});
 
@@ -999,7 +999,7 @@ Round_Start_Animation_Effect :: class : Effect_Base {
             if player.device_kind != .PC {
                 close_str = "Tap and hold to close";
             }
-            UI.text(hold_rect_bg->offset(0, 35), ts, close_str);
+            UI.text(hold_rect_bg.offset(0, 35), ts, close_str);
         }
 
         if hold_progress >= 1 {
@@ -1046,11 +1046,11 @@ Health_Component :: class : Component {
         // if health_percent >= 1.0 return;
 
         bar_pos := entity.world_position + health_bar_offset;
-        bar_rect := Rect{bar_pos, bar_pos}->grow(0.1, 0.4, 0.1, 0.4);
+        bar_rect := Rect{bar_pos, bar_pos}.grow(0.1, 0.4, 0.1, 0.4);
 
         UI.quad(bar_rect, white_sprite, {0.01, 0.01, 0.01, 1});
 
-        fill_rect := bar_rect->subrect(0, 0, health_percent, 1);
+        fill_rect := bar_rect.subrect(0, 0, health_percent, 1);
 
         color := lerp(v4{0.8, 0.1, 0.1, 1}, {0.1, 0.8, 0.1, 1}, health_percent);
         UI.quad(fill_rect, white_sprite, color);
@@ -1117,13 +1117,13 @@ Damage_Number :: class : Component {
     ao_update :: method(dt: float) {
         time_alive := get_time() - spawn_time;
         if time_alive >= lifetime {
-            entity->destroy();
+            entity.destroy();
             return;
         }
 
         // Apply velocity with gravity
         velocity.y -= 20 * dt;
-        entity->add_local_position(velocity * dt);
+        entity.add_local_position(velocity * dt);
 
         // Draw the damage number
         UI.push_world_draw_context();
@@ -1132,7 +1132,7 @@ Damage_Number :: class : Component {
         UI.push_layer(100);
         defer UI.pop_layer();
 
-        rect := Rect{entity.local_position, entity.local_position}->grow(0.2, 0.4, 0.2, 0.4);
+        rect := Rect{entity.local_position, entity.local_position}.grow(0.2, 0.4, 0.2, 0.4);
 
         fade_t := linear_step(lifetime-1, lifetime, time_alive);
         ts := UI.default_text_settings();
@@ -1150,9 +1150,9 @@ Damage_Number :: class : Component {
 
 spawn_damage_number :: proc(value: int, position: v2) {
     entity := Scene.create_entity();
-    entity->set_local_position(position);
+    entity.set_local_position(position);
 
-    damage_number := entity->add_component(Damage_Number);
+    damage_number := entity.add_component(Damage_Number);
     damage_number.value = value;
     damage_number.spawn_time = get_time();
     damage_number.lifetime = 1.5;
@@ -1167,11 +1167,11 @@ spawn_damage_number :: proc(value: int, position: v2) {
 Death_Effect :: class : Effect_Base {
     effect_start :: method() {
         player_specific.freeze_player = true;
-        player->add_name_invisibility_reason("death");
-        player->player_set_trigger("death");
+        player.add_name_invisibility_reason("death");
+        player.player_set_trigger("death");
         if Game.is_server() {
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(player.entity.world_position);
+            sfx.set_position(player.entity.world_position);
             sfx.volume = 0.5;
             sfx.speed_perturb = 0.15;
             SFX.play(get_asset(SFX_Asset, "sfx/death.wav"), sfx);
@@ -1181,7 +1181,7 @@ Death_Effect :: class : Effect_Base {
     effect_update :: method(dt: float) {
         if g_game.state == .GAMEPLAY {
             time_until_respawn := 5.0 - get_elapsed_time();
-            if player->is_local() {
+            if player.is_local() {
                 if player.killer_name.count > 0 {
                     draw_killed_by_screen(player, get_elapsed_time(), time_until_respawn.(int) + 1);
                 }
@@ -1197,18 +1197,18 @@ Death_Effect :: class : Effect_Base {
     }
 
     effect_end :: method(interrupt: bool) {
-        player->remove_name_invisibility_reason("death");
+        player.remove_name_invisibility_reason("death");
         became_zombie := player.team == .SURVIVOR;
         if became_zombie {
-            player->set_team(.ZOMBIE);
+            player.set_team(.ZOMBIE);
         }
         respawn_player(player);
-        player.health->reset();
-        player->player_set_trigger("RESET");
+        player.health.reset();
+        player.player_set_trigger("RESET");
         player.killer_name = "";
         if became_zombie {
             intro_effect := new(Round_Start_Animation_Effect);
-            player.entity->set_active_effect(intro_effect);
+            player.entity.set_active_effect(intro_effect);
         }
     }
 }
@@ -1281,11 +1281,11 @@ Player :: class : Player_Base {
         if team == .SPECTATOR {
             return;
         }
-        health->take_damage(damage);
+        health.take_damage(damage);
         if health.is_dead {
             active_ability = null;
             effect := new(Death_Effect);
-            entity->set_active_effect(effect);
+            entity.set_active_effect(effect);
         }
     }
 
@@ -1294,7 +1294,7 @@ Player :: class : Player_Base {
         was_dead := health.is_dead;
         take_damage(damage);
         if health.is_dead && !was_dead && attacker.team == .ZOMBIE {
-            killer_name = attacker->get_username();
+            killer_name = attacker.get_username();
         }
     }
 
@@ -1310,31 +1310,31 @@ Player :: class : Player_Base {
         bar_height := 0.2;
         segment_gap := 0.02;
 
-        bar_rect := Rect{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
+        bar_rect := Rect{bar_pos, bar_pos}.grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
 
         // Background bar
         {
             jitter := Ease.jitter(Ease.T(get_time() - last_failed_to_shoot_time, 0.5), 8);
 
-            bar_rect_jitter := bar_rect->offset(jitter * 0.15, 0);
+            bar_rect_jitter := bar_rect.offset(jitter * 0.15, 0);
 
             UI.quad(bar_rect_jitter, white_sprite, {0.01, 0.01, 0.01, 1});
-            inner_bar := bar_rect_jitter->inset(0.04);
+            inner_bar := bar_rect_jitter.inset(0.04);
             UI.quad(inner_bar, white_sprite, {0.15, 0.15, 0.15, 1});
 
             // fill bar
             full_ammo_t := current_ammo_float / MAX_AMMO.(float);
-            UI.quad(inner_bar->subrect(0, 0, full_ammo_t, 1), white_sprite, {0.4, 0.4, 0.1, 1});
+            UI.quad(inner_bar.subrect(0, 0, full_ammo_t, 1), white_sprite, {0.4, 0.4, 0.1, 1});
 
             // Calculate segment dimensions
-            segment_width := inner_bar->width() / MAX_AMMO.(float);
+            segment_width := inner_bar.width() / MAX_AMMO.(float);
 
             // Draw each segment
-            step_size := inner_bar->width() / MAX_AMMO.(float);
-            base_segment_rect := inner_bar->left_rect()->grow_unscaled(0, segment_width, 0, 0);
-            base_notch_rect   := inner_bar->left_rect()->grow(0, segment_gap, 0, segment_gap);
+            step_size := inner_bar.width() / MAX_AMMO.(float);
+            base_segment_rect := inner_bar.left_rect().grow_unscaled(0, segment_width, 0, 0);
+            base_notch_rect   := inner_bar.left_rect().grow(0, segment_gap, 0, segment_gap);
             for i: 0..MAX_AMMO-1 {
-                segment_rect := base_segment_rect->offset_unscaled(segment_width * i.(float), 0);
+                segment_rect := base_segment_rect.offset_unscaled(segment_width * i.(float), 0);
                 if i < current_ammo {
                     UI.quad(segment_rect, white_sprite, {0.2, 0.9, 0.9, 1});
                 }
@@ -1344,14 +1344,14 @@ Player :: class : Player_Base {
                 draw_rect_grow_fade_out_effect(segment_rect, get_time() - time_last_shot[i], {0, 1, 0, 1});
             }
             for i: 0..MAX_AMMO-2 {
-                notch_rect := base_notch_rect->offset_unscaled(segment_width * (i+1).(float), 0);
+                notch_rect := base_notch_rect.offset_unscaled(segment_width * (i+1).(float), 0);
                 UI.quad(notch_rect, white_sprite, {0.2, 0.01, 0.01, 1});
             }
         }
 
         // No ammo indicator
         no_ammo_t := Ease.out_quart(Ease.T(get_time() - last_failed_to_shoot_time, 0.35));
-        no_ammo_rect := bar_rect->grow(0.2 * no_ammo_t);
+        no_ammo_rect := bar_rect.grow(0.2 * no_ammo_t);
         UI.quad(no_ammo_rect, white_sprite, lerp(v4{1, 0, 0, 1}, v4{1, 0, 0, 0}, no_ammo_t));
     }
 
@@ -1367,15 +1367,15 @@ Player :: class : Player_Base {
         bar_width := 0.6;
         bar_height := 0.12;
 
-        bar_rect := Rect{bar_pos, bar_pos}->grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
+        bar_rect := Rect{bar_pos, bar_pos}.grow(bar_height / 2, bar_width / 2, bar_height / 2, bar_width / 2);
 
         // Background
         UI.quad(bar_rect, white_sprite, {0.01, 0.01, 0.01, 1});
-        inner_bar := bar_rect->inset(0.02);
+        inner_bar := bar_rect.inset(0.02);
         UI.quad(inner_bar, white_sprite, {0.15, 0.15, 0.15, 1});
 
         // Stamina fill
-        fill_rect := inner_bar->subrect(0, 0, sprint_stamina, 1);
+        fill_rect := inner_bar.subrect(0, 0, sprint_stamina, 1);
 
         // Color: yellow when full, orange when depleting
         fill_color: v4 = #expr {
@@ -1424,19 +1424,19 @@ Player :: class : Player_Base {
     }
 
     ao_start :: method() {
-        agent->set_navmesh_to_lock_to(get_game_manager().main_navmesh);
+        agent.set_navmesh_to_lock_to(get_game_manager().main_navmesh);
 
         switch g_game.state {
             case .GAMEPLAY: {
                 turn_into_spectator();
             }
-            case: {
+            default: {
                 set_team(.SURVIVOR);
             }
         }
 
-        health = entity->add_component(Health_Component);
-        health->set_max_health(1, true);
+        health = entity.add_component(Health_Component);
+        health.set_max_health(1, true);
         health.health_bar_offset = {0, 1.75};
 
         // Initialize ammo system
@@ -1447,9 +1447,9 @@ Player :: class : Player_Base {
         sprint_stamina = 1;
 
         {
-            animator->awaken();
-            layer := animator.instance.state_machine->try_get_layer("main");
-            running_state = layer->try_get_state("Run_Fast");
+            animator.awaken();
+            layer := animator.state_machine.try_get_layer("main");
+            running_state = layer.try_get_state("Run_Fast");
             assert(running_state != null, "failed to find running state");
         }
     }
@@ -1494,14 +1494,14 @@ Player :: class : Player_Base {
                 dust_serial += 1;
                 dust_rng := rng_seed(dust_serial);
                 e := Scene.create_entity();
-                e->set_local_position(entity.world_position);
-                e->set_local_scale(entity.local_scale * 1.5);
-                animator := e->add_component(Spine_Animator);
+                e.set_local_position(entity.world_position);
+                e.set_local_scale(entity.local_scale * 1.5);
+                animator := e.add_component(Spine_Animator);
                 brightness := rng_range_float(ref dust_rng, 0.5, 1);
-                animator.instance.color_multiplier = {brightness, brightness, brightness, 0.25};
-                animator.instance->set_skeleton(dust_spine);
-                animator.instance->set_animation("running_dust_poof", false, 0, 1);
-                e->queue_for_destruction(0.5);
+                animator.color_multiplier = {brightness, brightness, brightness, 0.25};
+                animator.set_skeleton(dust_spine);
+                animator.set_animation("running_dust_poof", false, 0, 1);
+                e.queue_for_destruction(0.5);
             }
 
             running_state.speed = SPRINT_SPEED_BONUS;
@@ -1540,7 +1540,7 @@ Player :: class : Player_Base {
                 case .ZOMBIE: {
                     name_color_override = {1, 0, 0, 1};
                 }
-                case: {
+                default: {
                     name_color_override = {1, 1, 1, 1};
                 }
             }
@@ -1549,11 +1549,11 @@ Player :: class : Player_Base {
 
     ao_late_update :: method(dt: float) {
         if team == .SPECTATOR {
-            agent->set_navmesh_to_lock_to(null);
+            agent.set_navmesh_to_lock_to(null);
             camera.size = 8;
         }
         else {
-            agent->set_navmesh_to_lock_to(get_game_manager().main_navmesh);
+            agent.set_navmesh_to_lock_to(get_game_manager().main_navmesh);
             camera.size = 5;
         }
 
@@ -1601,12 +1601,12 @@ Player :: class : Player_Base {
                             switch g_game.current_task {
                                 case .FUEL_CANISTERS: {
                                     if is_player_carrying_item(this) {
-                                        foreach delivery: component_iterator(Fuel_Delivery_Point) {
+                                        for delivery: component_iterator(Fuel_Delivery_Point) {
                                             Tutorial_Arrow.draw(this, delivery.entity.world_position, tutorial_arrow_options);
                                         }
                                     }
                                     else {
-                                        foreach fuel: component_iterator(Fuel_Canister) {
+                                        for fuel: component_iterator(Fuel_Canister) {
                                             if !fuel.carried_item.is_picked_up {
                                                 Tutorial_Arrow.draw(this, fuel.entity.world_position, tutorial_arrow_options);
                                             }
@@ -1629,7 +1629,7 @@ Player :: class : Player_Base {
                                                     if carrier := battery.carried_item.carrier; carrier != null {
                                                         if carrier == this {
                                                             // I'm carrying - point to charger
-                                                            foreach charger: component_iterator(Battery_Charger) {
+                                                            for charger: component_iterator(Battery_Charger) {
                                                                 Tutorial_Arrow.draw(this, charger.entity.world_position, tutorial_arrow_options);
                                                             }
                                                         }
@@ -1655,7 +1655,7 @@ Player :: class : Player_Base {
                                                     if carrier := battery.carried_item.carrier; carrier != null {
                                                         if carrier == this {
                                                             // I'm carrying - point to trolley delivery
-                                                            foreach delivery: component_iterator(Battery_Delivery_Point) {
+                                                            for delivery: component_iterator(Battery_Delivery_Point) {
                                                                 Tutorial_Arrow.draw(this, delivery.entity.world_position, tutorial_arrow_options);
                                                             }
                                                         }
@@ -1686,7 +1686,7 @@ Player :: class : Player_Base {
                                 }
                                 case .TAKEOFF: {
                                     takeoff: Takeoff_Station;
-                                    foreach c: component_iterator(Takeoff_Station) {
+                                    for c: component_iterator(Takeoff_Station) {
                                         takeoff = c;
                                         break;
                                     }
@@ -1699,7 +1699,7 @@ Player :: class : Player_Base {
                         case .ZOMBIE: {
                             survivor_hint_options := Tutorial_Arrow.default_options();
                             survivor_hint_options.near = false;
-                            foreach other: component_iterator(Player) if other.team == .SURVIVOR && !other.health.is_dead {
+                            for other: component_iterator(Player) if other.team == .SURVIVOR && !other.health.is_dead {
                                 distance := length(other.entity.world_position - entity.world_position);
                                 alpha := linear_step(20, 0, distance);
                                 if alpha > 0 {
@@ -1740,7 +1740,7 @@ Player :: class : Player_Base {
             ts.valign = .CENTER;
 
             // "SPECTATING" pill at top-center, below the round timer
-            top_pill := UI.get_safe_screen_rect()->top_center_rect()->grow(24, 140, 24, 140)->offset(0, -120);
+            top_pill := UI.get_safe_screen_rect().top_center_rect().grow(24, 140, 24, 140).offset(0, -120);
             UI.quad(top_pill, white_sprite, {0, 0, 0, 0.55});
             ts.size = 26;
             ts.color = {0.8, 0.8, 0.8, 1};
@@ -1750,7 +1750,7 @@ Player :: class : Player_Base {
             UI.text(top_pill, ts, "SPECTATING");
 
             // Waiting message at bottom-center
-            bottom_rect := UI.get_safe_screen_rect()->bottom_center_rect()->grow(20, 260, 20, 260)->offset(0, 55);
+            bottom_rect := UI.get_safe_screen_rect().bottom_center_rect().grow(20, 260, 20, 260).offset(0, 55);
             UI.quad(bottom_rect, white_sprite, {0, 0, 0, 0.5});
             ts.size = 22;
             ts.color = {0.85, 0.85, 0.85, 1};
@@ -1765,20 +1765,20 @@ Player :: class : Player_Base {
                 if player_won && !victory_spine_ready {
                     victory_spine_ready = true;
                     victory_spine = Spine_Instance.create();
-                    victory_spine->set_skeleton(get_asset(Spine_Asset, "EXOW123_VictoryUI.spine"));
-                    victory_spine->set_animation("appear", false, 0);
+                    victory_spine.set_skeleton(get_asset(Spine_Asset, "EXOW123_VictoryUI.spine"));
+                    victory_spine.set_animation("appear", false, 0);
                 }
                 if victory_spine_ready {
-                    victory_spine->update(dt);
+                    victory_spine.update(dt);
                     UI.push_screen_draw_context();
                     defer UI.pop_draw_context();
                     UI.push_layer(600);
                     defer UI.pop_layer();
-                    UI.spine(UI.get_screen_rect()->center(), victory_spine, {1000, 1000}, 0.0);
+                    UI.spine(UI.get_screen_rect().center(), victory_spine, {1000, 1000}, 0.0);
                 }
             }
             else if victory_spine_ready {
-                victory_spine->destroy();
+                victory_spine.destroy();
                 victory_spine_ready = false;
             }
         }
@@ -1786,7 +1786,7 @@ Player :: class : Player_Base {
 
     ao_end :: method() {
         if victory_spine_ready {
-            victory_spine->destroy();
+            victory_spine.destroy();
             victory_spine_ready = false;
         }
     }
@@ -1832,25 +1832,25 @@ Food_Projectile :: class : Component {
 
     ao_update :: method(dt: float) {
         time_alive := get_time() - spawn_time;
-        sprite.entity->set_local_rotation(start_rotation + time_alive * 1440);
+        sprite.entity.set_local_rotation(start_rotation + time_alive * 1440);
 
         // Move projectile
-        entity->add_local_position(velocity * dt);
+        entity.add_local_position(velocity * dt);
 
         destroy_self := false;
 
         if !destroy_self {
-            foreach player: component_iterator(Player) {
+            for player: component_iterator(Player) {
                 if player.health.is_dead continue;
                 if #alive(owner) && owner == player.entity continue;
                 if player.team == team continue;
                 if player.team != .ZOMBIE continue;
                 if in_range(player.entity.world_position - entity.world_position, hit_radius) {
-                    player->take_damage(1);
+                    player.take_damage(1);
                     destroy_self = true;
                     {
                         sfx := SFX.default_sfx_desc();
-                        sfx->set_position(player.entity.world_position);
+                        sfx.set_position(player.entity.world_position);
                         sfx.volume = 0.75;
                         sfx.volume_perturb = 0.1;
                         sfx.speed_perturb = 0.2;
@@ -1868,8 +1868,8 @@ Food_Projectile :: class : Component {
         if !destroy_self {
             point: v2;
             // todo(josh): this crashes!!!:
-            // if Game_Manager.bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, &point) {
-            if get_game_manager().bullet_navmesh->try_find_closest_point_on_navmesh(entity.world_position, ref point, ref triangle_hint) {
+            // if Game_Manager.bullet_navmesh.try_find_closest_point_on_navmesh(entity.world_position, &point) {
+            if get_game_manager().bullet_navmesh.try_find_closest_point_on_navmesh(entity.world_position, ref point, ref triangle_hint) {
                 if !in_range(point - entity.world_position, 0.01) {
                     destroy_self = true;
                 }
@@ -1880,13 +1880,13 @@ Food_Projectile :: class : Component {
             hit_effect := get_asset(Prefab_Asset, "hit_effect.prefab");
             effect := Scene.instantiate(hit_effect);
             rng := rng_seed(entity.id);
-            effect.first_child->set_local_rotation(rng_range_float(ref rng, 0, 360));
-            effect->set_local_position(entity.world_position);
-            effect->queue_for_destruction(0.5);
-            entity->destroy();
+            effect.get_first_child().set_local_rotation(rng_range_float(ref rng, 0, 360));
+            effect.set_local_position(entity.world_position);
+            effect.queue_for_destruction(0.5);
+            entity.destroy();
 
             #static sfx := SFX.default_sfx_desc();
-            sfx->set_position(entity.world_position);
+            sfx.set_position(entity.world_position);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.1;
@@ -1900,7 +1900,7 @@ shoot_projectile :: proc(spawn_position: v2, velocity: v2, damage: int, lifetime
     #static prefab := get_asset(Prefab_Asset, "food_projectile.prefab");
     entity := Scene.instantiate(prefab, spawn_position);
 
-    projectile := entity->get_component(Food_Projectile);
+    projectile := entity.get_component(Food_Projectile);
     projectile.velocity = velocity;
     projectile.lifetime = lifetime;
     projectile.damage = damage;
@@ -1925,7 +1925,7 @@ Takeoff_Station :: class : Component {
     interactable: Interactable @ao_serialize;
 
     ao_start :: method() {
-        interactable->set_listener(this);
+        interactable.set_listener(this);
     }
 
     can_use :: method(player: Player) -> bool {
@@ -1934,13 +1934,13 @@ Takeoff_Station :: class : Component {
 
     on_interact :: method(player: Player) {
         player.is_on_boat = true;
-        player->turn_into_spectator();
-        player->add_notification("You escaped!");
+        player.turn_into_spectator();
+        player.add_notification("You escaped!");
 
         // Notify all players
-        foreach p: component_iterator(Player) {
+        for p: component_iterator(Player) {
             if p != player {
-                p->add_notification(format_string("A survivor escaped!", {}));
+                p.add_notification(format_string("A survivor escaped!", {}));
             }
         }
     }
@@ -1988,7 +1988,7 @@ Carried_Item :: class : Component {
                 vector := normalize_vector_to_radius(entity.local_position - carrier.entity.local_position, 1);
                 target_position := carrier.entity.local_position + vector;
                 new_position := lerp(entity.local_position, target_position, 0.25);
-                entity->set_local_position(new_position);
+                entity.set_local_position(new_position);
             }
         }
 
@@ -1996,22 +1996,22 @@ Carried_Item :: class : Component {
         hover_position := v2{0, 0};
         new_shadow_scale := shadow_scale;
         if is_picked_up {
-            shadow_sprite.enabled = true;
+            shadow_sprite.set_enabled(true);
             t := PI * get_time();
             hover_position.y = 0.4 + sin(t) * 0.2;
             new_shadow_scale = shadow_scale / (1.0 + hover_position.y);
         }
         else {
-            shadow_sprite.enabled = false;
+            shadow_sprite.set_enabled(false);
         }
-        item_sprite.entity->set_local_position(hover_position);
+        item_sprite.entity.set_local_position(hover_position);
         item_sprite.depth_offset = -hover_position.y;
-        shadow_sprite.entity->set_local_scale(new_shadow_scale);
+        shadow_sprite.entity.set_local_scale(new_shadow_scale);
     }
 }
 
 is_player_carrying_item :: proc(player: Player) -> bool {
-    foreach item: component_iterator(Carried_Item) {
+    for item: component_iterator(Carried_Item) {
         if item.carrier == player {
             return true;
         }
@@ -2020,7 +2020,7 @@ is_player_carrying_item :: proc(player: Player) -> bool {
 }
 
 get_player_carried_item :: proc(player: Player) -> Carried_Item {
-    foreach item: component_iterator(Carried_Item) {
+    for item: component_iterator(Carried_Item) {
         if item.carrier == player {
             return item;
         }
@@ -2032,11 +2032,11 @@ pickup_carried_item :: proc(using item: Carried_Item, player: Player) {
     is_picked_up = true;
     carrier = player;
     if pickup_notification.count > 0 {
-        player->add_notification(pickup_notification);
+        player.add_notification(pickup_notification);
     }
     if pickup_sfx.count > 0 {
         sfx := SFX.default_sfx_desc();
-        sfx->set_position(item.entity.world_position);
+        sfx.set_position(item.entity.world_position);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
         SFX.play(get_asset(SFX_Asset, pickup_sfx), sfx);
@@ -2044,12 +2044,12 @@ pickup_carried_item :: proc(using item: Carried_Item, player: Player) {
 }
 
 drop_carried_item :: proc(using item: Carried_Item, position: v2) {
-    entity->set_local_position(position);
+    entity.set_local_position(position);
     is_picked_up = false;
     carrier = null;
     if drop_sfx.count > 0 {
         sfx := SFX.default_sfx_desc();
-        sfx->set_position(item.entity.world_position);
+        sfx.set_position(item.entity.world_position);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
         SFX.play(get_asset(SFX_Asset, drop_sfx), sfx);
@@ -2100,7 +2100,7 @@ Fuel_Delivery_Point :: class : Interactable {
         item := get_player_carried_item(player);
         if item == null return false;
 
-        canister := item.entity->get_component(Fuel_Canister);
+        canister := item.entity.get_component(Fuel_Canister);
         return canister != null;
     }
 
@@ -2108,13 +2108,13 @@ Fuel_Delivery_Point :: class : Interactable {
         item := get_player_carried_item(player);
         if item == null return;
 
-        canister := item.entity->get_component(Fuel_Canister);
+        canister := item.entity.get_component(Fuel_Canister);
         if canister == null return;
 
         g_game.fuel_deposited += 1;
         {
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(entity.world_position);
+            sfx.set_position(entity.world_position);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
@@ -2123,26 +2123,26 @@ Fuel_Delivery_Point :: class : Interactable {
         // Show fuel on trolley
         if trolley := get_trolley(); trolley != null {
             switch g_game.fuel_deposited {
-                case 1: trolley.fuel1_sprite.entity->set_local_enabled(true);
-                case 2: trolley.fuel2_sprite.entity->set_local_enabled(true);
-                case 3: trolley.fuel3_sprite.entity->set_local_enabled(true);
+                case 1: trolley.fuel1_sprite.entity.set_local_enabled(true);
+                case 2: trolley.fuel2_sprite.entity.set_local_enabled(true);
+                case 3: trolley.fuel3_sprite.entity.set_local_enabled(true);
             }
         }
 
         // Check if task is complete
         if g_game.fuel_deposited >= REQUIRED_FUEL_CANISTERS {
-            foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-                p->add_notification("All fuel loaded on trolley!");
+            for p: component_iterator(Player) if p.team == .SURVIVOR {
+                p.add_notification("All fuel loaded on trolley!");
             }
             complete_current_task();
         }
         else {
-            foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-                p->add_notification(format_string("Fuel loaded! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
+            for p: component_iterator(Player) if p.team == .SURVIVOR {
+                p.add_notification(format_string("Fuel loaded! (% / %)", {g_game.fuel_deposited, REQUIRED_FUEL_CANISTERS}));
             }
         }
 
-        canister.entity->destroy();
+        canister.entity.destroy();
     }
 }
 
@@ -2181,7 +2181,7 @@ Boat_Battery :: class : Interactable {
 
         if state == .CHARGING {
             // Float towards charger
-            entity->lerp_local_position(charger.entity.world_position + v2{0, 0.4}, 15 * dt);
+            entity.lerp_local_position(charger.entity.world_position + v2{0, 0.4}, 15 * dt);
 
             // Charging progress
             charge_t += dt / BATTERY_CHARGE_TIME;
@@ -2194,8 +2194,8 @@ Boat_Battery :: class : Interactable {
                     sfx := SFX.default_sfx_desc();
                     SFX.play(get_asset(SFX_Asset, "sfx/beacon_restore.wav"), sfx);
                 }
-                foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-                    player->add_notification("Battery fully charged! Bring it to the trolley!");
+                for player: component_iterator(Player) if player.team == .SURVIVOR {
+                    player.add_notification("Battery fully charged! Bring it to the trolley!");
                 }
             }
         }
@@ -2244,8 +2244,8 @@ Boat_Battery :: class : Interactable {
             carried_item.carrier = null;
         }
 
-        foreach player: component_iterator(Player) if player.team == .SURVIVOR {
-            player->add_notification("Battery charging... Stay alive!");
+        for player: component_iterator(Player) if player.team == .SURVIVOR {
+            player.add_notification("Battery charging... Stay alive!");
         }
     }
 }
@@ -2266,7 +2266,7 @@ Battery_Charger :: class : Interactable {
         item := get_player_carried_item(player);
         if item == null return false;
 
-        battery := item.entity->get_component(Boat_Battery);
+        battery := item.entity.get_component(Boat_Battery);
         if battery == null return false;
 
         return battery.state == .UNCHARGED;
@@ -2276,22 +2276,22 @@ Battery_Charger :: class : Interactable {
         item := get_player_carried_item(player);
         if item == null return;
 
-        battery := item.entity->get_component(Boat_Battery);
+        battery := item.entity.get_component(Boat_Battery);
         if battery == null return;
 
         is_charging = true;
-        battery->start_charging(this);
+        battery.start_charging(this);
 
         {
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(entity.world_position);
+            sfx.set_position(entity.world_position);
             SFX.play(get_asset(SFX_Asset, "sfx/align_takeoff.wav"), sfx); // TODO: charging sound
         }
     }
 }
 
 get_boat_battery :: proc() -> Boat_Battery {
-    foreach battery: component_iterator(Boat_Battery) {
+    for battery: component_iterator(Boat_Battery) {
         return battery;
     }
     return null;
@@ -2310,7 +2310,7 @@ Battery_Delivery_Point :: class : Interactable {
         item := get_player_carried_item(player);
         if item == null return false;
 
-        battery := item.entity->get_component(Boat_Battery);
+        battery := item.entity.get_component(Boat_Battery);
         if battery == null return false;
 
         return battery.state == .CHARGED;
@@ -2320,29 +2320,29 @@ Battery_Delivery_Point :: class : Interactable {
         item := get_player_carried_item(player);
         if item == null return;
 
-        battery := item.entity->get_component(Boat_Battery);
+        battery := item.entity.get_component(Boat_Battery);
         if battery == null return;
 
         g_game.battery_delivered = true;
         {
             sfx := SFX.default_sfx_desc();
-            sfx->set_position(entity.world_position);
+            sfx.set_position(entity.world_position);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
         }
 
-        foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-            p->add_notification("Battery loaded on trolley!");
+        for p: component_iterator(Player) if p.team == .SURVIVOR {
+            p.add_notification("Battery loaded on trolley!");
         }
 
         // Show battery on trolley
         if trolley := get_trolley(); trolley != null {
-            trolley.battery_sprite.entity->set_local_enabled(true);
+            trolley.battery_sprite.entity.set_local_enabled(true);
         }
 
         complete_current_task();
-        battery.entity->destroy();
+        battery.entity.destroy();
     }
 }
 
@@ -2372,8 +2372,8 @@ Trolley :: class : Component {
 
     ao_start :: method() {
         g_trolley = this;
-        agent = entity->get_component(Movement_Agent);
-        agent->set_navmesh_to_lock_to(get_game_manager().trolley_navmesh);
+        agent = entity.get_component(Movement_Agent);
+        agent.set_navmesh_to_lock_to(get_game_manager().trolley_navmesh);
         start_position = entity.world_position;
         reset_trolley(this);
     }
@@ -2386,7 +2386,7 @@ Trolley :: class : Component {
         // Check if any survivor or zombie is in range
         survivor_nearby := false;
         zombie_nearby := false;
-        foreach player: component_iterator(Player) {
+        for player: component_iterator(Player) {
             if player.health.is_dead continue;
             switch player.team {
                 case .SURVIVOR: {
@@ -2407,7 +2407,7 @@ Trolley :: class : Component {
         if is_being_pushed {
             // Move toward destination using Movement_Agent pathfinding
             if destination != null && #alive(destination) {
-                result := agent->set_path_target(destination.world_position, 60);
+                result := agent.set_path_target(destination.world_position, 60);
 
                 // Flip sprite based on movement direction
                 if result.success && sprite != null {
@@ -2418,7 +2418,7 @@ Trolley :: class : Component {
                     else if result.move_direction.x < -0.01 {
                         new_scale.x = -abs(new_scale.x);
                     }
-                    sprite.entity->set_local_scale(new_scale);
+                    sprite.entity.set_local_scale(new_scale);
                 }
 
                 // Check if reached destination
@@ -2453,7 +2453,7 @@ Trolley :: class : Component {
         else {
             // Check why not pushing
             zombie_nearby := false;
-            foreach player: component_iterator(Player) {
+            for player: component_iterator(Player) {
                 if player.team != .ZOMBIE continue;
                 if in_range(player.entity.world_position - entity.world_position, TROLLEY_ZOMBIE_RANGE) {
                     zombie_nearby = true;
@@ -2476,14 +2476,14 @@ Trolley :: class : Component {
         has_reached_destination = true;
 
         // Hide the trolley sprite and all cargo sprites
-        sprite.entity->set_local_enabled(false);
-        battery_sprite.entity->set_local_enabled(false);
-        fuel1_sprite.entity->set_local_enabled(false);
-        fuel2_sprite.entity->set_local_enabled(false);
-        fuel3_sprite.entity->set_local_enabled(false);
+        sprite.entity.set_local_enabled(false);
+        battery_sprite.entity.set_local_enabled(false);
+        fuel1_sprite.entity.set_local_enabled(false);
+        fuel2_sprite.entity.set_local_enabled(false);
+        fuel3_sprite.entity.set_local_enabled(false);
 
-        foreach p: component_iterator(Player) if p.team == .SURVIVOR {
-            p->add_notification("Supplies delivered! Get to the boat!");
+        for p: component_iterator(Player) if p.team == .SURVIVOR {
+            p.add_notification("Supplies delivered! Get to the boat!");
         }
 
         complete_current_task();
@@ -2491,18 +2491,18 @@ Trolley :: class : Component {
 }
 
 reset_trolley :: proc(using trolley: Trolley) {
-    entity->set_local_position(start_position);
+    entity.set_local_position(start_position);
     is_being_pushed = false;
     has_reached_destination = false;
 
     // Re-enable trolley sprite
-    sprite.entity->set_local_enabled(true);
+    sprite.entity.set_local_enabled(true);
 
     // Hide all cargo sprites initially
-    battery_sprite.entity->set_local_enabled(false);
-    fuel1_sprite.entity->set_local_enabled(false);
-    fuel2_sprite.entity->set_local_enabled(false);
-    fuel3_sprite.entity->set_local_enabled(false);
+    battery_sprite.entity.set_local_enabled(false);
+    fuel1_sprite.entity.set_local_enabled(false);
+    fuel2_sprite.entity.set_local_enabled(false);
+    fuel3_sprite.entity.set_local_enabled(false);
 }
 
 get_trolley :: proc() -> Trolley {
@@ -2521,6 +2521,6 @@ is_trolley_being_pushed :: proc() -> bool {
 //
 
 player_set_trigger :: proc(player: Player, trigger: string) {
-    player.animator.instance.state_machine->set_trigger(trigger);
+    player.animator.state_machine.set_trigger(trigger);
 }
 

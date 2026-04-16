@@ -20,9 +20,9 @@
       "Skill(save)",
       "Skill(spine)",
       "Skill(syntax)",
-      "Skill(ui)",
-      "Skill(ui-scroll-grid)",
-      "Skill(ui-specific-examples)",
+      "Skill(uik)",
+      "Skill(uik-cards)",
+      "Skill(ui-world-and-overlays)",
       "Skill(game-design)",
       "mcp__allout__asset_local_search",
       "mcp__allout__spine_rig_info",
@@ -34,4 +34,27 @@
   "enabledMcpjsonServers": [
     "allout"
   ]
+,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block_asset_manifest_read.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block_scene_write.py\""
+          }
+        ]
+      }
+    ]
+  }
 }

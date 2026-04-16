@@ -3,11 +3,9 @@ name: save
 description: "For persisting player data across joins if required  "
 ---
 # CSL Save System
-
 Per-player key-value store that persists across sessions.
 
 ## Save API Reference
-
 ```csl
 Save :: struct {
     set_string :: proc(player: Player, key: string, value: string);
@@ -19,7 +17,7 @@ Save :: struct {
     set_f64    :: proc(player: Player, key: string, value: f64);
     get_f64    :: proc(player: Player, key: string, default: f64) -> f64;
 
-    // For complex data — see the json skill
+    // For complex data — see the json skill (and make sure you use @ao_serialize!)
     set_json     :: proc(player: Player, key: string, value: ref $T);
     try_get_json :: proc(player: Player, key: string, out: ref $T) -> bool;
 
@@ -28,7 +26,6 @@ Save :: struct {
 ```
 
 ## Basic Usage
-
 Load in `ao_start`, save on change:
 
 ```csl
@@ -49,7 +46,6 @@ Save.set_f64(player, "music_volume", 0.8);
 ```
 
 ## Boolean Storage
-
 No native bool save — store as int:
 
 ```csl
@@ -58,37 +54,21 @@ tutorial_complete = Save.get_int(player, "tutorial_complete", 0) != 0;
 ```
 
 ## Save Versioning
-
-Use a version key to handle migrations when save format changes:
+Store a `"version"` key. In `ao_start`, load it and run migrations in order (`if version < N`), then save the new version. Use `Save.delete_key` to clean up old keys during migration:
 
 ```csl
 ao_start :: method() {
     save_version := Save.get_int(this, "version", 0);
-
     if save_version < 5 {
         save_version = 5;
         Save.delete_key(this, "xp");
-        Save.delete_key(this, "level");
     }
-
-    if save_version < 6 {
-        save_version = 6;
-        hp := Save.get_int(this, "hp", 0);
-        Save.delete_key(this, "hp");
-        Save.set_f64(this, "hp", hp.(f64));
-    }
-
     Save.set_int(this, "version", save_version);
-
-    // Load data after migration
     current_xp = Save.get_int(this, "xp", 0);
-    current_level = Save.get_int(this, "level", 1);
-    hp = Save.get_f64(this, "hp", 100);
 }
 ```
 
 ## Game-Level Save API
-
 For data shared across all players (global state, not per-player):
 
 ```csl
@@ -107,7 +87,7 @@ Save_Game_Int    :: struct { key: string; value: s64; }
 ```
 
 ```csl
-Save.set_game_string("world_record_holder", player->get_username());
+Save.set_game_string("world_record_holder", player.get_username());
 difficulty := Save.get_game_string("server_difficulty", "normal");
 
 // Atomically increment — safe for concurrent updates from multiple players
@@ -117,15 +97,12 @@ total_games := Save.get_game_int("total_games_played", 0);
 ```
 
 ### Iterating All Game Data
-
 ```csl
 all_strings := Save.get_all_game_strings();
 for entry: all_strings {
     log_info("Key: %, Value: %", {entry.key, entry.value});
 }
 ```
-
-### Game-Level vs Player-Level
 
 | Use Case | API |
 |----------|-----|

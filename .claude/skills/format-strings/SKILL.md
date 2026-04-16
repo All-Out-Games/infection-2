@@ -1,9 +1,7 @@
 ---
 name: format-strings
-description: "Only read if you're struggling with debugging weird string formatting"
+description: Only read if you're struggling with debugging weird string formatting
 ---
-# String Formatting
-
 `format_string()` uses `%` as a placeholder. Arguments are passed in an array.
 
 ```csl
@@ -29,11 +27,9 @@ format_string("%0%%", {hp}); // "67%"
 
 Without `%0`, writing `%%%` would parse as `%%` (literal %) then `%` (argument), producing `%67`.
 
-## Format_Int and Format_Float
-
 ```csl
-format_string("%", {format_int(42, leading_zeroes=5)});        // "00042"
-format_string("%", {format_float(3.14159, decimals=2)});       // "3.14"
+format_string("%", {format_int(42, leading_zeroes=5)}); // "00042"
+format_string("%", {format_float(3.14159, decimals=2)}); // "3.14"
 format_string("%", {format_float(5.3, leading_zeroes=2, decimals=1)}); // "05.3"
 ```
 
@@ -48,13 +44,3 @@ format_string("%", {format_float(5.3, leading_zeroes=2, decimals=1)}); // "05.3"
 format_string("%3, %2, %1", {"a", "b", "c"}); // "c, b, a"
 format_string("%1 said hello. %1 is friendly.", {name}); // reuse without repeating arg
 ```
-
-## Error Handling
-
-Extra arguments are appended with a warning:
-
-```csl
-format_string("%", {123, 456}); // "123 %{ADDITIONAL ARG(S): (456)}"
-```
-
-Too few arguments leave `%` as literal text (not an error). This allows strings containing `%` to pass through safely.
