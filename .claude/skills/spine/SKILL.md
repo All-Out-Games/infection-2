@@ -1,6 +1,6 @@
 ---
 name: spine
-description: You must load this tool when working with Spine animators or player animations, it provides the Spine API surface you must adhere to. 
+description: You must load this tool when working with Spine animators or player animations, it provides the Spine API surface you must adhere to.
 ---
 # Spine Animation System
 
@@ -15,10 +15,11 @@ entity := Scene.create_entity();
 animator := entity.add_component(Spine_Animator);
 animator.awaken();  // REQUIRED before calling animation methods
 animator.set_skeleton(get_asset(Spine_Asset, "anims/rig.spine"));
-animator.set_skin("call spine_rig_info to know what skin you MUST use"); // REQUIRED or spine will be invisible 
+animator.set_skin("call spine_rig_info to know what skin you MUST use"); // REQUIRED or spine will be invisible
 animator.refresh_skins(); // REQUIRED after any skin change
 animator.set_animation("Idle", true, 0); // name, loop, track, speed = 1
-animator.scale = v2{0.9, 0.9}; // reference the worldSize returned by the spine_rig_info tool and compute the best value here given the world/player/use case. 
+animator.scale = v2{0.9, 0.9}; // reference the worldSize returned by the spine_rig_info tool and compute the best value here given the world/player/use case.
+```
 
 **You MUST call `awaken()` before calling any animation methods** if your component and the Spine_Animator start at the same time on the same entity.
 
@@ -51,7 +52,7 @@ Available triggers: `death`, `RESET`, `flinch`, `dodge_roll`, `attack`, `punch`
 Available bools: `ghost_form`, `electrocute`, `sleep`
 
 ## Non-Player State Machine
-For complex non-player spines, you can create your own custom state machine for those spines: 
+For complex non-player spines, you can create your own custom state machine for those spines. A `State_Machine` can also be attached to a standalone `Spine_Instance` via `instance.set_state_machine(sm, true)`, this is useful, like displaying a spine instance in UI. When created this way, you will need to Awake & Update the state machine manually.
 
 ```csl
 Enemy_NPC :: class : Component {
@@ -63,14 +64,18 @@ Enemy_NPC :: class : Component {
 
         // Variable types: `.BOOL`, `.TRIGGER`, `.INT`, `.FLOAT`. Numeric conditions accept a kind: `.GREATER`, `.GREATER_EQUAL`, `.LESS`, `.LESS_EQUAL`, `.EQUAL`.
         is_moving := state_machine.create_variable("is_moving", .BOOL);
-        attack_trigger := state_machine.create_variable("attack", .TRIGGER);  // auto-resets after triggering
+        attack_trigger := state_machine.create_variable("attack", .TRIGGER); // auto-resets after triggering
         die_trigger := state_machine.create_variable("die", .TRIGGER);
 
-        // Layer maps to a Spine track
+        // A layer maps 1:1 to a Spine track. Multiple layers run concurrently,
+        // which is how you get additive anims like attack-while-running on track 1.
         layer := state_machine.create_layer("main", 0);
 
-        // States -- name must match Spine animation
-        // create_state(name, loop, duration = 0) -- duration pulled from spine rig
+        // States -- name must match the Spine animation name EXACTLY.
+        // create_state(name, loop, duration) -- duration pulled from spine rig if duration parameter is 0
+        // if setting duration, make sure to update this if / when needed.
+
+        // Clearing a track: pass "__CLEAR_TRACK__" as the state name.
         idle_state := layer.create_state("idle", true);
         walk_state := layer.create_state("walk", true);
         attack_state := layer.create_state("attack", false);   // one-shot
@@ -108,11 +113,27 @@ Enemy_NPC :: class : Component {
 }
 ```
 
+### One-shot anim with return-to-Idle pattern
+```csl
+var   := sm.create_variable("my_action", .TRIGGER);
+state := layer.create_state("my_action_anim", false, 1.2);
+layer.create_global_transition(state, false).create_trigger_condition(var);
+layer.create_transition(state, idle_state, true); // require_state_complete=true returns to idle when duration elapses
+```
+
+### Splitting large setups
+Many `create_state` / `create_transition` calls can exhaust the VM's register budget. Split setup across multiple procs that share `sm`, `layer`, and `idle_state` if required.
+
+### Modifying existing anims — checklist
+- If a spine anim has been **renamed**, update every `create_state("…")` string that references it (exact match, case-sensitive).
+- If a spine anim has **changed length**, update the `duration` argument on its `create_state(…)` (unless it uses 0)
+- If you **rename a trigger/bool**, update both the `create_variable(…)` name and every `set_trigger` / `set_bool` call site.
+
 ## Skins
-You must use the spine_rig_info tool before using any spine to know what skin(s) to select, plus scaling and animations to use. 
+You must use the spine_rig_info tool before using any spine to know what skin(s) to select, plus scaling and animations to use.
 
 ```csl
-// Combine multiple skins 
+// Combine multiple skins
 animator.disable_all_skins();
 animator.enable_skin("base/crewchsia"); // (required when using the streamed character skeleton)
 animator.enable_skin("body/alien");
@@ -134,17 +155,17 @@ animator.state_machine.set_trigger("jump");
 ```
 
 ## Color
-// All spines that can take damage or you want to draw attention to should color_multiplier to apply effects (red flash, glow, etc...)
+All spines that can take damage or you want to draw attention to should color_multiplier to apply effects (red flash, glow, etc...)
 
 ```csl
-// Tint/flash (e.g. damage flash, transparency)
+// Tint/flash like damage flash, transparency
 animator.color_multiplier = {brightness, brightness, brightness, 0.25};
 ```
 
 ## Spine_Instance (Standalone for UI)
 **You MUST call `destroy()` on Spine_Instance when done to avoid leaks.**
 
-If an API has `create()`, it MUST have a matching `destroy()`. Exception: APIs with a `transfer_ownership` parameter -- passing `true` transfers destroy responsibility to the receiver (e.g. `instance.set_state_machine(sm, true)`).
+If an API has `create()`, it MUST have a matching `destroy()`. Exception: APIs with a `transfer_ownership` parameter -- passing `true` transfers destroy responsibility to the receiver like `instance.set_state_machine(sm, true)`.
 
 ```csl
 Popup :: class {
@@ -169,9 +190,7 @@ Popup :: class {
         UI.push_screen_draw_context();
         defer UI.pop_draw_context();
         rect := UI.get_safe_screen_rect();
-        // Spine assets authored in world space are ~1-2 units tall.
-        // In screen space that's 1-2 pixels, so scale up for UI.
-        // In world space, {1,1} is fine.
+        // Spine assets authored in world space are ~1-2 units tall. In screen space that's 1-2 pixels, so scale up for UI. In world space, {1,1} is fine.
         scale := v2{100, 100};
         UI.spine(rect.center(), spine_instance, scale, 0.0);
     }
@@ -203,4 +222,3 @@ Color_Replace_Color :: enum {
     PURPLE3; RED2; WHITE1;
 }
 ```
-

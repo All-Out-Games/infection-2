@@ -1,6 +1,6 @@
 ---
 name: inventory
-description: Any item or inventory system in your game MUST use the API described in this skill. Do not create custom inventory/item systems. 
+description: Any item or inventory system in your game MUST use the API described in this skill. Do not create custom inventory/item systems.
 ---
 1. **Item_Definition** - Template defining what an item IS (name, icon, stack size, custom properties)
 2. **Item_Instance** - An actual item in the world/inventory (has a count, can be moved)
@@ -245,7 +245,7 @@ Inventory_Draw_Options :: struct {
 ### Draw_Hotbar_Result
 
 > **Important:** `selected_item` and `dropped_item` may be non-null yet reference
-> items that were destroyed during the same frame (e.g. consumed on use, merged
+> items that were destroyed during the same frame like consumed on use or merged
 > into a stack). A `!= null` check alone is **not** sufficient — always guard with
 > `#alive()` before calling methods on them.
 

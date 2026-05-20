@@ -1,6 +1,6 @@
 ---
 name: game-design
-description: Must be used whenever the user requests a large game developed from scratch. It should not be used for discrete requests to build systems or small changes. 
+description: Must be used whenever the user requests a large game developed from scratch. It should not be used for discrete requests to build systems or small changes.
 ---
 # Game Design Workflow
 
@@ -10,9 +10,9 @@ This will be a production-grade, polished game. It will not be done in one shot.
 
 ## Core Rules
 1. Inspect the request and the existing project before planning. Reuse what exists.
-2. Every game is multiplayer. Design for many concurrent players from the start. Use ownership patterns (plot-based, instance-based, per-player state on the player class) so players don't collide on shared world state. (e.g. if you're asked to make a gardening game, plan for at least 6 duplicate garden plot with ownership assigned to players on join)
+2. Every game is multiplayer. Design for many concurrent players from the start. Use ownership patterns (plot-based, instance-based, per-player state on the player class) so players don't collide on shared world state. like if you're asked to make a gardening game you must have at least 4 duplicate garden plots with ownership assigned to players on join or the game will be unplayable. 
 3. Search for assets using the All Out MCP tools and world-building skill. Prefer animated Spine assets if appropriate.
-4. Use the All Out engine systems/skills like Inventory, Abilities, Economy Currencies, instead of creating your own custom systems. 
+4. Use the All Out engine systems/skills like Inventory, Abilities, Economy Currencies, instead of creating your own custom systems.
 5. After any script change, compile with the All Out MCP compile tool.
 
 ---
@@ -102,12 +102,12 @@ Work through the `tasks` array in order:
 3. Fix errors before moving on
 4. Mark the task done in `game_plan.json`
 
-Use the appropriate engine skills as you go and constantly reference AGENTS.md. 
+Use the appropriate engine skills as you go and constantly reference AGENTS.md.
 
 ### Step 3: Gate Test
-You must have a subagent write a gate_test for every task using the `testing` skill. 
+You must have a subagent write a gate_test for every task using the `testing` skill.
 
-Gate subagent prompt: 
+Gate subagent prompt:
 ```
 Write the gate test for the "{epic name}" script epic.
 
@@ -213,7 +213,7 @@ After all epics are done:
       "status": "pending",
       "tasks": [
         { "name": "Register currency with Economy system for persistence", "done": false },
-        { "name": "Reset currency on logging in (call economy_delete_save_data) for round based games", "done": false },
+        { "name": "Reset currency on logging in (call Economy.delete_save_data) for round based games", "done": false },
         { "name": "Scale enemy count and stats between waves", "done": false }
       ],
       "gate_test": "test_gate_economy_scaling",

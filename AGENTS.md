@@ -1,7 +1,7 @@
 You will be developing a multiplayer game in a custom scripting language (.csl)
 
 ## Networking
-> **NEVER wrap gameplay logic in `Game.is_server()`.** The engine uses client-side prediction with automatic server reconciliation. Gameplay code **must** run on both client and server for smooth behavior.
+> **NEVER USE`Game.is_server()`.** The engine uses client-side prediction with automatic server reconciliation. Gameplay code **must** run on both client and server for smooth behavior.
 
 - All gameplay state is automatically synced. You do not need to write RPCs or manually replicate state.
 - The client runs the same gameplay code as the server. The server's authoritative result is reconciled automatically — you get correctness **and** responsiveness for free, but **only if the code runs on both sides**.
@@ -55,9 +55,10 @@ import "core:ao"
 import "ui" // add folder imports here if needed
 ```
 
-Find assets with the MCP: 
-asset_local_search (query: "tree")
+Find assets with the MCP asset_local_search (query: "tree")
 When referencing assets use <path>.<ext>, omit /res from the path. 
+
+Do not use $AO/ui/kit/Icons/sparks/spark_small.png
 
 ### Asset Types
 ```csl
@@ -67,7 +68,7 @@ spine := get_asset(Spine_Asset, "anims/dog/dog.spine");
 ```
 
 ## Entities
-Place entities with the mcp tools, except for dynamically spawned entities:
+Runtime spawned entities:
 ```csl
 e := Scene.create_entity();
 e.set_local_position({10, 20});
@@ -91,15 +92,14 @@ for entity: entity_iterator() {
 visit :: proc(entity: Entity) {
     // logic
 
-    current := entity.first_child;
+    current := entity.get_first_child();
     while current != null {
         visit(current);
-        current = current.next_sibling;
+        current = current.get_next_sibling();
     }
 }
 
 ## Components
-### Out-of-the-box components
 #### Sprite_Renderer
 ```csl
 sprite := entity.get_component(Sprite_Renderer);
@@ -110,22 +110,21 @@ sprite.layer = -5;
 
 #### Prefab_Asset
 ```csl
-prefab := get_asset(Prefab_Asset, "MyPrefab.prefab");
-entity := instantiate(prefab);
+p := get_asset(Prefab_Asset, "MyPrefab.prefab");
+entity := instantiate(p);
 ```
 
 #### Spine_Animator
-Reference the Spine skill. If you are asked to make an NPC, shop vendor, or other character, you must use the $AO/streamed_character rig which has a ton of skins and animations! If adding through code, note that all streamed_characters will need at least the base/crewchsia skin added. 
+Reference the Spine skill. If you are asked to make an NPC, shop vendor, or other character, you must use the $AO/streamed_character rig which has useful skins and animations! All streamed_characters need the base/crewchsia skin. 
 
 ### Creating Custom Components
-> Make new components in dedicated files. You do not need to import them unless they're in a separate folder. 
+> One file per component. You do not need to import them unless they're in a separate folder. 
 
-Can override these lifecycle methods:
-
-- ao_start
-- ao_update
-- ao_late_update
-- ao_end - when destroyed
+Lifecycle methods
+ao_start
+ao_update
+ao_late_update
+ao_end - when destroyed
 
 ```csl
 // orbiter.csl
@@ -193,9 +192,8 @@ hp := 67;
 // %0 as alias for % when you want either multiple args next to eachother ("%0%") or an arg then a percent literal ("%0%%")
 format_string("health: %0%%", {hp}); // health: 67%
 
-// Use Format_Float wrapper struct for decimal rounding
-value := 3.14159;
-format_string("pi: %", {format_float(value, decimals=2)}); // "pi: 3.14"
+// Decimal rounding
+format_string("pi: %", {format_float(PI, decimals=2)}); // "pi: 3.14"
 ```
 
 my_str.count gets length 
@@ -235,25 +233,24 @@ COST :: 50;
 if Economy.can_withdraw_currency(player, "Coins", COST) {
     Economy.withdraw_currency(player, "Coins", COST);
 }
-
+```
 Any time players receive item or currencies you MUST play a sick animation of the item/coins going up or lerping over and have tactile sfx. 
 
-Round based games should reset economy on ao_start with economy_delete_save_data()
-```
+Round based games should reset economy on ao_start with Economy.delete_save_data
 
 ## UI
-- Reference the `UIK` skill if the user's request requires game UI. Do not mix UIK and UI APIs. 
+- Reference the `UIK` skill for any game UI. Do not mix UIK and UI APIs. 
 
 ## Inventory & Items
 - When players acquire items (e.g. from a shop or interacting with the world), you MUST use the All Out inventory system documented in the `inventory` skill.
-- For placing items in the world use the `inventory-droppable-items` skill. 
+- For placing items in the world use the `inventory-placeable-items` skill. 
 
 ## Math Functions
 `sin`, `cos`, `pow`, `sqrt`, `lerp`, `clamp`, `abs`, `min`, `max`, `length`, `length_squared`, `normalize` there are no other math functions. 
 
 ### Player_Base Reference
-- p.is_local_or_server() -> bool  // true on the local client and on the server; must be used for UI. 
-- p.is_local() -> bool            // true only on the local client; use for purely cosmetic effects (not UI)
+- p.is_local_or_server() -> bool // true on the local client and on the server; must be used for UI. 
+- p.is_local() -> bool  // true only on the local client; use for purely cosmetic effects (not UI)
 - p.get_username()
 - p.get_user_id() -> string
 - p.avatar_color -> Color_Replace_Color 
@@ -262,13 +259,24 @@ Round based games should reset economy on ao_start with economy_delete_save_data
 - p.add_invisibility_reason(reason: string)
 
 ## Best Practices
-- CSL does not have closures, instead use `userdata: Object` passed to callbacks. Class instances can be stored in an `Object` variable and cast back to its original type.
-- Do not write your own input. Movement is handled by default. If you need to consume it, use player.agent.inputs_this_frame and ability buttons. 
-- When unsure about an API signature, find the appropriate skill. If no results are found, you may grep api_references/core/ao/[core/generated].csl_engine which is a massive file with ALL engine APIs. 
+- Do not write your own input. Movement is handled by default (speed = 300). If you need to consume it use player.agent.inputs_this_frame and ability buttons.
+- When unsure about an API signature find the appropriate skill. If no results are found you may grep api_references/core/ao/[core/generated].csl_engine.
+- You MUST fundamentally design your games to account for multiple players. No global tycoons, everything must either be plot based (tycoons) or round based (shooters)
+- Brainrots refer to a special class of character you can find by using the get_remote_assets_that_work_well_with tool with catalogId 05604152b758f509 (these are usually collection based games where brainrots obtained in a user defined way generate money over time you can collect by walking up to them when placed in your base)
+- All games with plots must have a UIK button to teleport to their own plot.
+- Only use the Notifyer API for critical messages there is no other way to convey. Skip notifications if there's a more natural way to convey something.  
+- For new-player onboarding, use world-space objective arrows over tutorial text. Reference the `world-space-ui` skill and use `Tutorial_Arrow.default_options()` + `Tutorial_Arrow.draw(player, target_position, options)`.
+- Any games involving weapons MUST clone https://github.com/All-Out-Games/reusable-weapons-csl.git repo with curl and follow its README. 
+- When the prompt requires building a game world do so using the allout MCP scene editing tools instead of scripts. 
 
-After you make script changes, run the All Out MCP compile tool.
-When the prompt requires building a game world, do so using the allout MCP scene editing tools instead of scripts. 
+### Guidelines for text / copy
+- Don't use text in UI if an icon would suffice. Players won't spend time reading huge blobs of text.
+- If you use text in UI make CERTAIN it fits within its container. UIK does not wrap automatically and you have a tendancy to overflow container bounds. Pay attention. Keep it short, and use resize as appropriate. 
+- Don't "explain" the game with UI. Put effort into making the game clear via INTUITIVE GAMEPLAY. 
 
-To add weapons to your game clone the https://github.com/All-Out-Games/reusable-weapons-csl.git repo with curl and follow its README. 
+### Guidelines for maps
+- Follow all directions carefully from the world building skill
+- Every map must be a large comprehensive game **world**, not a demo. There should be no blue editor backing showing behind anything and the players must have space to explore. 
 
-Start with the scene_summary tool. Do exactly what the users asks for and nothing more. 
+After you make script changes run the All Out MCP compile tool.
+Do exactly what the users asks for and nothing more.

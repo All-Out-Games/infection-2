@@ -17,7 +17,7 @@ My_Pickup :: class : Interactable {
     }
 
     can_use :: method(player: Player) -> bool {
-        if is_picked_up return false; // Return can_use false to hide interactables if they aren't relevant to the player right now. 
+        if is_picked_up return false; // Return can_use false to hide interactables if they aren't relevant to the player right now.
         return true;
     }
 
@@ -44,7 +44,7 @@ For game-wide checks on ALL interactables, define these on your Player component
 
 ```csl
 Player :: class : Player_Base {
-    // Return false in your player to block ALL interactions (e.g., player is dead)
+    // Return false in your player to block ALL interactions like player is dead
     ao_can_use_interactable :: method(interactable: Interactable) -> bool {
         if health.is_dead return false;
         return true;
@@ -53,4 +53,4 @@ Player :: class : Player_Base {
 ```
 
 ## Dynamic Prompt Text
-- Use `Notifier.notify(player, "message")` to send feedback on interactions that don't otherwise have feedback (e.g. "you don't have enough money") but don't overuse this because it can be annoying. 
+- Use `Notifier.notify(player, "message")` to send feedback on interactions that don't otherwise have feedback like "you don't have enough money" but don't overuse this because it can be annoying.
