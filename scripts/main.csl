@@ -1260,6 +1260,8 @@ Player :: class : Player_Base {
     last_notification: Notification;
 
     running_state: State_Machine_State;
+    sword_attachment_sprite_id: u64;
+    hand_attachment_rig_id: u64;
 
     add_notification :: method(text: string) {
         notification := new(Notification);
@@ -1452,6 +1454,26 @@ Player :: class : Player_Base {
             running_state = layer.try_get_state("Run_Fast");
             assert(running_state != null, "failed to find running state");
         }
+
+        #static sword_sprite := get_asset(Texture_Asset, "sword.png");
+        desc := Attachment_Desc.default();
+        desc.draw_mode = .BEHIND;
+        sword_attachment_sprite_id = animator.instance.add_attachment_sprite("Hand_R_Fist_Mesh", sword_sprite, desc);
+        assert(sword_attachment_sprite_id != 0, "expected sword attachment sprite id to be non-zero, got %", {sword_attachment_sprite_id});
+
+        rig_desc := Attachment_Desc.default();
+        rig_desc.draw_mode = .IN_FRONT;
+        rig_desc.offset = {0.25, 0};
+        rig_desc.scale = {2, 2};
+
+        rig := Spine_Instance.create();
+        rig.set_skeleton(get_asset(Spine_Asset, "$AO/schleem/playercharacter.spine"));
+        rig.set_animation("Idle", true, 0);
+        rig.set_skin("base/crewchsia");
+        rig.refresh_skins();
+
+        hand_attachment_rig_id = animator.instance.add_attachment_rig("Hat_Skin_Mesh", rig, rig_desc, true);
+        assert(hand_attachment_rig_id != 0, "expected hand attachment rig id to be non-zero, got %", {hand_attachment_rig_id});
     }
 
     ao_update :: method(dt: float) {
@@ -1785,6 +1807,14 @@ Player :: class : Player_Base {
     }
 
     ao_end :: method() {
+        if hand_attachment_rig_id != 0 {
+            animator.instance.clear_attachment_rig(hand_attachment_rig_id);
+            hand_attachment_rig_id = 0;
+        }
+        if sword_attachment_sprite_id != 0 {
+            animator.instance.clear_attachment_sprite(sword_attachment_sprite_id);
+            sword_attachment_sprite_id = 0;
+        }
         if victory_spine_ready {
             victory_spine.destroy();
             victory_spine_ready = false;

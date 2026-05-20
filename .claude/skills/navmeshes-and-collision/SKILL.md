@@ -14,7 +14,7 @@ description: Reference this when implementing pathfinding, movement constraints,
 1. Create an entity with a `Navmesh` component
 2. Create child entities with `Navmesh_Loop` components to define walkable areas
 3. For each `Navmesh_Loop`: add points for the polygon shape; set `Flip Inside Outside` to true for obstacles/holes
-4. Colliders can contribute to navmesh loops via `Make Navmesh Loop` and `Flip Navmesh Loop` in inspector. **Navmesh does not automatically track colliders** -- it won't rebuild if you modify colliders at runtime.
+4. Colliders can contribute to navmesh loops via `Make Navmesh Loop` and `Flip Navmesh Loop` in inspector. Navmeshes automatically hash loop/collider/tilemap inputs each frame and rebuild when those inputs change.
    - Disable collider contribution with Navmesh `Ignore Colliders` = true
 5. Use Navmesh `Debug Enabled` and `Debug Rebuild Every Frame` to visualize
 
@@ -65,10 +65,9 @@ input := agent.input_this_frame; // read-only
 
 ### Forcing Navmesh Rebuild
 
-- **`mark_for_rebuild()`** -- Deferred rebuild at start of next frame. Preferred for batching multiple changes.
 - **`rebuild_immediately()`** -- Immediate rebuild. Use only when you need to query the updated navmesh in the same frame. Returns success bool.
 
-Rebuilds needed when: modifying colliders with `MakeNavmeshLoop` at runtime, or modifying the navmesh hierarchy.
+Most input changes rebuild automatically. Force a rebuild only when you need to query the updated navmesh immediately in the same frame.
 
 ### Parent/Child Navmesh Setup
 
@@ -85,7 +84,7 @@ Parent Entity (Navmesh)
 Parent rebuild collects all child navmesh points and creates a unified navigation mesh with cross-boundary neighbor relationships.
 
 **Critical gotchas:**
-- **Modifying a child navmesh does NOT trigger parent rebuild** -- you must call `mark_for_rebuild()` / `rebuild_immediately()` on the parent yourself.
+- **Nested navmeshes refresh child-first** -- parent navmeshes automatically pick up child mesh input changes.
 - **Query the parent navmesh for pathfinding** -- child navmeshes only contain their local area.
 - **Set `IgnoreColliders` to true on parent navmeshes** -- prevents redundant work since children already process colliders.
 

@@ -16,20 +16,12 @@ Integer literals coerce to float, but not the reverse.
 > **Struct fields cannot have inline defaults.**
 
 ### Constants
+Define const with `::` Must be compile-time constant. Global vars must be constant use `ao_start` or `ao_before_scene_load` for runtime init.
 
-`::` instead of `:=`. Must be compile-time constant. Global variable initializers must also be constant (use `ao_start` or `ao_before_scene_load` for runtime init).
-
-`PI` is already defined as a builtin — do not redefine it.
-
-```csl
-PI :: 3.14159265359; // DON'T — already exists
-MY_SPEED :: 5.0; // DO — custom constants are fine
-```
+`PI` is already defined as a global.
 
 ## Types
-
 ### Primitive Types
-
 - Signed integers: `s8`, `s16`, `s32`, `s64`
 - Unsigned integers: `u8`, `u16`, `u32`, `u64`
 - Booleans: `bool`
@@ -38,7 +30,6 @@ MY_SPEED :: 5.0; // DO — custom constants are fine
 - `string`, `typeid`, `any`
 
 ## Structs
-
 Structs are value types (shallow-copied on assignment/pass).
 
 ```csl
@@ -48,23 +39,19 @@ Food_Definition :: struct {
 }
 ```
 
-## Classes
-
-Classes are reference types, allocated with `new`.
-
+## Classes: reference types allocated with `new`
 ```csl
 Foo :: class {
     value: int;
     position: v2;
 }
 
-foo := new(Foo); // type inference
-foo: Foo = new(); // explicit type, inferred new
-foo: Foo = new(Foo); // fully explicit
+foo := new(Foo);
+foo: Foo = new();
+foo: Foo = new(Foo);
 ```
 
 ### Inheritance
-
 ```csl
 Dog :: class : Animal {
     breed: string;
@@ -72,7 +59,6 @@ Dog :: class : Animal {
 ```
 
 ## Procedures
-
 ```csl
 add :: proc(a: int, b: int) -> int {
     return a + b;
@@ -80,7 +66,6 @@ add :: proc(a: int, b: int) -> int {
 ```
 
 ### Methods
-
 Use `method()` instead of `proc()` inside a struct or class.
 
 ```csl
@@ -97,10 +82,9 @@ dog.bark();
 ```
 
 ### Arrays
-
-- **Fixed**: `[N]T` -- compile-time size, initialized with `{...}`
-- **Slice**: `[]T` -- a view into array data (common for parameters)
-- **Dynamic**: `[..]T` -- resizable list (`.count`, `.capacity`); implicitly converts to `[]T`
+- **Fixed**: `[N]T` compile-time size, initialized with `{...}`
+- **Slice**: `[]T` a view into array data (common for parameters)
+- **Dynamic**: `[..]T` resizable list (`.count`, `.capacity`); implicitly converts to `[]T`
 
 ```csl
 fixed: [4]int = {1, 2, 3, 4};
@@ -120,9 +104,9 @@ numbers.pop();
 numbers.clear();
 numbers.reserve(64);
 
-// Remove -- optional mode: .ONE (default) or .ALL
+// Optional mode: .ONE (default) or .ALL
 numbers.unordered_remove_by_value(10);
-numbers.ordered_remove_by_value(999, .ALL);
+numbers.ordered_remove_by_value(999, .ALL); 
 numbers.unordered_remove_by_index(0);
 numbers.ordered_remove_by_index(0);
 ```
@@ -143,14 +127,13 @@ Cases support **multiple values** (comma-separated) and **ranges** (`..`, inclus
 ```csl
 switch level {
     case 1, 2, 3: tier = .BEGINNER;
-    case 4..10:   tier = .INTERMEDIATE;
+    case 4..10: tier = .INTERMEDIATE;
     case 11..20, 25, 30..50: tier = .ADVANCED;
-    default:      tier = .UNKNOWN;
+    default: tier = .UNKNOWN;
 }
 ```
 
 Multi-statement bodies must use braces:
-
 ```csl
 switch tier {
     case .COMMON, .UNCOMMON: {
@@ -166,13 +149,9 @@ switch tier {
 
 Do not write C-style fallthrough logic in CSL switch cases.
 
-`..` ranges are **inclusive**: `for i: 0..9 { }` iterates 0 through 9.
-
 `for` also handles custom iterators: `for player: component_iterator(My_Player) { }`
 
 Custom iterator-based `for` loops require a `next :: method() -> bool` and a `current` field.
-
-### Enums, `defer`, and `#alive`
 
 ```csl
 Item_Tier :: enum {
@@ -190,20 +169,10 @@ defer UI.pop_draw_context();
 `defer` runs a statement when the current scope exits and is commonly used for UI push/pop cleanup.
 
 ## Type Casting
-
 Use `expr.(T)` syntax: `b := 123.4.(int);`
 
-## Member Access and Method Calls
-
-```csl
-increment :: proc(f: *Foo) { f.a += 1; }
-f: Foo;
-f.increment();
-```
-
 ## Parameter Passing: ref
-
-Mark both the parameter and callsite with `ref`. When forwarding a ref param, use `ref` again:
+Mark both the parameter and callsite with `ref`. When forwarding a ref param use `ref` again:
 
 ```csl
 update_health :: proc(health: ref int, damage: int) {
@@ -215,7 +184,6 @@ update_health(ref hp, 25);
 ```
 
 ## Polymorphic Procedures
-
 `$T` on a parameter deduces the type from the callsite. `$T` is only used when **defining** polymorphic procs — callers always pass concrete types:
 
 ```csl
@@ -245,16 +213,13 @@ player.on_death = proc(player: Player, userdata: Object) {
 };
 ```
 
-## Using Keyword
-
-`using` lets you access fields without a selector:
+## Using Keyword - access fields without a selector:
 ```csl
 using position: v3;
 x = 123; // Instead of position.x
 ```
 
 ## Runtime Type Checking
-
 Use `.#type` to get the runtime type of a class instance:
 ```csl
 if effect.#type == Slow_Effect {
@@ -263,7 +228,6 @@ if effect.#type == Slow_Effect {
 ```
 
 ## Multiple Return Values
-
 ```csl
 get_thing :: proc() -> Thing, bool {
     return g_thing, true;
@@ -271,3 +235,5 @@ get_thing :: proc() -> Thing, bool {
 
 thing, ok := get_thing();
 if thing, ok := get_thing(); ok { }
+
+_ is NOT supported for discarding variables
