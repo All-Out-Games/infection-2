@@ -215,7 +215,8 @@ Player :: class : Player_Base {
 ```
 
 ## Custom Button Drawing
-Implement `on_draw_button` on your ability class to draw custom content on the ability button like ammo count charge indicators:
+
+Implement `on_draw_button` on your ability class to draw custom content on the ability button (e.g., ammo count, charge indicator):
 
 ```csl
 My_Ability :: class : Ability_Base {

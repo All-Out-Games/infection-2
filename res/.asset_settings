@@ -1,15 +1,5 @@
 [
   {
-    "id": "sword.png",
-    "texture": {
-      "pixels_per_unit": 120,
-      "pivot": [
-        -0.1445877552032471,
-        -0.5509964227676392
-      ]
-    }
-  },
-  {
     "id": "sprites/battery_charger.png",
     "texture": {
       "pivot": [
@@ -46,9 +36,15 @@
     }
   },
   {
-    "id": "map.png"
+    "id": "map.png",
+    "texture": {
+      "resample_multiplier": 1
+    }
   },
   {
-    "id": "new_map/*"
+    "id": "new_map/*",
+    "texture": {
+      "resample_multiplier": 1
+    }
   }
 ]
