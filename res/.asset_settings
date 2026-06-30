@@ -46,5 +46,51 @@
     "texture": {
       "resample_multiplier": 1
     }
+  },
+  {
+    "id": "new_map/Island Base.png",
+    "should_mip": true,
+    "texture": {
+      "resample_multiplier": 0.75
+    }
+  },
+  {
+    "id": "new_map/template.png",
+    "should_mip": true,
+    "texture": {
+      "resample_multiplier": 0.75
+    }
+  },
+  {
+    "id": "new_map/Edge Fencing/Border fence bottom.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Base Fencing/Base fence side R.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Base Fencing/Base fence TOP.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Powerplant fencing/Powerplant fence piece.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Base Fencing/Base fence BOTTOM.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Base Fencing/Base fence side L.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Edge Fencing/Border fence top L.png",
+    "should_mip": true
+  },
+  {
+    "id": "new_map/Powerplant towers.png",
+    "should_mip": true
   }
 ]
