@@ -54,7 +54,7 @@ entity.add_passive_effect(slow_effect);
 ```csl
 Effect_Base :: class {
     entity: Entity;
-    player: Player; (null for NPCs)
+    player: Player; // null for NPCs
 
     player_specific: struct {
         freeze_player: bool; // Lock position entirely (use for eat/interact)
@@ -69,7 +69,7 @@ Effect_Base :: class {
 ## Callbacks (each optional)
 - `effect_start` -- Set freeze/movement flags, trigger animations, store initial state, call `set_duration`.
 - `effect_update(dt: float)`
-- `effect_late_update(dt: float)` -- Post-update: draw UI, camera effects. Use `player.is_local()` to gate local-only visuals.
+- `effect_late_update(dt: float)` -- Post-update UI, camera effects, or local-only visuals. Screen UI is valid here for effects attached to a Player because player effects run from `core_player_late_update`; guard UI with `player.is_local_or_server()`.
 - `effect_end(interrupt: bool)` -- Restore saved state, reset animations with `player.animator.state_machine.set_trigger("RESET")`.
 
 ## Checking Effects
@@ -138,12 +138,6 @@ Death_Effect :: class : Effect_Base {
 
     effect_update :: method(dt: float) {
         time_until_respawn := 5.0 - get_elapsed_time();
-        if player.is_local() {
-            ts := UI.default_text_settings();
-            ts.size = 64;
-            rect := UI.get_screen_rect().bottom_center_rect().offset(0, 150);
-            UI.text(rect, ts, "Respawning in %", {time_until_respawn.(int) + 1});
-        }
         if time_until_respawn <= 0 {
             remove_effect(false);
             return;
@@ -153,8 +147,18 @@ Death_Effect :: class : Effect_Base {
     effect_end :: method(interrupt: bool) {
         player.remove_name_invisibility_reason("death");
         respawn_player(player); // user-defined respawn proc
-        player.health.reset(); // user-defined health field/object
+        reset_player_health(player); // replace with your game's health reset logic
         player.animator.state_machine.set_trigger("RESET");
+    }
+
+    effect_late_update :: method(dt: float) {
+        if player.is_local_or_server() {
+            time_until_respawn := 5.0 - get_elapsed_time();
+            ts := UI.default_text_settings();
+            ts.size = 64;
+            rect := UI.get_screen_rect().bottom_center_rect().offset(0, 150);
+            UI.text(rect, ts, `Respawning in {time_until_respawn.(int) + 1}`);
+        }
     }
 }
 ```

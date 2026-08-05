@@ -37,7 +37,7 @@ json := JSON.serialize(ref stats);
 
 loaded: Player_Stats;
 if JSON.try_deserialize(json, ref loaded) {
-    log("Loaded: % at level %", {loaded.name, loaded.level});
+    log(`Loaded: {loaded.name} at level {loaded.level}`);
 }
 ```
 

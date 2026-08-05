@@ -16,7 +16,9 @@ Integer literals coerce to float, but not the reverse.
 > **Struct fields cannot have inline defaults.**
 
 ### Constants
-Define const with `::` Must be compile-time constant. Global vars must be constant use `ao_start` or `ao_before_scene_load` for runtime init.
+Define const with `::` Must be compile-time constant.
+
+Global variable initializers must be compile-time constants. Zero-initialized file-scope vars are allowed for game-wide handles/registries, then assign them in `ao_start` or `ao_before_scene_load` for runtime init. Do not use globals for per-player state; store that on the player/component.
 
 `PI` is already defined as a global.
 
@@ -28,6 +30,19 @@ Define const with `::` Must be compile-time constant. Global vars must be consta
 - Floats: `f32`, `f64`
 - Vector types: `v2`, `v3`, `v4` (float fields `.x`, `.y`, `.z`, `.w`; constructed with `v2{10, 20}`)
 - `string`, `typeid`, `any`
+
+### Strings and Template Strings
+`"..."` strings support backslash escapes (`\n`, `\t`, `\\`, ...). Backtick strings are raw (no backslash escapes, newlines allowed) and support `{expr}` interpolation:
+
+```csl
+name := "Ada";
+msg := `Hi {name}, you have {count + 1} new messages`; // any expression works inside {}
+```
+
+- Interpolating templates compile to a `format_string` call, so they need `import "core:basic"` and are not compile-time constants.
+- A backtick string with no `{expr}` stays a plain raw string constant.
+- Literal braces: `{{` and `}}`. A single `}` in text is a compile error.
+- Backtick strings cannot nest inside `{}` (use `"..."` strings there).
 
 ## Structs
 Structs are value types (shallow-copied on assignment/pass).
@@ -66,14 +81,12 @@ add :: proc(a: int, b: int) -> int {
 ```
 
 ### Methods
-Use `method()` instead of `proc()` inside a struct or class.
-
 ```csl
 Dog :: class {
     name: string;
 
     bark :: method() {
-        log_info("% says bark!", {name}); // implicit this.name
+        log_info(`{name} says bark!`); // implicit this.name
     }
 }
 
@@ -82,7 +95,7 @@ dog.bark();
 ```
 
 ### Arrays
-- **Fixed**: `[N]T` compile-time size, initialized with `{...}`
+- **Fixed**: `[N]T` initialized with `{...}`
 - **Slice**: `[]T` a view into array data (common for parameters)
 - **Dynamic**: `[..]T` resizable list (`.count`, `.capacity`); implicitly converts to `[]T`
 
@@ -92,11 +105,10 @@ spawn_points: [3]v2 = {{0, 0}, {5, 0}, {0, 5}};
 dyn: [..]int;
 view: []int = dyn;
 
-hit := Damage_Desc{amount=10, knockback={2, 1}}; // named fields use = (NOT :)
+hit := Damage_Desc{amount=10, knockback={2, 1}}; // named fields use = not :
 ```
 
 ### Dynamic Arrays
-
 ```csl
 numbers: [..]int;
 numbers.append(10);
@@ -104,7 +116,6 @@ numbers.pop();
 numbers.clear();
 numbers.reserve(64);
 
-// Optional mode: .ONE (default) or .ALL
 numbers.unordered_remove_by_value(10);
 numbers.ordered_remove_by_value(999, .ALL); 
 numbers.unordered_remove_by_index(0);
@@ -133,7 +144,7 @@ switch level {
 }
 ```
 
-Multi-statement bodies must use braces:
+Multi-statement bodies use braces
 ```csl
 switch tier {
     case .COMMON, .UNCOMMON: {
@@ -147,7 +158,7 @@ switch tier {
 }
 ```
 
-Do not write C-style fallthrough logic in CSL switch cases.
+Do not write C-style fallthrough logic
 
 `for` also handles custom iterators: `for player: component_iterator(My_Player) { }`
 
@@ -165,8 +176,8 @@ UI.push_screen_draw_context();
 defer UI.pop_draw_context();
 ```
 
-`#alive(expr)` checks whether a class reference is still valid and MUST be used before accessing to prevent crashes. 
-`defer` runs a statement when the current scope exits and is commonly used for UI push/pop cleanup.
+`#alive(expr)` checks whether a class reference is still valid and MUST be used before accessing to prevent crashes.
+`defer` runs a statement when the current scope exits.
 
 ## Type Casting
 Use `expr.(T)` syntax: `b := 123.4.(int);`
@@ -199,7 +210,7 @@ result := min(3, 5); // T is deduced as int
 
 ## Function Pointers and Callbacks
 
-**CSL has no closures.** Pair a callback field with a `userdata: Object` field. Any class instance can be stored as `Object` and cast back:
+**CSL has no closures.** Proc literals cannot capture enclosing parameters or locals. Pair a callback field with a `userdata: Object` field. Any class instance can be stored as `Object` and cast back:
 
 ```csl
 on_death_userdata: Object;

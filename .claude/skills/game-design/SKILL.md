@@ -1,19 +1,18 @@
 ---
 name: game-design
-description: Must be used whenever the user requests a large game developed from scratch. It should not be used for discrete requests to build systems or small changes.
+description: Must be used whenever the user requests a large game developed from scratch. Do not read for requests to build systems or small changes.
 ---
 # Game Design Workflow
 
 Every game is built in two phases: **Scene** (the world) then **Scripts** (the logic). Plan both up front, build the scene first, verify it, then bring it to life with scripts.
 
-This will be a production-grade, polished game. It will not be done in one shot. **Never use placeholder art. Never write throwaway scripts.** Every asset, every entity, every line of code ships.
+This will be a production-grade, polished game. It will not be done in one shot. **Never use placeholder art. Never write throwaway scripts.**
 
 ## Core Rules
-1. Inspect the request and the existing project before planning. Reuse what exists.
-2. Every game is multiplayer. Design for many concurrent players from the start. Use ownership patterns (plot-based, instance-based, per-player state on the player class) so players don't collide on shared world state. like if you're asked to make a gardening game you must have at least 4 duplicate garden plots with ownership assigned to players on join or the game will be unplayable. 
-3. Search for assets using the All Out MCP tools and world-building skill. Prefer animated Spine assets if appropriate.
-4. Use the All Out engine systems/skills like Inventory, Abilities, Economy Currencies, instead of creating your own custom systems.
-5. After any script change, compile with the All Out MCP compile tool.
+1. Every game is multiplayer. Design for many concurrent players from the start. You must implement ownership patterns (plot-based, instance-based, per-player state on the player class) so players don't collide on shared world state. Like if you're asked to make a gardening game you must have at least 4 duplicate garden plots with ownership assigned to players on join or the game will be unplayable. 
+2. Search for assets using the All Out MCP tools and world-building skill. Prefer animated Spine assets if appropriate.
+3. Use the All Out engine systems/skills like Inventory, Abilities, Economy Currencies, instead of creating your own custom systems.
+4. After any script change, compile with the All Out MCP compile tool.
 
 ---
 
@@ -32,7 +31,7 @@ This will be a production-grade, polished game. It will not be done in one shot.
 - Economy, resources, progression
 - Polish (tactile sfx for every action, animated particles, damage flashes, juicy effects when earning currency or harvesting plants)
 
-### 3. Write `game_plan.json`
+### 2. Write `game_plan.json`
 ```json
 {
   "game": "Game Title",
@@ -68,8 +67,8 @@ This will be a production-grade, polished game. It will not be done in one shot.
 
 ---
 
-2a. Build the scene
-2b. After completing a scene epic, **launch a verification subagent**. This subagent's job is to genuinely critique the work — not rubber-stamp it. **Don't write test.csl files for scene verification.**
+### 3. Build the Scene
+After completing a scene epic, **launch a verification subagent**. This subagent's job is to genuinely critique the work — not rubber-stamp it. **Don't write test.csl files for scene verification.**
 
 Example verification subagent prompt:
 ```
@@ -121,7 +120,9 @@ Read these files to understand what was built:
 The test procedure must be named `{gate_test name}`.
 It should:
 - <specific assertions for this epic's deliverable>
-- Take screenshots at key moments
+- Take screenshots at key gameplay moments (mid-wave, after purchase, etc.)
+
+Gate tests verify gameplay logic, not UI polish. If the epic added or changed UI, polish it separately with the live loop (start_game + compile hot-reload + in_game_screenshot + client_click) before writing the gate test.
 
 Write the test to tests/{test_file}.csl.
 After writing, compile using the All Out MCP compile tool and fix any errors.
@@ -141,7 +142,7 @@ Update `game_plan.json` after each epic.
 After all epics are done:
 
 1. Run the full test suite
-2. Take screenshots of the complete game
+2. Play the complete game live: `start_game`, then walk every screen and flow — `client_ui_tree` + `client_click` through menus, shops, and dialogs, `in_game_screenshot` at each state
 3. Report what was built and any remaining risks
 
 ---
@@ -158,7 +159,7 @@ After all epics are done:
         { "name": "Place a backdrop and scenery to match the theme", "done": false },
         { "name": "Lay out the lane path with ground tiles from spawn to base", "done": false },
         { "name": "If using a pre-baked map, figure out the EXACT points the enemies will path between to get to the base using red markers pixel-pushed to perfection.", "done": false },
-        { "name": "Add decorative environment props (trees, rocks, grass) to fill empty space", "done": false },
+        { "name": "Add decorative environment props (trees, rocks, grass) to fill empty space", "done": false }
       ],
       "verified": false
     },
@@ -168,7 +169,7 @@ After all epics are done:
       "tasks": [
         { "name": "Find unique and beautiful animated tower, enemy, and base assets", "done": false },
         { "name": "Place the base entity at the lane endpoint", "done": false },
-        { "name": "Place 6 tower pads in strategic places off of the lane", "done": false },
+        { "name": "Place 6 tower pads in strategic places off of the lane", "done": false }
       ],
       "verified": false
     }

@@ -1,6 +1,6 @@
 ---
 name: interactables
-description: "Interactable system for allowing players to interact with entities in the world (pickups, buttons, NPCs, etc.)."
+description: System for allowing players to interact with entities in the world, pickups, buttons, NPCs
 ---
 ## Creating an Interactable
 Inherit from `Interactable`, call `this.set_listener(this)` in `ao_start`, and implement `can_use` / `on_interact`:

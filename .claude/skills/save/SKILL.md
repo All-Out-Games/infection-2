@@ -100,7 +100,7 @@ total_games := Save.get_game_int("total_games_played", 0);
 ```csl
 all_strings := Save.get_all_game_strings();
 for entry: all_strings {
-    log_info("Key: %, Value: %", {entry.key, entry.value});
+    log_info(`Key: {entry.key}, Value: {entry.value}`);
 }
 ```
 

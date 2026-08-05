@@ -107,7 +107,7 @@ for i: 0..player.default_inventory.capacity-1 {
     defn := item.get_definition();
     weapon_defn := defn.(Weapon_Definition);
     if weapon_defn != null {
-        log_info("Found weapon with % damage", {weapon_defn.damage});
+        log_info(`Found weapon with {weapon_defn.damage} damage`);
     }
 }
 ```
@@ -239,13 +239,15 @@ Inventory_Draw_Options :: struct {
     enable_selection: bool;
     scroll_item_selection: bool;
     enable_use_from_hotbar: bool;
+    on_before_draw: (proc(item: Item_Instance, rect: Rect));
+    on_after_draw: (proc(item: Item_Instance, rect: Rect));
 }
 ```
 
 ### Draw_Hotbar_Result
 
 > **Important:** `selected_item` and `dropped_item` may be non-null yet reference
-> items that were destroyed during the same frame like consumed on use or merged
+> items that were destroyed during the same frame (like consumed on use or merged
 > into a stack). A `!= null` check alone is **not** sufficient — always guard with
 > `#alive()` before calling methods on them.
 

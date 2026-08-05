@@ -1,29 +1,26 @@
 ---
 name: chat-commands
-description: For creating in-game chat commands that admins can invoke to help make playtesting easier.
+description: Add in-game chat commands that developers can use to make their testing process easier (e.g. setting coins, resetting progress, admin tools)
 ---
-# Chat Commands
-
 Annotate a procedure with `@chat_command` to make it invocable via `/proc_name` in chat. Commands run on the server.
 
 ```csl
-heal_player :: proc(player: Player, amount: int = 50) {
+heal :: proc(player: Player, amount: int = 50) {
     player.health += amount;
-    Notifier.notify(player, "Healed for %!", {amount});
-} @chat_command @any
+    Notifier.notify(player, `Healed for {amount}!`);
+} @chat_command @owner
 ```
 
 ## Permission Annotations
 
-| Annotation | Who Can Use |
-|------------|-------------|
-| `@any` | All players |
-| `@vip` | VIP players and admins |
-| `@youtuber` | Youtuber players and admins |
-| (none) | Admins only |
+`@any` All players
+`@vip` All Out VIP subscribers
+`@youtuber` Verified YouTubers
+`@owner` Game owner
+`@owner_or_editor` Game owner and their team
+(none) Platform admins only
 
 ## Parameter Rules
-
 First parameter must be `Player`. Supported additional types: `string`, `int`/`s64`, `float`/`f64`, `bool`, `Player` (resolved by name). Default values make parameters optional.
 
 ```csl
@@ -35,5 +32,3 @@ spawn_enemy :: proc(player: Player, enemy_type: string = "zombie", count: int = 
 ```
 
 String arguments with spaces require quotes: `/say "Hello everyone!"`
-
-Players append `?` to see usage: `/spawn_enemy?`

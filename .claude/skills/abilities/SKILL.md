@@ -226,7 +226,7 @@ My_Ability :: class : Ability_Base {
         ts.size = 24;
         ts.halign = .RIGHT;
         ts.valign = .BOTTOM;
-        UI.text(rect.inset(5), ts, "%", {ammo});
+        UI.text(rect.inset(5), ts, `{ammo}`);
     }
 }
 ```

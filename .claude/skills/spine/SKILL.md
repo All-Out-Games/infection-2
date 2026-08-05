@@ -14,8 +14,9 @@ For runtime-spawned non-player entities:
 entity := Scene.create_entity();
 animator := entity.add_component(Spine_Animator);
 animator.awaken();  // REQUIRED before calling animation methods
-animator.set_skeleton(get_asset(Spine_Asset, "anims/rig.spine"));
-animator.set_skin("call spine_rig_info to know what skin you MUST use"); // REQUIRED or spine will be invisible
+animator.set_skeleton(get_asset(Spine_Asset, "$AO/streamed_character"));
+animator.disable_all_skins();
+animator.enable_skin("base/crewchsia"); // Use spine_rig_info for the exact skins required by other rigs.
 animator.refresh_skins(); // REQUIRED after any skin change
 animator.set_animation("Idle", true, 0); // name, loop, track, speed = 1
 animator.scale = v2{0.9, 0.9}; // reference the worldSize returned by the spine_rig_info tool and compute the best value here given the world/player/use case.
@@ -51,6 +52,68 @@ sm.set_bool("ghost_form", true);  // false to exit then RESET
 Available triggers: `death`, `RESET`, `flinch`, `dodge_roll`, `attack`, `punch`
 Available bools: `ghost_form`, `electrocute`, `sleep`
 
+### Generated Player Rig Animations
+The shipped player rig can be stripped down per project. Before writing CSL that depends on a player animation outside the normal trigger set, use MCP to make sure the generated player rig contains it.
+
+Workflow:
+- Call `player_rig_info` to inspect `availableAnimations`, `includedAnimations`, `availableSkins`, and `includedSkins`. The full list is hundreds of names — pass `{"filter":"keg"}` (case-insensitive substring) to narrow it.
+- Pick exact animation names from `availableAnimations`; do not guess names.
+- Call `player_rig_ensure_animations` with `{"animations":["Exact/Animation/Name"],"skins":["Optional/Skin/Name"],"setAsDefaultPlayerRig":true}` for every player animation and optional player skin your feature needs.
+- `base/crewchsia` defaults to included and appears in `availableSkins`/`includedSkins` like other skins.
+- Use the exact returned names in custom state machine or animation code.
+
+`player_rig_ensure_animations` writes `res/game_player/player.spine`, the matching atlas/png, and `res/game_player/.player_rig`. When `setAsDefaultPlayerRig` is true, it also sets `scene.config` to use `game_player/player.spine` and enables new cosmetics.
+
+The response includes `animationDetails` for each animation you enable: its duration, the attachment names it animates (these are `override_attachment_sprite` targets — held items, props), and its spine events with timings (hook them with `set_on_event` to sync gameplay to animation moments like a throw release). `spine_rig_info` gives the same detail for any rig via `animation:"name"`, and `query:"slots"` / `query:"attachments"` list everything overridable.
+
+### Playing Generated Player Rig Animations (custom layer pattern)
+The built-in player state machine only has the standard trigger states. To play other rig animations on the player, add your own layer to the player's live state machine. Do NOT replace the player's state machine, and do NOT call `set_animation` directly on reserved tracks.
+
+- Tracks 0 (main), 1 (attack), 2 (invis), and 10000 (skin anim) are reserved by the engine. Use tracks 3–9 for game layers.
+- A new layer MUST get `set_initial_state` in the same function that creates it — the next state machine update asserts otherwise. Use a `__CLEAR_TRACK__` state as the empty default so your layer only overrides the body when it should.
+- Run setup and triggers on every sim: never wrap state machine setup, triggers, or attachment overrides in `is_local()` — the server and all clients need identical animation state (replication and server-side test assertions both depend on it).
+
+```csl
+on_player_spine_event :: proc(userdata: Object, event: Spine_Event_Data) {
+    if event.event == "Fire_Ranged" {
+        // The throw animation reached its release moment — spawn the projectile here.
+    }
+}
+
+Player :: class : Player_Base {
+    ao_start :: method() {
+        sm := animator.state_machine;
+        var_held  := sm.create_variable("keg_held", .BOOL);
+        var_throw := sm.create_variable("keg_throw", .TRIGGER);
+
+        layer := sm.create_layer("keg_game", 5); // free track, see reserved list above
+        empty_state := layer.create_state("__CLEAR_TRACK__", true);
+        hold_state  := layer.create_state("fishermon/holding_keg_idle", true);
+        throw_state := layer.create_state("fishermon/throw_keg", false);
+        layer.set_initial_state(empty_state);
+
+        layer.create_transition(empty_state, hold_state, false).create_bool_condition(var_held, true);
+        layer.create_global_transition(throw_state, false).create_trigger_condition(var_throw);
+        layer.create_transition(throw_state, hold_state, true).create_bool_condition(var_held, true); // return to holding once the throw finishes
+        layer.create_transition(hold_state, empty_state, false).create_bool_condition(var_held, false);
+
+        animator.instance.set_on_event(null, on_player_spine_event);
+    }
+
+    // Later, from gameplay code (on every sim, not just the local client):
+    //   animator.state_machine.set_bool("keg_held", true);
+    //   animator.state_machine.set_trigger("keg_throw");
+}
+```
+
+To swap the art of a held item the animation shows (e.g. upgraded item tiers), override its attachment on the player instance — the attachment names come from `animationDetails`:
+```csl
+tex := get_asset(Texture_Asset, "kegs/keg_tier_2.png");
+override_id := animator.instance.override_attachment_sprite("RAND004/Pirate/powder_keg/powder_keg", tex);
+// Calling override_attachment_sprite again on the same attachment just swaps the texture (same id) — perfect for item tier upgrades.
+// clear_attachment_sprite_override(override_id) restores the rig's original art.
+```
+
 ## Non-Player State Machine
 For complex non-player spines, you can create your own custom state machine for those spines. A `State_Machine` can also be attached to a standalone `Spine_Instance` via `instance.set_state_machine(sm, true)`, this is useful, like displaying a spine instance in UI. When created this way, you will need to Awake & Update the state machine manually.
 
@@ -74,6 +137,9 @@ Enemy_NPC :: class : Component {
         // States -- name must match the Spine animation name EXACTLY.
         // create_state(name, loop, duration) -- duration pulled from spine rig if duration parameter is 0
         // if setting duration, make sure to update this if / when needed.
+        // Lowercase names here are placeholders for a custom rig. `$AO/streamed_character`
+        // uses exact case-sensitive names like `Idle`, `Run`/`Run_Fast`,
+        // `Attack_Melee_1`, and `Death_No_HP`.
 
         // Clearing a track: pass "__CLEAR_TRACK__" as the state name.
         idle_state := layer.create_state("idle", true);
@@ -154,6 +220,58 @@ if layer != null {
 animator.state_machine.set_trigger("jump");
 ```
 
+## Attachment Overrides
+Use attachment APIs when you need to replace an existing rig attachment or draw an extra sprite/rig over or under a slot. This is the right tool for item-in-hand moments, equipment swaps, muzzle flashes, held props, or drawing a separate animated rig attached to a body slot. The calls return a `u64` ID for you to save so you can clear it later if you want to.
+
+These methods live on `Spine_Instance`.
+
+```csl
+// Replace an existing Spine attachment by attachment name.
+// Good for hotswapping the art used by a rig attachment, like Link holding up a different item.
+item_tex := get_asset(Texture_Asset, "items/boomerang.png");
+override_id := instance.override_attachment_sprite("held_item", item_tex);
+
+// Later, restore the rig's original attachment art.
+instance.clear_attachment_sprite_override(override_id);
+```
+
+```csl
+// Draw an extra sprite on a slot without replacing the slot's normal attachment.
+desc := Attachment_Desc.default();
+desc.draw_mode = .IN_FRONT; // .BEHIND draws under the slot attachment
+desc.offset = {0, 0.25};
+// desc also has scale (defaulted to (1, 1)), rotation_degrees, and color (defaulted to (1,1,1,1))
+
+sparkle_id := instance.add_attachment_sprite("Hand_R", get_asset(Texture_Asset, "fx/sparkle.png"), desc);
+
+// Later, remove just this added sprite.
+instance.clear_attachment_sprite(sparkle_id);
+```
+
+```csl
+// Attach another animated Spine rig to a slot.
+child := Spine_Instance.create();
+child.set_skeleton(get_asset(Spine_Asset, "items/animated_sword.spine"));
+child.set_animation("Idle", true, 0);
+
+desc := Attachment_Desc.default();
+desc.draw_mode = .IN_FRONT;
+rig_id := instance.add_attachment_rig("Hand_R", child, desc, true); // true transfers destroy ownership
+
+// Later, remove it. If transfer_ownership was true, the parent owns cleanup.
+instance.clear_attachment_rig(rig_id);
+```
+
+Attachment API summary:
+- `override_attachment_sprite(attachment_name, texture) -> u64`: replace an existing attachment's sprite by attachment name.
+- `clear_attachment_sprite_override(id)`: remove a replacement made by `override_attachment_sprite`.
+- `add_attachment_sprite(slot_name, texture, desc) -> u64`: draw an extra texture on a slot.
+- `clear_attachment_sprite(id)`: remove an extra sprite.
+- `add_attachment_rig(slot_name, rig, desc, transfer_ownership) -> u64`: draw another `Spine_Instance` on a slot.
+- `clear_attachment_rig(id)`: remove an attached rig.
+
+Use `attachment_name` when replacing art already authored in the rig. Use `slot_name` when adding a new over/under draw on top of the animated slot. `Attachment_Desc.offset`, `scale`, and `rotation_degrees` are local to the slot's bone, and `draw_mode` controls whether the added sprite/rig is drawn `.BEHIND` or `.IN_FRONT` of the slot attachment.
+
 ## Color
 All spines that can take damage or you want to draw attention to should color_multiplier to apply effects (red flash, glow, etc...)
 
@@ -213,6 +331,9 @@ player_ui_instance.set_color_replace_color(player.avatar_color);
 // Every frame:
 player_ui_instance.update(dt);
 UI.spine(UI.get_screen_rect().center(), player_ui_instance, {100, 100});
+
+// When the UI closes:
+player_ui_instance.destroy();
 ```
 
 ```csl
