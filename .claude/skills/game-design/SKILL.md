@@ -1,237 +1,120 @@
 ---
 name: game-design
-description: Must be used whenever the user requests a large game developed from scratch. Do not read for requests to build systems or small changes.
+description: Must be used whenever the user requests a game built from scratch, and whenever you are assigned a phase of a phased game build (world-building, scripting, review). Do not read for small changes or individual systems in an existing game.
 ---
-# Game Design Workflow
+# Building a Complete Game
 
-Every game is built in two phases: **Scene** (the world) then **Scripts** (the logic). Plan both up front, build the scene first, verify it, then bring it to life with scripts.
+You are building a full multiplayer game of the kind that tops the charts — a game strangers will play with nobody there to explain it, and come back to tomorrow. Not a demo, not a prototype, not a proof of concept.
 
-This will be a production-grade, polished game. It will not be done in one shot. **Never use placeholder art. Never write throwaway scripts.**
+**The failure mode to beat is shipping a demo.** A demo looks like: one mechanic, one zone, three shop items, a sparse flat map, "You win!" after two minutes, nothing left to want. If a player runs out of things to work toward inside an hour, the game is not done. Everything below exists to prevent that outcome.
 
-## Core Rules
-1. Every game is multiplayer. Design for many concurrent players from the start. You must implement ownership patterns (plot-based, instance-based, per-player state on the player class) so players don't collide on shared world state. Like if you're asked to make a gardening game you must have at least 4 duplicate garden plots with ownership assigned to players on join or the game will be unplayable. 
-2. Search for assets using the All Out MCP tools and world-building skill. Prefer animated Spine assets if appropriate.
-3. Use the All Out engine systems/skills like Inventory, Abilities, Economy Currencies, instead of creating your own custom systems.
-4. After any script change, compile with the All Out MCP compile tool.
+## Find the Fun First
 
----
+Before touching the scene or writing any code, design the game. The user's prompt is a fantasy — "be a wizard", "run a restaurant", "grow crops" — and your job is to find the proven, deeply engaging game inside it.
 
-### 1. Break Into Scene and Script Epics
-**Scene epics**:
-- Environment and terrain (ground, walls, decorations, lighting)
-- Spawn area, player plots (if applicable)
-- Interactable objects and NPCs (placed as entities with components)
+**1. Anchor on hits.** Name the 2–3 chart-topping Roblox games closest to the prompt and steal their proven structure; differentiate on theme and feel, not on loop mechanics that already work. Genre anchors:
+- Farm / collect / idle: Grow a Garden, Bee Swarm Simulator, Pet Simulator 99, Fisch
+- Tycoon / builder: Theme Park Tycoon 2, Restaurant Tycoon 2, Car Dealership Tycoon
+- Combat / RPG progression: Blox Fruits, Blade Ball, Arsenal, Rivals
+- Tower defense: Toilet Tower Defense, Anime Defenders
+- Social / roleplay / dress-up: Adopt Me!, Brookhaven RP, Dress to Impress
+- Round-based / party / horror: Murder Mystery 2, Doors, Tower of Hell, BedWars, Natural Disaster Survival
 
-**Script epics**:
-- Plot assignment (if applicable)
-- Match flow, game state, win/loss conditions
-- Wave systems, spawners, timers
-- Player abilities
-- Enemy/NPC behavior and AI
-- Economy, resources, progression
-- Polish (tactile sfx for every action, animated particles, damage flashes, juicy effects when earning currency or harvesting plants)
+Look up the closest comparable's wiki. Note its core loop, first-session onboarding, progression and economy numbers, and social hooks — you will design with real numbers, not guesses.
 
-### 2. Write `game_plan.json`
-```json
-{
-  "game": "Game Title",
-  "description": "One sentence",
-  "scene_epics": [
-    {
-      "name": "Arena Layout",
-      "status": "pending",
-      "tasks": [
-        { "name": "Search and download ground/wall/decoration assets", "done": false },
-        { "name": "Place arena boundary walls", "done": false },
-        { "name": "Place spawn points for players and enemies", "done": false },
-        { "name": "Add decorative props to fill the space", "done": false }
-      ],
-      "verified": false
-    }
-  ],
-  "script_epics": [
-    {
-      "name": "Enemy Wave System",
-      "status": "pending",
-      "tasks": [
-        { "name": "Create wave manager script with timed spawns", "done": false },
-        { "name": "Implement enemy pathfinding to target", "done": false },
-        { "name": "Scale difficulty across waves", "done": false }
-      ],
-      "gate_test": "test_gate_enemy_waves",
-      "gate_passed": false
-    }
-  ]
-}
-```
+**2. Design the three loops.** Every hit game runs three loops at once:
+- **Seconds** — the action repeated hundreds of times (harvest, shoot, serve, dodge). It must feel great: instant feedback, sound, motion, numbers going up.
+- **Minutes** — the reason to keep doing it (fill the order, clear the wave, afford the next upgrade). A reward lands every few minutes; no dead air.
+- **Hours** — the reason to come back (new zones, rarer drops, prestige/rebirth, leaderboard climb, cosmetics).
 
----
+If you cannot say what the player is working toward at minute 1, minute 10, and hour 2, the design is not done.
 
-### 3. Build the Scene
-After completing a scene epic, **launch a verification subagent**. This subagent's job is to genuinely critique the work — not rubber-stamp it. **Don't write test.csl files for scene verification.**
+**3. Commit to real content scope.** Defaults for a real game — go bigger when the comparables do, smaller only if the user's prompt explicitly asks:
+- 3+ interlocking systems (collect → sell → upgrade → unlock new area → collect faster)
+- 15–30 purchasable upgrades/unlocks arranged in tiers
+- 3+ distinct zones; later zones gated by progression and visibly aspirational from the start
+- 8+ mechanically distinct variants of the core content (crops, towers, pets, weapons, enemies…) — different behavior, not stat reskins
+- Rarity tiers (common → legendary) wherever collecting is involved; the rare version must be visibly cooler
+- An endgame lever: prestige/rebirth, bosses, a leaderboard — pick at least one
 
-Example verification subagent prompt:
-```
-Verify the "Arena Layout" scene epic for the Tower Defense game.
+**4. Do the economy math.** Write the actual price ladder: starting currency, income per seconds-loop, cost of every upgrade tier. Costs grow geometrically (~1.6–2×) alongside income so the next unlock is always 1–3 minutes-loops away. Paper-play the first ten minutes: first upgrade affordable inside 60–90 seconds, no dead zone where nothing is within reach, no point where income can hit zero with no recovery path. Round-based games reset currency per round (Economy.delete_save_data on login).
 
-Use these MCP tools to critique this scene with a critical lens:
-1. Call scene_hierarchy to get the full entity tree
-2. Call editor_scene_screenshot to capture the current view
-3. Call scene_camera to move to different positions, then screenshot again (get at least 3 angles)
-4. Call scene_find_entities to confirm key entities exist: "Spawn_Point_1", "Spawn_Point_2", "Tower_Pad_1" through "Tower_Pad_6", "Base"
+**5. Design multiplayer ownership.** Every game runs with 1–4+ concurrent players:
+- Shared world state needs an ownership pattern: duplicated plots (at least 4) assigned on join, per-player instances, or per-player state on the player class. A gardening game with one shared garden is unplayable.
+- Solo must be fully playable; a full server must feel better — shared boss moments, seeing others' progress, trading, leaderboards.
 
-Evaluate against these criteria:
-- NO GAPS: Is there ground/terrain covering the entire play area? Any holes or missing tiles?
-- DENSITY: Does this look like a shipped game or an empty prototype? Are there enough decorative props?
-- SCALE: Are towers, enemies, and the base appropriately sized relative to the lane?
-- STRUCTURE: Are spawn points at lane entrances? Are tower pads along the lane? Is the base at the end?
+### Write design.md
+Capture the above in `design.md` at the project root — about a page of markdown, never JSON, no task-tracking bureaucracy. It is the design contract every later phase builds against:
+- Fantasy and comparables (one line each)
+- The three loops (one line each)
+- Content list: every zone, upgrade, and item/enemy/unit by name — this is the scope commitment
+- Economy table: starting currency, income rates, full price ladder
+- Multiplayer ownership model
+- First 60 seconds: what a brand-new player sees, does, and earns
 
-Return a verdict: PASS or FAIL.
-If FAIL, list every minor issue along with entity names and positions so they can be fixed.
-```
-Only set `verified: true` on the scene epic after the verification subagent passes. If it fails, fix the issues and re-verify.
+Update it if reality forces a change — it must stay true, because later phases trust it over guesses.
 
----
+## The Three Build Phases
 
-## Phase 3 — Build the Scripts
-After all scene epics are verified, build the `script_epics` in order.
-Work through the `tasks` array in order:
-1. Implement the task in CSL
-2. Compile after every change
-3. Fix errors before moving on
-4. Mark the task done in `game_plan.json`
+The build runs **world-building → scripting → review**. In phased builds each phase gets a fresh conversation and you are told which phase you are executing: do only that phase, and read `design.md` first. In a single conversation, run the phases in order yourself.
 
-Use the appropriate engine skills as you go and constantly reference AGENTS.md.
+Rules for every phase:
+- Use engine systems — Inventory, Abilities, Economy, save, interactables, effects — instead of custom versions. Check the skills list before building anything generic.
+- Never use placeholder art. Search real assets with the MCP asset tools; prefer animated Spine assets (spine skill).
+- Compile after every script change; fix errors before moving on.
+- Verify by playing, not by reading code. Live loop: `start_game` once, then edit → `compile` (hot-reloads in seconds) → `in_game_screenshot` → `client_ui_tree`/`client_click`. When the `run_tests` tool is available, also write end-to-end tests for gameplay systems (testing skill).
 
-### Step 3: Gate Test
-You must have a subagent write a gate_test for every task using the `testing` skill.
+### Phase 1 — World Building
+Find the fun first (above), write `design.md`, then build the ENTIRE world. No scripts in this phase.
+- Follow the world-building skill for asset discovery, placement, tiling, and scale verification.
+- Build every zone in the content list at full quality: spawn area, all player plots, gameplay entities, NPCs, decoration, collision/navmesh. The starter zone must read instantly; later zones visible and enticing but clearly gated.
+- The bar is a beautiful, dense, complete game world — the kind a player screenshots — not a starter area with props scattered to look busy.
+- Before calling it done, critique it like an outsider: screenshot from several camera positions (includePlayerForScale) hunting for terrain gaps, empty dead space, wrong relative scales, floating/overlapping props, and zones that don't match `design.md`. For a large map, spawn a fresh-eyes subagent to run this critique with scene_hierarchy plus screenshots from 3+ angles and return concrete failures with entity names and positions; fix and re-verify until it passes.
 
-Gate subagent prompt:
-```
-Write the gate test for the "{epic name}" script epic.
+### Phase 2 — Scripting
+Read the design.md or write it if it doesn't exist. Bring the world to life with ALL of the game logic. Do not rearrange the world unless something is genuinely broken.
+- Core loop first: make the seconds→minutes loop playable end-to-end before anything else. Then build out the full `design.md` content list — every upgrade, zone gate, and variant — plus win/loss and match flow.
+- Multiplayer from the first line: ownership assignment on join, server-authoritative state, per-player progress, plot reset when a player leaves.
+- Onboarding is a feature: a brand-new player must know their first action within seconds (pointer/arrow to it) and earn their first reward inside a minute.
+- Make every action tactile: sound on every interaction, particles, number pop-ups, damage flashes, celebrations on unlocks (effects skill). Silent actions feel broken.
+- UI through the uidoc skill (screen-space) and world-space-ui skill (in-world). Keep the HUD to what a new player needs.
+- Play continuously through the live loop; nothing is "done" until you have watched it work in-game.
 
-Read these skills first:
-- <absolute path to testing/SKILL.md>
-- <absolute path to syntax/SKILL.md>
+### Phase 3 — Review
+The game works; now make it engaging, then make it shippable. You are the last check before real players see this, and your improvements must be implemented, not noted.
 
-Read these files to understand what was built:
-- <list every script file the epic created or modified>
+The design audit comes first:
+- Re-check the comparables' wikis with real questions now that the game is playable, and port over what they do better.
+- Audit against `design.md`: did scripting quietly cut scope? Restore it.
+- Play the game start to finish and fix against this list:
+  1. Is the core loop focused, satisfying, and instantly clear to a new player?
+  2. Is there enough depth and scaling to hold interest for hours, not minutes?
+  3. Is there always "just one more thing" 1–3 loops away? Kill dead zones in the price ladder.
+  4. Soft locks: can income hit zero with no recovery? Can colliders block anywhere the game points the player? Verify by playing.
+  5. Is the UI exactly what a new player needs — nothing missing, nothing extra?
+  6. Is it fun solo and duo, and better with 4?
+- Keep the world layout unless a change directly serves engagement, onboarding, progression, scaling, or soft-lock prevention.
 
-The test procedure must be named `{gate_test name}`.
-It should:
-- <specific assertions for this epic's deliverable>
-- Take screenshots at key gameplay moments (mid-wave, after purchase, etc.)
+Then the ship check. Work this rubric yourself and fix every failure before calling it done:
 
-Gate tests verify gameplay logic, not UI polish. If the epic added or changed UI, polish it separately with the live loop (start_game + compile hot-reload + in_game_screenshot + client_click) before writing the gate test.
+**Scene** — `scene_hierarchy`, `scene_camera`, `editor_scene_screenshot`; zoom into detail areas:
+- Objects sized appropriately relative to the player
+- Nothing looks randomly scattered; every prop is cohesive gameplay or a deliberate set piece
+- No overlapping objects; roads/paths/sidewalks aligned with end pieces
+- Gameplay-relevant assets used ONLY for gameplay (e.g. if a tree can be chopped, every tree is choppable)
 
-Write the test to tests/{test_file}.csl.
-After writing, compile using the All Out MCP compile tool and fix any errors.
-```
+**Code**
+- No gameplay logic gated behind `is_server` (perf) or `is_local` (wiped on server update)
+- Delivers everything `design.md` commits to (content list, economy ladder, ownership) — no quietly cut scope
+- Sound effects where appropriate; every non-player Spine sets correct skins/animations (`spine_rig_info`)
+- Round-based: full state resets after rounds. Plot-based: plots reset on leave; start at plot + easy teleport back
+- Balance: enough starting currency for starter buys; no obvious progression gaps
 
-### Step 4: Run the Gate Test
-Use MCP `run_tests` with the gate test name.
+**Tests** — End-to-end coverage for every UI button, interactable, and feature (testing skill). Watch `session_logs` while playing.
 
-- **Pass** → set `gate_passed: true`, set `status: "done"`, continue
-- **Fail** → inspect, fix, recompile, re-run
+**UI** (omit if none) — `start_game`, drive every screen with `client_ui_tree` / `client_click` / `in_game_screenshot`:
+- Text/buttons inside containers; nothing overflows or overlaps; readable on mobile
+- Every button in `client_ui_tree` actually responds
+- Screen-space UI via UIDoc (`uidoc` skill)
 
-### Step 5: Checkpoint
-Update `game_plan.json` after each epic.
----
-
-## Phase 4 — Final Verification
-After all epics are done:
-
-1. Run the full test suite
-2. Play the complete game live: `start_game`, then walk every screen and flow — `client_ui_tree` + `client_click` through menus, shops, and dialogs, `in_game_screenshot` at each state
-3. Report what was built and any remaining risks
-
----
-## Example: 2D Tower Defense
-```json
-{
-  "game": "Lane Defense",
-  "description": "Place elemental themed towers to stop waves of enemies from reaching the base matching the level of polish of Bloons TD6. 8 unique towers each have special effects and enemies are varied and scale in difficulty.",
-  "scene_epics": [
-    {
-      "name": "Arena Environment",
-      "status": "pending",
-      "tasks": [
-        { "name": "Place a backdrop and scenery to match the theme", "done": false },
-        { "name": "Lay out the lane path with ground tiles from spawn to base", "done": false },
-        { "name": "If using a pre-baked map, figure out the EXACT points the enemies will path between to get to the base using red markers pixel-pushed to perfection.", "done": false },
-        { "name": "Add decorative environment props (trees, rocks, grass) to fill empty space", "done": false }
-      ],
-      "verified": false
-    },
-    {
-      "name": "Gameplay Entities",
-      "status": "pending",
-      "tasks": [
-        { "name": "Find unique and beautiful animated tower, enemy, and base assets", "done": false },
-        { "name": "Place the base entity at the lane endpoint", "done": false },
-        { "name": "Place 6 tower pads in strategic places off of the lane", "done": false }
-      ],
-      "verified": false
-    }
-  ],
-  "script_epics": [
-    {
-      "name": "Enemy Wave Loop",
-      "status": "pending",
-      "tasks": [
-        { "name": "Implement wave manager with timed spawns from spawn points", "done": false },
-        { "name": "Move enemies along the lane using pathfinding", "done": false },
-        { "name": "Damage the base when an enemy reaches it and destroy the enemy", "done": false }
-      ],
-      "gate_test": "test_gate_enemy_wave_loop",
-      "gate_passed": false
-    },
-    {
-      "name": "Tower Placement",
-      "status": "pending",
-      "tasks": [
-        { "name": "Implement tap-to-build on tower pads using plot ownership (per-player pad locking)", "done": false },
-        { "name": "Spend currency to place a tower, block if pad is occupied or owned by another player", "done": false },
-        { "name": "Visual feedback on valid/invalid/owned pads, build sfx when placement succeeds", "done": false }
-      ],
-      "gate_test": "test_gate_tower_placement",
-      "gate_passed": false
-    },
-    {
-      "name": "Tower Combat",
-      "status": "pending",
-      "tasks": [
-        { "name": "Give towers targeting rules and fire cadence", "done": false },
-        { "name": "Spawn projectiles that travel to and damage enemies", "done": false },
-        { "name": "Add tactile impact animations and subtle sfx", "done": false },
-        { "name": "Award currency to the tower's owner on kill", "done": false }
-      ],
-      "gate_test": "test_gate_tower_combat",
-      "gate_passed": false
-    },
-    {
-      "name": "Economy and Wave Scaling",
-      "status": "pending",
-      "tasks": [
-        { "name": "Register currency with Economy system for persistence", "done": false },
-        { "name": "Reset currency on logging in (call Economy.delete_save_data) for round based games", "done": false },
-        { "name": "Scale enemy count and stats between waves", "done": false }
-      ],
-      "gate_test": "test_gate_economy_scaling",
-      "gate_passed": false
-    },
-    {
-      "name": "HUD and Match Flow",
-      "status": "pending",
-      "tasks": [
-        { "name": "Display per-player currency, shared base health, wave number", "done": false },
-        { "name": "Show build menu with tower options and costs", "done": false },
-        { "name": "Implement win state (all waves cleared) and loss state (base destroyed)", "done": false },
-        { "name": "End-of-match screen with player stats and play again screen", "done": false }
-      ],
-      "gate_test": "test_gate_hud_match_flow",
-      "gate_passed": false
-    }
-  ]
-}
-```
+Fix everything, then re-verify in-game. Leave no stone unturned.

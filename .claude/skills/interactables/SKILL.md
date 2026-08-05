@@ -23,12 +23,13 @@ My_Pickup :: class : Interactable {
 
     on_interact :: method(player: Player) {
         is_picked_up = true;
+        // Assumes "Coins" was registered in ao_before_scene_load.
         Economy.deposit_currency(player, "Coins", item_value.(s64));
         entity.destroy();
     }
 }
 ```
-The engine automatically shows interaction prompts when players are in range.
+Add `My_Pickup` to an entity in the editor, or add it to a spawned entity at runtime. The engine automatically shows interaction prompts when players are in range.
 
 ### Listener Callbacks
 Implement these methods on your Interactable subclass:
@@ -46,11 +47,12 @@ For game-wide checks on ALL interactables, define these on your Player component
 Player :: class : Player_Base {
     // Return false in your player to block ALL interactions like player is dead
     ao_can_use_interactable :: method(interactable: Interactable) -> bool {
+        // Replace with your game's death-state check.
         if health.is_dead return false;
         return true;
     }
 }
 ```
 
-## Dynamic Prompt Text
+## Interaction Feedback
 - Use `Notifier.notify(player, "message")` to send feedback on interactions that don't otherwise have feedback like "you don't have enough money" but don't overuse this because it can be annoying.

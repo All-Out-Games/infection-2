@@ -13,7 +13,6 @@ For runtime-spawned non-player entities:
 ```csl
 entity := Scene.create_entity();
 animator := entity.add_component(Spine_Animator);
-animator.awaken();  // REQUIRED before calling animation methods
 animator.set_skeleton(get_asset(Spine_Asset, "$AO/streamed_character"));
 animator.disable_all_skins();
 animator.enable_skin("base/crewchsia"); // Use spine_rig_info for the exact skins required by other rigs.
@@ -22,7 +21,7 @@ animator.set_animation("Idle", true, 0); // name, loop, track, speed = 1
 animator.scale = v2{0.9, 0.9}; // reference the worldSize returned by the spine_rig_info tool and compute the best value here given the world/player/use case.
 ```
 
-**You MUST call `awaken()` before calling any animation methods** if your component and the Spine_Animator start at the same time on the same entity.
+`add_component` awakens synchronously before returning. Use its initialization callback when fields must be set before awakening; do not call `awaken()` again.
 
 ## Player Animations
 The engine builds the player's skeleton and state machine automatically. Access it via `player.animator.state_machine`. The `moving` bool is driven by velocity — everything else you trigger from CSL.
@@ -49,8 +48,10 @@ sm.set_trigger("attack");
 sm.set_bool("ghost_form", true);  // false to exit then RESET
 ```
 
-Available triggers: `death`, `RESET`, `flinch`, `dodge_roll`, `attack`, `punch`
-Available bools: `ghost_form`, `electrocute`, `sleep`
+Common built-in triggers: `death`, `RESET`, `flinch`, `dodge_roll`, `attack`, `punch`
+Common built-in bools: `ghost_form`, `electrocute`, `sleep`
+
+After clearing `electrocute` or `sleep`, trigger `RESET` to leave the end animation.
 
 ### Generated Player Rig Animations
 The shipped player rig can be stripped down per project. Before writing CSL that depends on a player animation outside the normal trigger set, use MCP to make sure the generated player rig contains it.
@@ -69,7 +70,7 @@ The response includes `animationDetails` for each animation you enable: its dura
 ### Playing Generated Player Rig Animations (custom layer pattern)
 The built-in player state machine only has the standard trigger states. To play other rig animations on the player, add your own layer to the player's live state machine. Do NOT replace the player's state machine, and do NOT call `set_animation` directly on reserved tracks.
 
-- Tracks 0 (main), 1 (attack), 2 (invis), and 10000 (skin anim) are reserved by the engine. Use tracks 3–9 for game layers.
+- Tracks 0 (main), 1 (attack), 2 (invis), and 10 (skin anim) are reserved by the engine. Use tracks 3–9 for game layers.
 - A new layer MUST get `set_initial_state` in the same function that creates it — the next state machine update asserts otherwise. Use a `__CLEAR_TRACK__` state as the empty default so your layer only overrides the body when it should.
 - Run setup and triggers on every sim: never wrap state machine setup, triggers, or attachment overrides in `is_local()` — the server and all clients need identical animation state (replication and server-side test assertions both depend on it).
 
@@ -115,7 +116,7 @@ override_id := animator.instance.override_attachment_sprite("RAND004/Pirate/powd
 ```
 
 ## Non-Player State Machine
-For complex non-player spines, you can create your own custom state machine for those spines. A `State_Machine` can also be attached to a standalone `Spine_Instance` via `instance.set_state_machine(sm, true)`, this is useful, like displaying a spine instance in UI. When created this way, you will need to Awake & Update the state machine manually.
+For complex non-player spines, you can create your own custom state machine for those spines. A `State_Machine` can also be attached to a standalone `Spine_Instance` via `instance.set_state_machine(sm, true)`, such as for UI. Call `instance.update(dt)`; it updates the attached state machine automatically.
 
 ```csl
 Enemy_NPC :: class : Component {
@@ -125,7 +126,8 @@ Enemy_NPC :: class : Component {
     ao_start :: method() {
         state_machine = State_Machine.create();
 
-        // Variable types: `.BOOL`, `.TRIGGER`, `.INT`, `.FLOAT`. Numeric conditions accept a kind: `.GREATER`, `.GREATER_EQUAL`, `.LESS`, `.LESS_EQUAL`, `.EQUAL`.
+        // Variable types: `.BOOL`, `.TRIGGER`, `.INT`, `.FLOAT`. Name-based set_float is currently broken; avoid FLOAT variables.
+        // Numeric conditions accept: `.GREATER`, `.GREATER_EQUAL`, `.LESS`, `.LESS_EQUAL`, `.EQUAL`.
         is_moving := state_machine.create_variable("is_moving", .BOOL);
         attack_trigger := state_machine.create_variable("attack", .TRIGGER); // auto-resets after triggering
         die_trigger := state_machine.create_variable("die", .TRIGGER);
@@ -166,7 +168,6 @@ Enemy_NPC :: class : Component {
         to_death := layer.create_global_transition(death_state, false);
         to_death.create_trigger_condition(die_trigger);
 
-        animator.awaken();
         animator.set_state_machine(state_machine, true);  // true = transfer ownership
     }
 

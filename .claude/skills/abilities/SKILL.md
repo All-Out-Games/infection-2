@@ -44,16 +44,9 @@ Player :: class : Player_Base {
 ```
 
 ## Button Layout
+Index 0: Large primary button (bottom-right, closest to corner)
+Index 1-5: Smaller secondary buttons arranged around index 0
 
-- **Index 0**: Large primary button (bottom-right, closest to corner)
-- **Index 1-5**: Smaller secondary buttons arranged around index 0
-
-```
-// Offsets from bottom-right:
-// 0: {-105, 90}   Big     1: {-295, 40}   Small, left
-// 2: {-290, 180}  Upper-left   3: {-180, 290}  Upper
-// 4: {-40, 295}   Upper-right  5: {-440, 40}   Far left
-```
 
 ## Ability_Update_Params
 
@@ -71,7 +64,6 @@ on_update :: method(params: ref Ability_Update_Params) {
 ```
 
 ## Hold Ability
-
 Use `Ability_Utilities.update_holding_ability` for abilities active while held. Handles both PC keybind and mobile button.
 
 ```csl
@@ -88,7 +80,7 @@ Sprint_Ability :: class : Ability_Base {
 
     on_update :: method(params: ref Ability_Update_Params) {
         holding := Ability_Utilities.update_holding_ability(player, ref params, keybind_sprint);
-        player.is_sprinting = holding.active && player.stamina > 0;
+        player.is_sprinting = holding.active && params.can_use;
     }
 }
 ```
@@ -144,7 +136,7 @@ Dodge_Roll :: class : Ability_Base {
 ## Low-Level Utilities
 
 - `update_aiming_ability` -- Returns `{ aim: bool, activate: bool, cancel: bool, aim_direction: v2 }`. Use `full_update_aimed_ability` unless you need custom aiming UI.
-- `update_targeted_ability` -- Returns `{ targeting: bool }`. Sets `player.active_ability` to this ability.
+- `update_targeted_ability` -- Returns `{ targeting: bool }`; updates `player.active_ability` from button input.
 
 ## Ability_Base Fields
 
@@ -165,7 +157,6 @@ Ability_Base :: class {
 ```
 
 ## Keybinds
-
 Register in `ao_before_scene_load`, then reference via `keybind_override`:
 
 ```csl

@@ -36,6 +36,7 @@ Global variable initializers must be compile-time constants. Zero-initialized fi
 
 ```csl
 name := "Ada";
+count := 0;
 msg := `Hi {name}, you have {count + 1} new messages`; // any expression works inside {}
 ```
 
@@ -123,7 +124,17 @@ numbers.ordered_remove_by_index(0);
 ```
 
 ## Control Flow
-No parentheses around conditions. Enum values use `.` prefix in `switch`:
+Conditions normally omit parentheses. Enum values use `.` prefix in `switch`:
+
+### Compound literals in control-flow conditions
+
+A compound literal immediately before a control-flow body is ambiguous. This is the exception to the normal no-parentheses style: disambiguate with `.{}`, `Type.{}`, or parentheses.
+
+```csl
+if value == .{} {}
+if value == v2.{} {}
+if (value == v2{}) {}
+```
 
 ```csl
 switch tier {
@@ -161,6 +172,7 @@ switch tier {
 Do not write C-style fallthrough logic
 
 `for` also handles custom iterators: `for player: component_iterator(My_Player) { }`
+Numeric loops use `for i: 0..3 { }` (inclusive) or `for i: 0..<3 { }` (half-open), never `for i in ...`.
 
 Custom iterator-based `for` loops require a `next :: method() -> bool` and a `current` field.
 
@@ -206,7 +218,7 @@ min :: proc(a: $T, b: T) -> T {
 result := min(3, 5); // T is deduced as int
 ```
 
-> `T` is not a type. Never write `component_iterator(T)` or `[..]T` — always use the actual type name like `component_iterator(Enemy)` or `[..]Enemy`.
+> `T` is a type only inside a polymorphic declaration that binds `$T`; it is not a generic placeholder elsewhere. In concrete code use the actual type name, such as `component_iterator(Enemy)` or `[..]Enemy`.
 
 ## Function Pointers and Callbacks
 
@@ -246,5 +258,4 @@ get_thing :: proc() -> Thing, bool {
 
 thing, ok := get_thing();
 if thing, ok := get_thing(); ok { }
-
-_ is NOT supported for discarding variables
+```

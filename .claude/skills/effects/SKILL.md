@@ -57,13 +57,13 @@ Effect_Base :: class {
     player: Player; // null for NPCs
 
     player_specific: struct {
-        freeze_player: bool; // Lock position entirely (use for eat/interact)
+        freeze_player: bool; // Zero out Player Movement_Agent velocity (use for eat/interact)
         disable_movement_inputs: bool; // Ignore input but code can still move (use for dash/roll)
     };
 
-    start_time: float;
-    next_effect: Effect_Base;
-    prev_effect: Effect_Base;
+    start_time: float #read_only;
+    next_effect: Effect_Base #read_only;
+    prev_effect: Effect_Base #read_only;
 }
 ```
 ## Callbacks (each optional)

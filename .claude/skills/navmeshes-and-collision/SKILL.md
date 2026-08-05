@@ -26,7 +26,7 @@ result: v2;
 triangle_hint: s64; // 0 = not set; reuse for repeated nearby queries for speed
 
 if navmesh.try_find_closest_point_on_navmesh(point, ref result, ref triangle_hint) {
-    spawn_entity.set_local_position(result);
+    spawn_entity.set_world_position(result);
 }
 ```
 
@@ -43,7 +43,7 @@ if result.success {
 }
 ```
 
-`set_path_target` is processed later in the frame in parallel with other agents, so the first frame you set a new target will NOT return `success == true`
+`set_path_target` queues the new target and returns the previous processed pathfind result. Ignore the first call's return, and treat the result as one-frame stale when changing targets.
 
 `agent_radius` controls pathfinding clearance. Increase it when an agent should route wider around corners or stay farther from navmesh edges. To fully avoid walls during actual movement, the agent should also have a collider, usually a `Circle_Collider`, with a matching radius.
 
@@ -55,14 +55,14 @@ agent.set_navmesh_to_lock_to(null); // clear
 
 ### Movement_Agent Properties
 ```csl
-agent.movement_speed = 300.0; // default
+agent.movement_speed = 300.0; // default walking speed, take note and adapt to your needs! 
 agent.friction = 0.5;
-current_velocity := agent.velocity; // readonly
-input := agent.input_this_frame; // readonly
+current_velocity := agent.velocity; // writable
+input := agent.input_this_frame; // writable; consumed and reset after movement update
 ```
 
 ### CSL Movement Physics and Triggers
-Agent's enabled non-trigger colliders block against enabled non-trigger world colliders taking `category_bits` / `mask_bits` filtering into account
+Agent's enabled non-trigger colliders block against enabled non-trigger world colliders taking `category_bits` / `mask_bits` filtering into account. These filter fields are configured in editor/native data and are not currently exposed in `core:ao`.
 
 ```csl
 Trigger_Listener :: class : Component {
@@ -73,7 +73,7 @@ Trigger_Listener :: class : Component {
 }
 ```
 
-Movement_Agent has velocity/friction fields but you do not have to use them. For a stationary trap, teleporter, pickup zone, or similar trigger volume, add a Movement_Agent and a trigger collider to the entity and assign trigger callbacks.
+For a stationary trap, teleporter, pickup zone, or similar trigger volume, add a trigger collider and assign callbacks. Add `Movement_Agent` only if the entity itself needs agent-driven movement or collision.
 
 `rebuild_immediately()` Use only when you need to query the updated navmesh in the same frame.
 

@@ -6,6 +6,7 @@ You will be developing a multiplayer game in a custom scripting language (.csl)
 - All gameplay state is automatically synced. You do not need to write RPCs or manually replicate state.
 - The client runs the same gameplay code as the server. The server's authoritative result pushed to the client every 4 frames — you get correctness **and** responsiveness for free.
 - Do not forget that **multiple players will be connecting**. Avoid global state that will break with multiple players. Store these as fields on the player.
+- `ao_start()` is not replayed for late-joining clients — rebuild client-local presentation from synced state in `ao_on_state_sync()` (see the client-specific-state skill); spawn/destroy networked entities in the shared predicted path (never gated to server or local); and store cross-entity ownership as user-id strings (`player.get_user_id()`), never as synced Player/Entity references or entity-creation order.
 
 There are two player methods that control where code runs:
 ```csl
@@ -52,6 +53,7 @@ other := e.get_component(Other_Component);
 
 e.destroy();
 ```
+`add_component()` runs the new component's `ao_start()` before returning; use its `on_before_start` callback for any fields that startup must read instead of assigning them afterward.
 
 ### Iterating Entities
 ```csl
@@ -252,14 +254,13 @@ Set `leaderboard_id` on the component, call `Global_Leaderboard.increment_score(
 - When unsure about an API signature find the appropriate skill. If none you may grep the core library in scripts/.ao_core
 - You MUST fundamentally design your games to account for multiple players. Everything must either be plot based (tycoons) or round based (shooters)
 - If asked for Brainrot use get_remote_assets_that_work_well_with tool with catalogId 05604152b758f509 (these are usually collection based games where brainrots obtained are placed in your plot and generate money)
-- All games with plots start the player in their plot and have a UIK button to teleport back. Plots MUST have very clear visual boundaries
+- All games with plots start the player in their plot and have a button to teleport back. Plots MUST have very clear visual boundaries
 - Only use the Notifier API for critical messages there is no other way to convey. Skip notifications if there's a more natural way to convey something
 - For player onboarding use world-space objective arrows insetad of tutorial text. Reference the `world-space-ui` skill and use `Tutorial_Arrow.default_options()` + `Tutorial_Arrow.draw(player, target_position, options)`. Pay special attention to avoid pointing an arrow somewhere a player can't go (already mined resource, collider blocking, teleport actually required to get there)
 - Any games involving weapons MUST clone https://github.com/All-Out-Games/reusable-weapons-csl.git repo with curl and follow its README
 
 ### Text / copy
 - Don't use text in UI if a texture icon would suffice. Players won't spend time reading text
-- If you use text in UI make CERTAIN it fits within its container. UIK does not wrap automatically and you have a tendancy to overflow container bounds. Meticulously check that everything fits with screenshot tests. 
 - Don't explain the game with UI/text. Put effort into making the game clear via INTUITIVE GAMEPLAY
 
 ### Maps

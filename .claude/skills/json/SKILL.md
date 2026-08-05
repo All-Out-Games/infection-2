@@ -15,6 +15,8 @@ JSON :: struct {
 }
 ```
 
+`try_deserialize` returns `false` for malformed JSON syntax. Valid JSON with an incompatible schema fails loudly.
+
 For persistence, prefer `Save.set_json` / `Save.try_get_json` (see the save skill)
 
 ## Basic Usage
@@ -91,7 +93,9 @@ JSON.try_deserialize(json, ref loaded_pos);
 | `[]T` (managed array) | `[...]` |
 | `[N]T` (fixed array) | `[...]` |
 | Class with `@ao_serialize` | `{"field": value, ...}` |
-| `null` | `null` |
+| Null class reference | `null` when serializing; class deserialization from `null` is unsupported |
+
+Deserializing `[]` does not clear an existing managed or dynamic array. Use a fresh/empty destination when empty input must produce an empty array.
 
 ## Schema Versioning
 

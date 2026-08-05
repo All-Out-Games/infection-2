@@ -186,7 +186,79 @@ Pathfind_Tester :: class : Component {
     agent_radius: float #foreign;
 } #foreign_struct "Pathfind_Tester"
 
+Tile_Layer_Kind :: enum {
+    GROUND;
+    WALL;
+}
+
+Tile_Layer_Mode :: enum {
+    DEFAULT;
+    MANUAL;
+}
+
+// Tilemap mutations are ordinary scene state and participate in CSL prediction,
+// rollback, and reconciliation. Layer indices shift when a layer is removed.
 Tilemap_Component :: class : Component {
+    get_width_in_chunks  :: method() -> int #foreign "tilemap_get_width_in_chunks";
+    get_height_in_chunks :: method() -> int #foreign "tilemap_get_height_in_chunks";
+    get_width_in_tiles   :: method() -> int #foreign "tilemap_get_width_in_tiles";
+    get_height_in_tiles  :: method() -> int #foreign "tilemap_get_height_in_tiles";
+    get_layer_count      :: method() -> int #foreign "tilemap_get_layer_count";
+    set_width_in_chunks  :: method(width_in_chunks: int) #foreign "tilemap_set_width_in_chunks";
+    set_height_in_chunks :: method(height_in_chunks: int) #foreign "tilemap_set_height_in_chunks";
+    resize               :: method(width_in_chunks: int, height_in_chunks: int) #foreign "tilemap_resize";
+
+    add_layer         :: method(kind: Tile_Layer_Kind = .GROUND) -> int #foreign "tilemap_add_layer";
+    remove_layer      :: method(layer_index: int) #foreign "tilemap_remove_layer";
+    clear_layer_tiles :: method(layer_index: int) #foreign "tilemap_clear_layer_tiles";
+
+    get_layer_kind       :: method(layer_index: int) -> Tile_Layer_Kind #foreign "tilemap_get_layer_kind";
+    set_layer_kind       :: method(layer_index: int, kind: Tile_Layer_Kind) #foreign "tilemap_set_layer_kind";
+    get_layer_mode       :: method(layer_index: int) -> Tile_Layer_Mode #foreign "tilemap_get_layer_mode";
+    set_layer_mode       :: method(layer_index: int, mode: Tile_Layer_Mode) #foreign "tilemap_set_layer_mode";
+    get_layer_sort_order :: method(layer_index: int) -> int #foreign "tilemap_get_layer_sort_order";
+    set_layer_sort_order :: method(layer_index: int, sort_order: int) #foreign "tilemap_set_layer_sort_order";
+    get_layer_manual_layer :: method(layer_index: int) -> s64 #foreign "tilemap_get_layer_manual_layer";
+    set_layer_manual_layer :: method(layer_index: int, manual_layer: s64) #foreign "tilemap_set_layer_manual_layer";
+    get_layer_tile_size  :: method(layer_index: int) -> float #foreign "tilemap_get_layer_tile_size";
+    set_layer_tile_size  :: method(layer_index: int, tile_size: float) #foreign "tilemap_set_layer_tile_size";
+    get_layer_tint       :: method(layer_index: int) -> v4 #foreign "tilemap_get_layer_tint";
+    set_layer_tint       :: method(layer_index: int, tint: v4) #foreign "tilemap_set_layer_tint";
+    get_layer_mask       :: method(layer_index: int) -> Texture_Asset #foreign "tilemap_get_layer_mask";
+    set_layer_mask       :: method(layer_index: int, mask: Texture_Asset) #foreign "tilemap_set_layer_mask";
+    get_layer_outline_color :: method(layer_index: int) -> v4 #foreign "tilemap_get_layer_outline_color";
+    set_layer_outline_color :: method(layer_index: int, color: v4) #foreign "tilemap_set_layer_outline_color";
+
+    get_layer_wall_height :: method(layer_index: int) -> s64 #foreign "tilemap_get_layer_wall_height";
+    set_layer_wall_height :: method(layer_index: int, wall_height: s64) #foreign "tilemap_set_layer_wall_height";
+    get_layer_wall_top_texture :: method(layer_index: int) -> Texture_Asset #foreign "tilemap_get_layer_wall_top_texture";
+    set_layer_wall_top_texture :: method(layer_index: int, texture: Texture_Asset) #foreign "tilemap_set_layer_wall_top_texture";
+    get_layer_wall_top_mask :: method(layer_index: int) -> Texture_Asset #foreign "tilemap_get_layer_wall_top_mask";
+    set_layer_wall_top_mask :: method(layer_index: int, mask: Texture_Asset) #foreign "tilemap_set_layer_wall_top_mask";
+    get_layer_wall_outline_color :: method(layer_index: int) -> v4 #foreign "tilemap_get_layer_wall_outline_color";
+    set_layer_wall_outline_color :: method(layer_index: int, color: v4) #foreign "tilemap_set_layer_wall_outline_color";
+    get_layer_collision_enabled :: method(layer_index: int) -> bool #foreign "tilemap_get_layer_collision_enabled";
+    set_layer_collision_enabled :: method(layer_index: int, enabled: bool) #foreign "tilemap_set_layer_collision_enabled";
+    get_layer_collision_inset :: method(layer_index: int) -> v2 #foreign "tilemap_get_layer_collision_inset";
+    set_layer_collision_inset :: method(layer_index: int, inset: v2) #foreign "tilemap_set_layer_collision_inset";
+    get_layer_collision_offset :: method(layer_index: int) -> v2 #foreign "tilemap_get_layer_collision_offset";
+    set_layer_collision_offset :: method(layer_index: int, offset: v2) #foreign "tilemap_set_layer_collision_offset";
+
+    get_layer_texture_count  :: method(layer_index: int) -> int #foreign "tilemap_get_layer_texture_count";
+    get_layer_texture        :: method(layer_index: int, texture_index: int) -> Texture_Asset #foreign "tilemap_get_layer_texture";
+    get_layer_texture_weight :: method(layer_index: int, texture_index: int) -> float #foreign "tilemap_get_layer_texture_weight";
+    add_layer_texture        :: method(layer_index: int, texture: Texture_Asset, weight: float = 1) -> int #foreign "tilemap_add_layer_texture";
+    set_layer_texture        :: method(layer_index: int, texture_index: int, texture: Texture_Asset) #foreign "tilemap_set_layer_texture";
+    set_layer_texture_weight :: method(layer_index: int, texture_index: int, weight: float) #foreign "tilemap_set_layer_texture_weight";
+    remove_layer_texture     :: method(layer_index: int, texture_index: int) #foreign "tilemap_remove_layer_texture";
+
+    has_tile   :: method(layer_index: int, tile_x: int, tile_y: int) -> bool #foreign "tilemap_has_tile";
+    set_tile   :: method(layer_index: int, tile_x: int, tile_y: int) #foreign "tilemap_set_tile";
+    clear_tile :: method(layer_index: int, tile_x: int, tile_y: int) #foreign "tilemap_clear_tile";
+
+    tile_to_local :: method(layer_index: int, tile_x: int, tile_y: int) -> v2 #foreign "tilemap_tile_to_local";
+    tile_to_world :: method(layer_index: int, tile_x: int, tile_y: int) -> v2 #foreign "tilemap_tile_to_world";
+    world_to_tile :: method(layer_index: int, world_position: v2) -> int, int #foreign "tilemap_world_to_tile";
 } #foreign_struct "Tilemap_Component"
 
 Terrain_Component :: class : Component {
@@ -737,6 +809,36 @@ Game :: struct {
 
     #deprecate_soft "Use Server.get_id()"
     get_server_id :: proc() -> string #foreign "server_get_id";
+}
+
+Live_Event_Presenter :: struct {
+    slot: int;
+    display_name: string;
+    is_speaking: bool;
+    // Always null while the live-event scripting API is stubbed.
+    ghost: Entity;
+}
+
+Live_Events :: struct {
+    is_active :: proc() -> bool #foreign "live_events_is_active";
+    is_local_player_presenting :: proc() -> bool #foreign "live_events_is_local_player_presenting";
+    presenter_count :: proc() -> int #foreign "live_events_presenter_count";
+
+    _presenter_slot :: proc(index: int) -> int #foreign "live_events_presenter_slot";
+    _presenter_name :: proc(slot: int) -> string #foreign "live_events_presenter_name";
+    _presenter_is_speaking :: proc(slot: int) -> bool #foreign "live_events_presenter_is_speaking";
+    _presenter_ghost :: proc(slot: int) -> Entity #foreign "live_events_presenter_ghost";
+
+    get_presenter :: proc(index: int) -> Live_Event_Presenter, bool {
+        slot := _presenter_slot(index);
+        if slot < 0 return {}, false;
+        return .{
+            slot = slot,
+            display_name = _presenter_name(slot),
+            is_speaking = _presenter_is_speaking(slot),
+            ghost = _presenter_ghost(slot),
+        }, true;
+    }
 }
 
 Server :: struct {
@@ -1734,6 +1836,7 @@ Float_Interpolation_Helper :: struct {
 
 Ads :: struct {
     prompt_rewarded_ad :: proc(player: Player, reward_id: string, title: string, description: string, texture: Texture_Asset) #foreign "ads_prompt_rewarded_ad";
+    request_interstitial :: proc() -> bool                                                                     #foreign "ads_request_interstitial";
     is_ad_showing      :: proc() -> bool                                                                        #foreign "ads_is_ad_showing";
 }
 
@@ -2105,6 +2208,16 @@ SFX :: struct {
         }
         return result;
     }
+}
+
+Haptics :: struct {
+    Impact_Type :: enum {
+        LIGHT;
+        MEDIUM;
+        HEAVY;
+    }
+
+    play_impact :: proc(impact_type: Impact_Type) #foreign "haptics_play_impact";
 }
 
 //
@@ -3082,15 +3195,14 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
                     keybind = ability.keybind_override;
                 }
                 should_draw_keybind = true;
-
-                if !ability.draw_but_dont_use_keybind {
-                    should_draw_keybind = true;
-                }
             }
         }
 
         #static bs := UI.default_button_settings();
         bs.keybind = keybind;
+        if ability.draw_but_dont_use_keybind {
+            bs.keybind = 0;
+        }
         bs.sprite = button_sprite;
         bs.sprite_pressed = button_pressed_sprite;
         bs.press_scaling = 1;
@@ -3116,7 +3228,10 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
                 }
                 else {
                     #static ts := UI.default_text_settings();
-                    UI.text(keybind_rect, ts, Keybinds.get_keybind_string(player, keybind));
+                    keybind_string := Keybinds.get_keybind_string(player, keybind);
+                    if keybind_string != "Unbound" {
+                        UI.text(keybind_rect, ts, keybind_string);
+                    }
                 }
             }
 
@@ -3446,6 +3561,8 @@ World_Progress_Bar :: struct {
     }
 
     draw :: proc(position: v2, progress: float, options: World_Progress_Bar_Options) {
+        if Game.is_server() return;
+
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 

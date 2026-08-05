@@ -74,6 +74,8 @@ item := Items.create_item_instance(sword_defn, 1);
 will_destroy: bool;
 if Items.can_move_item_to_inventory(item, player.default_inventory, ref will_destroy) {
     Items.move_item_to_inventory(item, player.default_inventory);
+} else {
+    Items.destroy_item_instance(item);
 }
 ```
 
@@ -93,9 +95,10 @@ amount_moved := Items.move_as_many_items_as_possible_to_inventory(item, player.d
 
 ### Removing / Destroying Items
 ```csl
-Items.remove_item_from_inventory(item, player.default_inventory);
-Items.destroy_item_instance(item); // Entire stack
-Items.destroy_item_instance(item, 5); // Only 5 from stack
+// Choose one:
+Items.remove_item_from_inventory(item, player.default_inventory); // Detach without destroying
+Items.destroy_item_instance(item);    // Entire stack; auto-removes
+Items.destroy_item_instance(item, 5); // Or remove only 5
 ```
 
 ### Iterating Inventory
@@ -105,8 +108,8 @@ for i: 0..player.default_inventory.capacity-1 {
     if item == null continue;
 
     defn := item.get_definition();
-    weapon_defn := defn.(Weapon_Definition);
-    if weapon_defn != null {
+    if defn.#type == Weapon_Definition {
+        weapon_defn := defn.(Weapon_Definition);
         log_info(`Found weapon with {weapon_defn.damage} damage`);
     }
 }
@@ -147,10 +150,10 @@ Items :: struct {
 }
 ```
 
-### Item_Definition Methods
+### Item_Definition Fields and Methods
 ```csl
-defn.get_name() -> string;
-defn.get_id() -> string;
+defn.name;
+defn.id;
 defn.get_icon() -> Texture_Asset;
 ```
 
@@ -229,6 +232,8 @@ if closed { inventory_open = false; }
 Inventory_Draw_Options :: struct {
     title: string;
     show_exit_button: bool;
+    show_scroll_bar: bool;
+    show_background: bool;
     allow_drag_drop: bool;
     drag_drop_color_multiplier: v4;
     hotbar_item_count: s32; // default: 6
@@ -238,9 +243,11 @@ Inventory_Draw_Options :: struct {
     hide_bag_button: bool;
     enable_selection: bool;
     scroll_item_selection: bool;
+    keyboard_item_selection: bool;
     enable_use_from_hotbar: bool;
     on_before_draw: (proc(item: Item_Instance, rect: Rect));
     on_after_draw: (proc(item: Item_Instance, rect: Rect));
+    default :: proc() -> Inventory_Draw_Options;
 }
 ```
 
