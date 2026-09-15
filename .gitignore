@@ -11,7 +11,6 @@ scene_temp
 *.ao.astc
 asset_report.txt
 res/.preprocessed
-.asset_manifest
 .asset_manifest.txt
 *.psd
 .cursor
@@ -26,3 +25,4 @@ CLAUDE.md
 .codex
 res/.upload_cache
 opencode.json
+

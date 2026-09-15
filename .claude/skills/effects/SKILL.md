@@ -1,204 +1,83 @@
 ---
 name: effects
-description: Reference this when implementing effects for abilities, animations, and state-based behaviors.
+description: Reference this when implementing effects for abilities, animations, and state-based behaviors — any bounded-duration behavior that takes over an entity (dash, roll, attack window, stun, eat lockout, death/respawn) or temporarily modifies it (slow, buff, fade/despawn).
 ---
-# CSL Effect System
+# CSL Effect System (`Effect_Base`)
 
-Effects temporarily take control of an entity to execute complex behaviors (dashes, attacks, death sequences). Works with Players, NPCs, or any entity.
+Bounded-duration behaviors that take over or temporarily modify an entity MUST be `Effect_Base` subclasses — never hand-rolled bools + timers + freeze-reason calls. Plain timers (cooldowns, spawn schedules) don't need one. NOT components: `new()`, never `add_component`; no `@ao_serialize`.
 
-## Creating an Effect
-```csl
-My_Effect :: class : Effect_Base {
-    target_position: v2;
-
-    effect_start :: method() {
-        player_specific.freeze_player = true;
-        player.animator.state_machine.set_trigger("my_animation");
-    }
-
-    effect_update :: method(dt: float) {
-        entity.lerp_local_position(target_position, 20 * dt);
-        if get_elapsed_time() > 1.0 {
-            remove_effect(false);
-            return; // Effect is invalid after removal -- must return immediately
-        }
-    }
-
-    effect_end :: method(interrupt: bool) {
-        if !interrupt {
-            entity.set_local_position(target_position);
-        }
-        player.animator.state_machine.set_trigger("RESET");
-    }
-}
-```
-
-## Activating Effects
-
-**Active effects** (`set_active_effect`) -- one at a time, setting a new one ends the current with `interrupt = true`:
-```csl
-effect := new(My_Effect);
-effect.target_position = target.world_position;
-entity.set_active_effect(effect);
-```
-
-**Passive effects** (`add_passive_effect`) -- multiple allowed, stack (slows, buffs):
-```csl
-slow_effect := new(Slow_Effect);
-slow_effect.speed_multiplier = 0.5;
-slow_effect.set_duration(4); // Auto-remove after 4 seconds
-entity.add_passive_effect(slow_effect);
-```
-
-## Effect_Base Fields
+## API
 ```csl
 Effect_Base :: class {
-    entity: Entity;
-    player: Player; // null for NPCs
-
+    entity: Entity;  // set by attach
+    player: Player;  // set by attach; null on non-players — never deref then
     player_specific: struct {
-        freeze_player: bool; // Zero out Player Movement_Agent velocity (use for eat/interact)
-        disable_movement_inputs: bool; // Ignore input but code can still move (use for dash/roll)
+        freeze_player: bool;           // agent velocity forced to 0
+        disable_movement_inputs: bool; // input ignored; your code can still drive agent.velocity
     };
-
-    start_time: float #read_only;
-    next_effect: Effect_Base #read_only;
-    prev_effect: Effect_Base #read_only;
+    start_time: float #read_only;  // don't shadow (nor next_effect/prev_effect)
+    get_elapsed_time       :: method() -> float;
+    get_duration_remaining :: method() -> float;  // 0 if no duration set
+    set_duration  :: method(duration: float);  // auto-remove after (interrupt=false); >0 unchecked; legal before attach
+    remove_effect :: method(interrupt: bool);  // idempotent
 }
+set_active_effect  :: proc(entity, e: $T);  // exclusive: interrupts current active
+add_passive_effect :: proc(entity, e: $T);  // stackable (slows, buffs, invuln)
+has_effect :: proc(entity, $T, mode := Try_Get_Effect_Mode.EXACT_MATCH) -> bool;
+get_effect :: proc(entity, $T, mode := .EXACT_MATCH) -> (T, bool);
+remove_effect :: proc(entity, type: typeid, interrupt: bool) -> bool; // first exact-type match
+remove_all_effects :: proc(entity);  // interrupt=true
+entity.get_active_effect() -> Effect_Base;  // null if none — gate AI/ability logic on this
+it := effect_iterator(entity); while it.next() { /* it.current */ }
 ```
-## Callbacks (each optional)
-- `effect_start` -- Set freeze/movement flags, trigger animations, store initial state, call `set_duration`.
-- `effect_update(dt: float)`
-- `effect_late_update(dt: float)` -- Post-update UI, camera effects, or local-only visuals. Screen UI is valid here for effects attached to a Player because player effects run from `core_player_late_update`; guard UI with `player.is_local_or_server()`.
-- `effect_end(interrupt: bool)` -- Restore saved state, reset animations with `player.animator.state_machine.set_trigger("RESET")`.
+`.ALLOW_INHERITANCE` matches subclasses. The active effect is also in the chain.
 
-## Checking Effects
+## Callbacks
+Bound at attach by compile-time name lookup; a MISNAMED callback (`on_start`, `update`) compiles fine and SILENTLY never runs (wrong signature on a correct name = compile error). All optional:
 ```csl
-if has_effect(entity, Slow_Effect) {
-    agent.movement_speed *= 0.5;
-}
+effect_start       :: method()                // fires synchronously INSIDE the attach call
+effect_update      :: method(dt: float)
+effect_late_update :: method(dt: float)       // player effects: screen UI legal here; guard is_local_or_server()
+effect_draw        :: method(dt: float)       // cosmetic-only; skipped on resim, interactive UI must use `effect_update`/`effect_late_update`.
+effect_end         :: method(interrupt: bool) // the ONLY place cleanup may live
 ```
+Attach the concrete instance from `new(My_Effect)` — don't upcast to `Effect_Base` first (binding uses the attach-site type).
 
-## Examples
-### Movement Effect (Dash/Roll)
-```csl
-Roll_Effect :: class : Effect_Base {
-    direction: v2;
-    original_friction: float;
+## Attach
+`set_active_effect` first ends the current active with `interrupt=true` (its `effect_end` runs BEFORE your effect starts; asserts if it installs a replacement active). Attach sets fields, links chain, calls `effect_start`, THEN adds counted freeze/input reasons per flags, then re-applies pre-attach `set_duration`.
+- Assign every field `effect_start` reads BEFORE attaching — attach-then-assign = zero-values.
+- Set `player_specific` flags in `effect_start` or before attach; NEVER flip mid-effect — removal re-reads flags → leaked/double-removed reason (stuck player).
+- Never call `add_freeze_reason`/`add_disable_movement_input_reason` yourself for effect locking — framework owns the pairing.
 
-    effect_start :: method() {
-        player_specific.disable_movement_inputs = true;
-        original_friction = player.agent.friction;
-        player.agent.friction = 0;
-        player.animator.state_machine.set_trigger("dodge_roll");
-        player.set_facing_right(direction.x > 0);
-        set_duration(0.5);
-    }
+## Removal
+`remove_effect(interrupt)`: removes reasons per flags, clears slot, unlinks, then calls `effect_end(interrupt)`, then un-roots.
+- After self-removal inside update callbacks, `return` immediately — `this`/fields are invalid.
+- Never reuse a removed instance — its "already ending" latch never resets; `new()` per activation.
+- interrupt=false: natural completion (own remove, duration expiry). interrupt=true: displaced by `set_active_effect`, `remove_all_effects`, entity destroy.
+- Restore UNCONDITIONALLY in `effect_end` everything you mutated (friction, velocity, alpha, animation). Gate only completion logic (respawn/reward/chaining) on `!interrupt`.
+- `effect_end` with interrupt=true must NOT install a new active effect — engine assert (destroy path: no assert, still broken); chain only on interrupt=false.
+- `entity.destroy()` is deferred; still `return` after calling it from a callback; don't also self-remove.
 
-    effect_update :: method(dt: float) {
-        player.agent.velocity = direction * 8;
-    }
+## Movement
+- `freeze_player`: agent zeroes velocity every step — no agent-driven movement; transform sets still move it; stationary states only.
+- `disable_movement_inputs`: input zeroed, agent still simulates — drive `player.agent.velocity` in `effect_update` (correct move path, not transform teleports).
+- `player.override_movement_input_for_next_step(input)` replaces input for one movement step, including with `{0,0}`. Call it from each `effect_update` that needs scripted input; it is applied after and therefore bypasses disabled-input reasons.
 
-    effect_end :: method(interrupt: bool) {
-        player.agent.friction = original_friction;
-    }
-}
-```
+## Timing / multiplayer
+- Fixed 32 Hz sim: dt = 0.03125 (0.3 s ≈ 10 ticks).
+- Prefer `set_duration` over manual elapsed checks — removal guaranteed even without `effect_update`. `get_duration_remaining()` for countdowns.
+- Effects are synced/predicted/rolled-back sim state: attach/remove in the shared predicted path, never server/local-gated. Per-swing state (hit-dedup user-id lists) lives on the effect instance, not globals.
+- An interpolation anchor wraps `effect_update`/`late_update`/`draw`; `effect_start`/`end` run at the attach/remove call site under the CALLER's anchor.
+- Effects update just before the owner's `ao_update`; gate normal logic: `if entity.get_active_effect() != null return;`
 
-### Attack Effect (Hit Detection)
-Same structure as Roll_Effect, but add an `already_hit_list` to avoid hitting the same target twice:
+## Player state machine (`player.animator.state_machine`)
+- Auto-return-to-Idle one-shots: "dodge_roll", "collect_item", "flinch", "grow_big".
+- Stick until "RESET": "death", "start_eating"; "fall_hurt"/"fall_safe" (auto-chain into Get_Up — no exit); electrocute/sleep end poses.
+- "teleport_away" holds until you fire "teleport_appear", which then auto-returns to Idle.
+- Bools: "electrocute"/"sleep" true=enter loop, false exits into a TERMINAL end pose — still fire "RESET". "ghost_form" false returns to locomotion itself. "moving"/"use_ik" engine-managed — don't touch.
+- Attack layer (overlays locomotion, auto-clears, no RESET): "attack", "punch", "shoot".
+- "RESET" = global return to Idle. `effect_end`: always for stick states; for one-shots on `interrupt`.
 
-```csl
-already_hit_list: [..]Player;
-
-effect_update :: method(dt: float) {
-    for other: component_iterator(Player) {
-        if other.team == player.team continue;
-        if !in_range(other.entity.world_position - player.entity.world_position, 0.75) continue;
-        if already_hit_list.contains(other) continue;
-        other.take_damage(1); // user-defined damage method
-        already_hit_list.append(other);
-    }
-    player.agent.velocity = direction * 10;
-    if get_elapsed_time() > 0.3 {
-        remove_effect(false);
-        return;
-    }
-}
-```
-
-### Death/Respawn Effect
-```csl
-Death_Effect :: class : Effect_Base {
-    effect_start :: method() {
-        player_specific.freeze_player = true;
-        player.add_name_invisibility_reason("death");
-        player.animator.state_machine.set_trigger("death");
-    }
-
-    effect_update :: method(dt: float) {
-        time_until_respawn := 5.0 - get_elapsed_time();
-        if time_until_respawn <= 0 {
-            remove_effect(false);
-            return;
-        }
-    }
-
-    effect_end :: method(interrupt: bool) {
-        player.remove_name_invisibility_reason("death");
-        respawn_player(player); // user-defined respawn proc
-        reset_player_health(player); // replace with your game's health reset logic
-        player.animator.state_machine.set_trigger("RESET");
-    }
-
-    effect_late_update :: method(dt: float) {
-        if player.is_local_or_server() {
-            time_until_respawn := 5.0 - get_elapsed_time();
-            ts := UI.default_text_settings();
-            ts.size = 64;
-            rect := UI.get_screen_rect().bottom_center_rect().offset(0, 150);
-            UI.text(rect, ts, `Respawning in {time_until_respawn.(int) + 1}`);
-        }
-    }
-}
-```
-
-### NPC Effects
-For NPCs, `player` is null. Store a reference to the NPC component and use `entity` for transforms.
-
-```csl
-NPC_Death_Effect :: class : Effect_Base {
-    npc: NPC;
-
-    effect_update :: method(dt: float) {
-        t := Ease.out_quad(Ease.T(get_elapsed_time(), 1.0));
-        npc.sprite.color.w = lerp(1.0, 0.0, t);
-        if get_elapsed_time() > 5.0 {
-            entity.destroy();
-        }
-    }
-}
-
-// Usage:
-effect := new(NPC_Death_Effect);
-effect.npc = this;
-entity.set_active_effect(effect);
-```
-
-Skip normal behavior while an effect is active:
-```csl
-ao_update :: method(dt: float) {
-    if entity.get_active_effect() != null return;
-    // Normal behaviour...
-}
-```
-
-## Checking Effects
-```csl
-effect := entity.get_active_effect();
-if effect != null && effect.#type == Eating_Effect {
-    effect.(Eating_Effect).chomp();
-}
-
-remove_all_effects(entity);
-```
+## Patterns
+- Dash: `disable_movement_inputs`; save+zero friction; "dodge_roll"; `set_duration`; drive `agent.velocity`; `effect_end` restores friction, zeroes velocity, "RESET" if interrupt.
+- Passive modifiers (slow/invuln): empty marker effect + `set_duration`; consumer recomputes from base each frame via `effect_iterator`/`has_effect` — never `*=` a persistent field per frame.

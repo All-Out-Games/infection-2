@@ -9,6 +9,40 @@ Two ways to use Spine animations:
 2. **Spine_Instance** (Standalone) - UI animations
 
 ## Spine_Animator (Component)
+
+### Editor/Scene placed animators
+
+For a rig that should already exist in the authored scene, use the world-building workflow instead of writing CSL just to configure its default pose:
+
+1. Call `spine_rig_info` with the rig's `assetPath`. Use the exact animation and skin names it returns; do not guess them.
+2. Place the `.spine` asset with `instantiate_assets`. This creates an entity with a `Spine_Animator` and selects a best-effort default skin and animation.
+3. Override that default with `modify_scene` when needed. The editor property names are `initial_animation`, `loop_initial_animation`, and `ordered_skins`:
+
+```json
+instantiate_assets (assets: [
+  {"assetPath": "$AO/streamed_character", "position": [4, 2], "name": "Shopkeeper", "scale": [0.9, 0.9]}
+])
+
+modify_scene (operations: [
+  {
+    "kind": "setComponentProperties",
+    "entityName": "Shopkeeper",
+    "componentType": "Spine_Animator",
+    "properties": {
+      "initial_animation": "Idle",
+      "loop_initial_animation": true,
+      "ordered_skins": ["base/crewchsia"]
+    }
+  }
+])
+```
+
+`ordered_skins` replaces the complete skin stack, in order, so include every desired skin in the same array. `$AO/streamed_character` must include `base/crewchsia`; add any outfit skins using their exact `spine_rig_info` names. These serialized fields determine the animation and skins when the scene loads. Use `get_available_components` with `filter: "Spine_Animator"` and `includeProperties: true` to discover other editor/MCP property names rather than copying CSL member names.
+
+On-screen rig size = the rig's `Size` from `spine_rig_info` × the entity's transform scale × `Spine_Animator.skeleton_scale` (default `[1, 1]`; the same field is `animator.scale` in CSL). Size a placed rig with the entity scale and leave `skeleton_scale` at 1; setting both (entity 5.5 and `skeleton_scale` 2.2) multiplies to 12x.
+
+### Runtime-spawned rigs
+
 For runtime-spawned non-player entities:
 ```csl
 entity := Scene.create_entity();
@@ -18,7 +52,7 @@ animator.disable_all_skins();
 animator.enable_skin("base/crewchsia"); // Use spine_rig_info for the exact skins required by other rigs.
 animator.refresh_skins(); // REQUIRED after any skin change
 animator.set_animation("Idle", true, 0); // name, loop, track, speed = 1
-animator.scale = v2{0.9, 0.9}; // reference the worldSize returned by the spine_rig_info tool and compute the best value here given the world/player/use case.
+animator.scale = v2{0.9, 0.9}; // spine_rig_info reports "Size: WxH world units" (or use query:"bounds"); pick the scale from that and the player size.
 ```
 
 `add_component` awakens synchronously before returning. Use its initialization callback when fields must be set before awakening; do not call `awaken()` again.
@@ -49,11 +83,14 @@ sm.set_bool("ghost_form", true);  // false to exit then RESET
 ```
 
 Common built-in triggers: `death`, `RESET`, `flinch`, `dodge_roll`, `attack`, `punch`
+`attack` and `punch` play on the attack layer (track 1): `attack` → `Attack_Melee_1` (with the `_mIK_AL` upper-body variant while moving), `punch` → `Punch_AL`, and ranged weapons use `Shoot_Gun_mIK_AL`. The layer's hidden `__skin_anim` state is optional, so a custom rig without it is fine.
 Common built-in bools: `ghost_form`, `electrocute`, `sleep`
+
+Triggers only select the corresponding state. They are no-ops when the generated player rig does not include that state's animation clip; `player_rig_info.includedAnimations` is the source of truth. For example, `set_trigger("punch")` and `set_trigger("flinch")` do nothing unless `Punch_AL` and `Flinch_Big` are included. The engine writes a session warning when a state has no animation data, but the game will not synthesize or download a missing clip.
 
 After clearing `electrocute` or `sleep`, trigger `RESET` to leave the end animation.
 
-### Generated Player Rig Animations
+### Extra Player Animations
 The shipped player rig can be stripped down per project. Before writing CSL that depends on a player animation outside the normal trigger set, use MCP to make sure the generated player rig contains it.
 
 Workflow:
@@ -61,13 +98,14 @@ Workflow:
 - Pick exact animation names from `availableAnimations`; do not guess names.
 - Call `player_rig_ensure_animations` with `{"animations":["Exact/Animation/Name"],"skins":["Optional/Skin/Name"],"setAsDefaultPlayerRig":true}` for every player animation and optional player skin your feature needs.
 - `base/crewchsia` defaults to included and appears in `availableSkins`/`includedSkins` like other skins.
+- `skins` are validated against the player source rig (`$AO/player/skinless/playercharacter.spine`), NOT `$AO/streamed_character`. Streamed-character outfit skins cannot be applied to the player rig; the error response names the source rig and lists `availableSkins`.
 - Use the exact returned names in custom state machine or animation code.
 
-`player_rig_ensure_animations` writes `res/game_player/player.spine`, the matching atlas/png, and `res/game_player/.player_rig`. When `setAsDefaultPlayerRig` is true, it also sets `scene.config` to use `game_player/player.spine` and enables new cosmetics.
+`setAsDefaultPlayerRig: true` selects the generated rig as the project's default player rig and enables new cosmetics.
 
-The response includes `animationDetails` for each animation you enable: its duration, the attachment names it animates (these are `override_attachment_sprite` targets — held items, props), and its spine events with timings (hook them with `set_on_event` to sync gameplay to animation moments like a throw release). `spine_rig_info` gives the same detail for any rig via `animation:"name"`, and `query:"slots"` / `query:"attachments"` list everything overridable.
+Pass `includeAnimationDetails: true` when you need per-animation `animationDetails` in the response. It contains each clip's duration, the attachment names it animates (these are `override_attachment_sprite` targets — held items, props), and its spine events with timings (hook them with `set_on_event` to sync gameplay to animation moments like a throw release). Details are omitted by default to keep the response small. `spine_rig_info` gives the same detail for any rig via `animation:"name"`, and `query:"slots"` / `query:"attachments"` list everything overridable.
 
-### Playing Generated Player Rig Animations (custom layer pattern)
+### Playing Extra Player Animations (custom layer pattern)
 The built-in player state machine only has the standard trigger states. To play other rig animations on the player, add your own layer to the player's live state machine. Do NOT replace the player's state machine, and do NOT call `set_animation` directly on reserved tracks.
 
 - Tracks 0 (main), 1 (attack), 2 (invis), and 10 (skin anim) are reserved by the engine. Use tracks 3–9 for game layers.
@@ -126,8 +164,11 @@ Enemy_NPC :: class : Component {
     ao_start :: method() {
         state_machine = State_Machine.create();
 
-        // Variable types: `.BOOL`, `.TRIGGER`, `.INT`, `.FLOAT`. Name-based set_float is currently broken; avoid FLOAT variables.
+        // Variable types: `.BOOL`, `.TRIGGER`, `.INT`, `.FLOAT`.
         // Numeric conditions accept: `.GREATER`, `.GREATER_EQUAL`, `.LESS`, `.LESS_EQUAL`, `.EQUAL`.
+        // Transition methods: create_int_condition(variable, value, kind), create_float_condition(variable, value, kind).
+        // Examples: transition.create_int_condition(count_var, 3, .EQUAL);
+        //           transition.create_float_condition(speed_var, 0.5, .GREATER);
         is_moving := state_machine.create_variable("is_moving", .BOOL);
         attack_trigger := state_machine.create_variable("attack", .TRIGGER); // auto-resets after triggering
         die_trigger := state_machine.create_variable("die", .TRIGGER);
@@ -207,10 +248,18 @@ animator.enable_skin("body/alien");
 animator.refresh_skins();
 ```
 
-## Bone Positions
+## Bone Transforms
 ```csl
 hand_pos := animator.get_bone_local_position("Hand_R");
+
+hand, found := animator.try_get_bone_local_transform("Hand_R");
+if found {
+    // Map an offset in the bone's own axes into skeleton-local space.
+    tip_pos := hand.position + hand.x_axis * 0.5 + hand.y_axis * 0.2;
+}
 ```
+
+`get_bone_local_position` is convenient when you only need the bone origin. Use `try_get_bone_local_transform` for placement: it reports whether the bone exists plus its current skeleton-local `position`, `x_axis`, and `y_axis`. A bone-local point `{x, y}` maps to `position + x_axis*x + y_axis*y`. The rig is Y-up, but a bone's axes include its rotation, scale, shear, and mirroring, so do not assume positive X is visual right or positive Y is visual up.
 
 ```csl
 layer := animator.state_machine.try_get_layer("main");
@@ -225,6 +274,22 @@ animator.state_machine.set_trigger("jump");
 Use attachment APIs when you need to replace an existing rig attachment or draw an extra sprite/rig over or under a slot. This is the right tool for item-in-hand moments, equipment swaps, muzzle flashes, held props, or drawing a separate animated rig attached to a body slot. The calls return a `u64` ID for you to save so you can clear it later if you want to.
 
 These methods live on `Spine_Instance`.
+
+Before tuning placement, call `spine_rig_info` with `query: "layout"`. Add `skin`, or `animation` plus `time`, to inspect that exact pose; use `filter: "Hand_R|weapon"` to narrow the bone, slot, or attachment. The result includes bone/slot position and axes plus the current attachment's skeleton-space bounds.
+
+For a held sprite, set the texture asset's pivot to the grip point. A pivot of `{0, 0}` is the center, `{-1, 0}` puts the origin on the left edge, and `{1, 0}` puts it on the right edge. Then `rotation_degrees` rotates around the grip and `offset` directly says where the grip sits in the slot bone's local axes. `Texture_Asset.get_world_size()` returns the unscaled source size in world units, which is useful for offsets expressed as fractions of the art:
+
+```csl
+sword := get_asset(Texture_Asset, "items/sword.png");
+size := sword.get_world_size();
+
+desc := Attachment_Desc.default();
+desc.offset = {size.x, size.y * 0.25}; // one width along local X, quarter length along local Y
+desc.rotation_degrees = -35;
+sword_id := instance.add_attachment_sprite("Hand_R", sword, desc);
+```
+
+The transform order is texture size and pivot, then `desc.scale`, then `rotation_degrees`, then `offset`, then the slot bone transform. Multiply `get_world_size()` by `desc.scale` when reasoning about the final local dimensions.
 
 ```csl
 // Replace an existing Spine attachment by attachment name.
@@ -271,7 +336,7 @@ Attachment API summary:
 - `add_attachment_rig(slot_name, rig, desc, transfer_ownership) -> u64`: draw another `Spine_Instance` on a slot.
 - `clear_attachment_rig(id)`: remove an attached rig.
 
-Use `attachment_name` when replacing art already authored in the rig. Use `slot_name` when adding a new over/under draw on top of the animated slot. `Attachment_Desc.offset`, `scale`, and `rotation_degrees` are local to the slot's bone, and `draw_mode` controls whether the added sprite/rig is drawn `.BEHIND` or `.IN_FRONT` of the slot attachment.
+Use `attachment_name` when replacing art already authored in the rig. Use `slot_name` when adding a new over/under draw on top of the animated slot. Spine slots do not have their own transform: `Attachment_Desc.offset`, `scale`, and `rotation_degrees` are local to the slot's bone. `draw_mode` controls whether the added sprite/rig is drawn `.BEHIND` or `.IN_FRONT` of the slot attachment.
 
 ## Color
 All spines that can take damage or you want to draw attention to should color_multiplier to apply effects (red flash, glow, etc...)

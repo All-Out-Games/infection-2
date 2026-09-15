@@ -30,6 +30,11 @@ Entity :: class {
     add_component :: proc(entity: Entity, $T: typeid, userdata: Object = {}, on_before_start: proc(component: Component, userdata: Object) = {}) -> T {
         return add_component_raw(entity, T, userdata, on_before_start).(T);
     }
+    add_component :: proc(entity: Entity, $T: typeid, on_before_start: proc(component: T)) -> T {
+        return add_component_raw(entity, T, {}, proc(component: Component, userdata: Object) {
+            on_before_start(component.(T));
+        }).(T);
+    }
     get_component :: proc(entity: Entity, $T: typeid) -> T {
         return get_component_raw(entity, T).(T);
     }
@@ -52,7 +57,7 @@ Entity :: class {
     local_scale:          v2                  #read_only("use set_local_scale()") #foreign "_local_scale";
     world_scale:          v2                  #read_only #foreign "cached_world_scale";
     model_matrix:         Matrix4             #read_only #foreign "cached_model_matrix";
-    inverse_model_matrix: Matrix4             #read_only #foreign "cached_inverted_model_matrix";
+    inverse_model_matrix  :: method() -> Matrix4 #foreign "entity_get_inverse_model_matrix";
     Effect_Data :: class {
         active_effect: Effect_Base #read_only;
         first_effect:  Effect_Base #read_only;
@@ -86,15 +91,16 @@ Component :: class {
     set_enabled :: method(new_value: bool) #foreign "component_set_enabled";
     // Defers removal until end-of-frame cleanup. The component remains addressable until that pass runs.
     remove_component :: method() #foreign "component_mark_for_removal";
-    #interface ao_start                   :: proc(using this: Component);
-    #interface ao_update                  :: proc(using this: Component, dt: float);
-    #interface ao_late_update             :: proc(using this: Component, dt: float);
-    #interface ao_end                     :: proc(using this: Component);
-    #interface ao_can_use_ability         :: proc(using this: Component, ability: Ability_Base) -> bool;
-    #interface ao_can_use_interactable    :: proc(using this: Component, interactable: Interactable) -> bool;
-    #interface ao_on_interactable_used    :: proc(using this: Component, interactable: Interactable);
-    #interface ao_on_holding_interactable :: proc(using this: Component, interactable: Interactable);
-    #interface ao_on_state_sync           :: proc(using this: Component);
+    #interface ao_start                   :: method();
+    #interface ao_update                  :: method(dt: float);
+    #interface ao_late_update             :: method(dt: float);
+    #interface ao_draw                    :: method(dt: float);
+    #interface ao_end                     :: method();
+    #interface ao_can_use_ability         :: method(ability: Ability_Base) -> bool;
+    #interface ao_can_use_interactable    :: method(interactable: Interactable) -> bool;
+    #interface ao_on_interactable_used    :: method(interactable: Interactable);
+    #interface ao_on_holding_interactable :: method(interactable: Interactable);
+    #interface ao_on_state_sync           :: method();
     component_id:             u64       #read_only #foreign;
     entity:                   Entity    #read_only #foreign "entity_csl_handle";
 } #gc_root #foreign_struct "Component_Base"
@@ -103,7 +109,7 @@ Component_Iterator :: struct(T: typeid) {
     component_iterator_next_raw :: method() -> bool #foreign "component_iterator_next";
     current: T #read_only #foreign "current_csl_handle";
     next :: method() -> bool {
-        return (&this).(*Component_Iterator(Component)).*.component_iterator_next_raw();
+        #unsafe return (&this).(*Component_Iterator(Component)).*.component_iterator_next_raw();
     }
 } #foreign_struct "Hierarchical_Component_Iterator<Component_Base>"
 
@@ -118,7 +124,7 @@ Sprite_Renderer :: class : Component {
     tint: v4           #foreign;
     color: v4           #foreign "tint";
     depth_offset: float #foreign;
-    layer: s32          #foreign;
+    layer: s64          #foreign;
     scale: v2           #foreign;
     flip_x: bool           #foreign;
     flip_y: bool           #foreign;
@@ -146,8 +152,8 @@ Circle_Collider :: class : Collider {
 Box_Collider :: class : Collider {
     get_points_local :: method(out_points: ref [..]v2) -> int #foreign "box_collider_get_points_local";
     get_points_world :: method(out_points: ref [..]v2) -> int #foreign "box_collider_get_points_world";
-    get_min_and_max_local :: method() -> v2, v2 #foreign "box_collider_get_min_and_max_local";
-    get_min_and_max_world :: method() -> v2, v2 #foreign "box_collider_get_min_and_max_world";
+    get_min_and_max_local :: method() -> (v2, v2) #foreign "box_collider_get_min_and_max_local";
+    get_min_and_max_world :: method() -> (v2, v2) #foreign "box_collider_get_min_and_max_world";
     size: v2   #foreign;
     offset: v2 #foreign;
 } #foreign_struct "Box_Collider"
@@ -155,15 +161,15 @@ Box_Collider :: class : Collider {
 Polygon_Collider :: class : Collider {
     get_points_local :: method(out_points: ref [..]v2) -> int #foreign "polygon_collider_get_points_local";
     get_points_world :: method(out_points: ref [..]v2) -> int #foreign "polygon_collider_get_points_world";
-    get_min_and_max_local :: method() -> v2, v2 #foreign "polygon_collider_get_min_and_max_local";
-    get_min_and_max_world :: method() -> v2, v2 #foreign "polygon_collider_get_min_and_max_world";
+    get_min_and_max_local :: method() -> (v2, v2) #foreign "polygon_collider_get_min_and_max_local";
+    get_min_and_max_world :: method() -> (v2, v2) #foreign "polygon_collider_get_min_and_max_world";
 } #foreign_struct "Polygon_Collider"
 
 Edge_Collider :: class : Collider {
     get_points_local :: method(out_points: ref [..]v2) -> int #foreign "edge_collider_get_points_local";
     get_points_world :: method(out_points: ref [..]v2) -> int #foreign "edge_collider_get_points_world";
-    get_min_and_max_local :: method() -> v2, v2 #foreign "edge_collider_get_min_and_max_local";
-    get_min_and_max_world :: method() -> v2, v2 #foreign "edge_collider_get_min_and_max_world";
+    get_min_and_max_local :: method() -> (v2, v2) #foreign "edge_collider_get_min_and_max_local";
+    get_min_and_max_world :: method() -> (v2, v2) #foreign "edge_collider_get_min_and_max_world";
     is_loop: bool #foreign;
 } #foreign_struct "Edge_Collider"
 
@@ -172,7 +178,7 @@ Rigidbody :: class : Component {
 
 Navmesh :: class : Component {
     try_find_closest_point_on_navmesh :: method(to_point: v2, result: ref v2, triangle_hint: ref s64) -> bool #foreign "navmesh_try_find_closest_point_on_navmesh";
-    try_raycast :: method(position: v2, direction: v2) -> v2, bool #foreign "navmesh_try_raycast";
+    try_raycast :: method(position: v2, direction: v2) -> (v2, bool) #foreign "navmesh_try_raycast";
     rebuild_immediately :: method() -> bool #foreign "navmesh_rebuild_immediately";
     mark_for_rebuild :: method() #foreign "navmesh_mark_for_rebuild";
     child_colliders_only: bool #foreign;
@@ -233,6 +239,10 @@ Tilemap_Component :: class : Component {
     set_layer_wall_height :: method(layer_index: int, wall_height: s64) #foreign "tilemap_set_layer_wall_height";
     get_layer_wall_top_texture :: method(layer_index: int) -> Texture_Asset #foreign "tilemap_get_layer_wall_top_texture";
     set_layer_wall_top_texture :: method(layer_index: int, texture: Texture_Asset) #foreign "tilemap_set_layer_wall_top_texture";
+    get_layer_wall_top_texture_scale :: method(layer_index: int) -> v2 #foreign "tilemap_get_layer_wall_top_texture_scale";
+    set_layer_wall_top_texture_scale :: method(layer_index: int, scale: v2) #foreign "tilemap_set_layer_wall_top_texture_scale";
+    get_layer_wall_top_texture_offset :: method(layer_index: int) -> v2 #foreign "tilemap_get_layer_wall_top_texture_offset";
+    set_layer_wall_top_texture_offset :: method(layer_index: int, offset: v2) #foreign "tilemap_set_layer_wall_top_texture_offset";
     get_layer_wall_top_mask :: method(layer_index: int) -> Texture_Asset #foreign "tilemap_get_layer_wall_top_mask";
     set_layer_wall_top_mask :: method(layer_index: int, mask: Texture_Asset) #foreign "tilemap_set_layer_wall_top_mask";
     get_layer_wall_outline_color :: method(layer_index: int) -> v4 #foreign "tilemap_get_layer_wall_outline_color";
@@ -247,6 +257,10 @@ Tilemap_Component :: class : Component {
     get_layer_texture_count  :: method(layer_index: int) -> int #foreign "tilemap_get_layer_texture_count";
     get_layer_texture        :: method(layer_index: int, texture_index: int) -> Texture_Asset #foreign "tilemap_get_layer_texture";
     get_layer_texture_weight :: method(layer_index: int, texture_index: int) -> float #foreign "tilemap_get_layer_texture_weight";
+    get_layer_texture_scale  :: method(layer_index: int, texture_index: int) -> v2 #foreign "tilemap_get_layer_texture_scale";
+    set_layer_texture_scale  :: method(layer_index: int, texture_index: int, scale: v2) #foreign "tilemap_set_layer_texture_scale";
+    get_layer_texture_offset :: method(layer_index: int, texture_index: int) -> v2 #foreign "tilemap_get_layer_texture_offset";
+    set_layer_texture_offset :: method(layer_index: int, texture_index: int, offset: v2) #foreign "tilemap_set_layer_texture_offset";
     add_layer_texture        :: method(layer_index: int, texture: Texture_Asset, weight: float = 1) -> int #foreign "tilemap_add_layer_texture";
     set_layer_texture        :: method(layer_index: int, texture_index: int, texture: Texture_Asset) #foreign "tilemap_set_layer_texture";
     set_layer_texture_weight :: method(layer_index: int, texture_index: int, weight: float) #foreign "tilemap_set_layer_texture_weight";
@@ -258,7 +272,7 @@ Tilemap_Component :: class : Component {
 
     tile_to_local :: method(layer_index: int, tile_x: int, tile_y: int) -> v2 #foreign "tilemap_tile_to_local";
     tile_to_world :: method(layer_index: int, tile_x: int, tile_y: int) -> v2 #foreign "tilemap_tile_to_world";
-    world_to_tile :: method(layer_index: int, world_position: v2) -> int, int #foreign "tilemap_world_to_tile";
+    world_to_tile :: method(layer_index: int, world_position: v2) -> (int, int) #foreign "tilemap_world_to_tile";
 } #foreign_struct "Tilemap_Component"
 
 Terrain_Component :: class : Component {
@@ -287,15 +301,21 @@ Interactable :: class : Component {
     can_use_proc:     (proc(t: Component, player: Player) -> bool) #foreign "csl_can_use_proc"     #read_only("use set_listener()");
     on_interact_proc: (proc(t: Component, player: Player))         #foreign "csl_on_interact_proc" #read_only("use set_listener()");
     on_holding_proc:  (proc(t: Component, player: Player))         #foreign "csl_on_holding_proc"  #read_only("use set_listener()");
-    #interface can_use     :: proc(t: Interactable, player: Player) -> bool;
-    #interface on_interact :: proc(t: Interactable, player: Player);
-    #interface on_holding  :: proc(t: Interactable, player: Player);
+    #interface can_use     :: method(player: Player) -> bool;
+    #interface on_interact :: method(player: Player);
+    #interface on_holding  :: method(player: Player);
 } #foreign_struct "Interactable"
+
+Spine_Bone_Transform :: struct {
+    position: v2 #foreign;
+    x_axis:   v2 #foreign;
+    y_axis:   v2 #foreign;
+} #foreign_struct "Spine_Bone_Transform"
 
 
 Spine_Animator :: class : Component {
     depth_offset: float #foreign;
-    layer: s32 #foreign;
+    layer: s64 #foreign;
     mask_in_shadow: bool #foreign;
     instance: Spine_Instance #read_only #foreign "instance_csl_handle";
     using _instance_fields: Spine_Instance_Fields #read_only #foreign "instance_csl_handle";
@@ -303,6 +323,7 @@ Spine_Animator :: class : Component {
     set_material            :: method(material: Material, transfer_ownership: bool) #foreign "spine_animator_set_material";
     set_state_machine       :: method(new_state_machine: State_Machine, transfer_ownership: bool) #foreign "spine_animator_set_state_machine";
     get_bone_local_position :: method(bone_name: string) -> v2 #foreign "spine_animator_get_bone_position";
+    try_get_bone_local_transform :: method(bone_name: string) -> (Spine_Bone_Transform, bool) #foreign "spine_animator_try_get_bone_transform";
     set_bone_local_position :: method(bone_name: string, position: v2) #foreign "spine_animator_set_bone_position";
     // Hit-tests the current animated geometry of every skeleton-space
     // attachment using canvas, then maps the topmost hit back to the stable
@@ -310,7 +331,7 @@ Spine_Animator :: class : Component {
     // top. It uses the deterministic sim pose, not render interpolation. This
     // is a geometric mesh hit; Spine clipping and transparent atlas pixels
     // inside a triangle are not applied to the hit test.
-    try_get_paint_canvas_uv :: method(world_position: v2, canvas: Dynamic_Canvas) -> v2, bool #foreign "spine_animator_try_get_paint_canvas_uv";
+    try_get_paint_canvas_uv :: method(world_position: v2, canvas: Dynamic_Canvas) -> (v2, bool) #foreign "spine_animator_try_get_paint_canvas_uv";
     set_skeleton            :: method(asset: Spine_Asset) -> u64 #foreign "spine_animator_set_skeleton";
     get_skeleton            :: method(id: u64 = 0) -> Spine_Asset #foreign "spine_animator_get_skeleton";
     set_animation           :: method(animation: string, loop: bool, track: s64, speed: float = 1) #foreign "spine_animator_set_animation";
@@ -332,7 +353,7 @@ LOS_Caster :: class : Component {
 } #foreign_struct "LOS_Caster"
 
 Shadow_Caster :: class : Component {
-    softness: v2 #foreign;
+    softness: float #foreign;
 } #foreign_struct "Shadow_Caster"
 
 Light :: class : Component {
@@ -439,6 +460,7 @@ AO_Player :: class : Component {
     username_rect:             Rect                        #foreign "final_name_rect";
     full_nameplate_rect:       Rect                        #foreign;
     input_this_frame:          v2                          #foreign;
+    #deprecate_soft "Use override_movement_input_for_next_step()."
     input_override:            v2                          #foreign;
     player_for_prediction:     Player                      #foreign "player_for_prediction_csl_handle";
 } #foreign_struct "Player"
@@ -451,25 +473,36 @@ Movement_Agent :: class : Component {
     }
     set_path_target        :: method(target: v2, speed: float) -> Set_Path_Target_Result #foreign "movement_agent_set_path_target";
     set_navmesh_to_lock_to :: method(navmesh: Navmesh) #foreign "movement_agent_set_navmesh_to_lock_to";
+    // Acceleration-like input tuning value, not world units per second.
+    // 300 settles near 5 world units per second at the default friction 0.5.
     movement_speed:   float #foreign;
     agent_radius:     float #foreign;
+    // Fraction of velocity lost per 1/60-second reference frame.
     friction:         float #foreign;
+    // Actual world-space velocity in world units per second.
     velocity:         v2    #foreign;
     input_this_frame: v2    #foreign;
 } #foreign_struct "Movement_Agent"
 
+// Asset classes are handles, not views onto engine memory. Every method takes the
+// CSL reference and goes through Scene::get_asset_for_csl_handle, so the object's
+// own bytes are never read. No #foreign_struct: adopting the engine struct's size
+// would make each of these cost sizeof(Texture)/sizeof(Spine_Skeleton_Data)/... of
+// permanently-zero scene arena per asset. Contrast Material and Dynamic_Canvas,
+// whose live objects alias the real engine struct and must keep its layout.
 Asset :: class {
-} #gc_root #foreign_struct "Asset_Base"
+} #gc_root
 
 Texture_Asset :: class : Asset {
     get_width :: method() -> s64 #foreign "texture_asset_get_width";
     get_height :: method() -> s64 #foreign "texture_asset_get_height";
+    get_world_size :: method() -> v2 #foreign "texture_asset_get_world_size";
     get_aspect :: method() -> float #foreign "texture_asset_get_aspect";
     get_pivot :: method() -> v2 #foreign "texture_asset_get_pivot";
     get_pixels_per_unit :: method() -> float #foreign "texture_asset_get_pixels_per_unit";
-    get_uvs :: method() -> v2, v2 #foreign "texture_asset_get_uvs";
+    get_uvs :: method() -> (v2, v2) #foreign "texture_asset_get_uvs";
 
-} #foreign_struct "Texture"
+}
 
 // A scene-owned straight-alpha sRGB RGBA8 canvas. Its pixels participate in
 // ordinary CSL scene syncing, prediction, rollback, and reconciliation; they
@@ -490,25 +523,25 @@ Dynamic_Canvas :: class {
 } #gc_root #foreign_struct "Dynamic_Canvas"
 
 SFX_Asset :: class : Asset {
-} #foreign_struct "SFX_Asset"
+}
 
 Spine_Asset :: class : Asset {
-} #foreign_struct "Spine_Skeleton_Data"
+}
 
 Cosmetic_Asset :: class : Asset {
-} #foreign_struct "Cosmetic_Asset"
+}
 
 Prefab_Asset :: class : Asset {
-} #foreign_struct "Prefab"
+}
 
 Font_Asset :: class : Asset {
-} #foreign_struct "Font"
+}
 
 UIDoc_Asset :: class : Asset {
-} #foreign_struct "UIDoc_Asset"
+}
 
 Shader_Asset :: class : Asset {
-} #foreign_struct "Shader"
+}
 
 Material :: class {
     create      :: proc(shader: Shader_Asset) -> Material #foreign "material_create";
@@ -608,6 +641,7 @@ SFX_Desc :: struct {
     entity_to_follow: u64                   #foreign;
     loop:             bool                  #foreign;
     channel:          SFX_Channel           #foreign;
+    unique_id:        u64                   #foreign;
     set_position :: method(p: v2) {
         positional = true;
         #unsafe position = p;
@@ -632,6 +666,7 @@ Text_Settings :: struct {
     halign:                 Horizontal_Alignment #foreign;
     word_wrap:              bool                 #foreign;
     overflow_wrap:          bool                 #foreign;
+    rich_text:              bool                 #foreign;
     word_wrap_start_offset: float                #foreign;
     offset:                 v2                   #foreign;
     do_drop_shadow:         bool                 #foreign;
@@ -661,6 +696,7 @@ Fill_Direction :: enum {
     LEFT;
     UP;
     DOWN;
+    RADIAL; // Starts at 12 o'clock. -1..0 fills counterclockwise; 0..1 fills clockwise.
 }
 
 Float_Interpolation :: struct {
@@ -674,8 +710,9 @@ Quad_Fill_Params :: struct {
 } #foreign_struct "Quad_Fill_Params"
 
 Quad_Params :: struct {
-    nine_slice: Texture_Nine_Slice_Data #foreign;
-    fill:       Quad_Fill_Params        #foreign;
+    nine_slice:       Texture_Nine_Slice_Data #foreign;
+    fill:             Quad_Fill_Params        #foreign;
+    rotation_degrees: float                   #foreign;
 } #foreign_struct "Quad_Params"
 
 Button_Settings :: struct {
@@ -759,10 +796,10 @@ Inventory_Draw_Options :: struct {
     show_background:            bool    #foreign;
     allow_drag_drop:            bool    #foreign;
     drag_drop_color_multiplier: v4      #foreign;
-    hotbar_item_count:          s32     #foreign;
-    columns:                    s32     #foreign;
-    rows:                       s32     #foreign;
-    force_select_hotbar_index:  s32     #foreign;
+    hotbar_item_count:          int     #foreign;
+    columns:                    int     #foreign;
+    rows:                       int     #foreign;
+    force_select_hotbar_index:  int     #foreign;
     hide_bag_button:            bool    #foreign;
     enable_selection:           bool    #foreign;
     scroll_item_selection:      bool    #foreign;
@@ -770,16 +807,24 @@ Inventory_Draw_Options :: struct {
     enable_use_from_hotbar:     bool    #foreign;
     on_before_draw:             (proc(item: Item_Instance, rect: Rect)) #foreign;
     on_after_draw:              (proc(item: Item_Instance, rect: Rect)) #foreign;
-    default :: proc() -> Inventory_Draw_Options {
+    inventory_default :: proc() -> Inventory_Draw_Options {
         desc: Inventory_Draw_Options;
         desc.force_select_hotbar_index = -1;
-        desc.hotbar_item_count = 6;
         desc.allow_drag_drop = true;
         desc.drag_drop_color_multiplier = .{1, 1, 1, 1};
         desc.enable_selection = true;
         desc.scroll_item_selection = true;
         desc.keyboard_item_selection = true;
         return desc;
+    }
+    hotbar_default :: proc() -> Inventory_Draw_Options {
+        desc := inventory_default();
+        desc.hotbar_item_count = 6;
+        return desc;
+    }
+    #deprecate_hard "Use Inventory_Draw_Options.inventory_default() or Inventory_Draw_Options.hotbar_default(), as appropriate for your use case."
+    default :: proc() -> Inventory_Draw_Options {
+        return inventory_default();
     }
 } #foreign_struct "Inventory_Draw_Options"
 
@@ -793,12 +838,12 @@ Draw_Hotbar_Result :: struct {
 } #foreign_struct "Inventory_Manager::Draw_Hotbar_Result"
 
 Game :: struct {
-    get_local_player :: proc() -> Player, bool #foreign "game_get_local_player";
+    get_local_player :: proc() -> (Player, bool) #foreign "game_get_local_player";
 
     #deprecate_soft "Use Game.get_local_player()"
     try_get_local_player :: proc() -> Player #foreign "try_get_local_player";
 
-    is_editor :: proc() -> bool #foreign "is_editor";
+    is_editor :: proc() -> bool #foreign "is_editor"; // NOT for use in games, editor scripting only
     is_launched_from_editor :: proc() -> bool #foreign "is_launched_from_editor";
     is_server :: proc() -> bool #foreign "game_is_server";
     is_predicted_frame :: proc() -> bool #foreign "game_is_predicted_frame";
@@ -829,7 +874,7 @@ Live_Events :: struct {
     _presenter_is_speaking :: proc(slot: int) -> bool #foreign "live_events_presenter_is_speaking";
     _presenter_ghost :: proc(slot: int) -> Entity #foreign "live_events_presenter_ghost";
 
-    get_presenter :: proc(index: int) -> Live_Event_Presenter, bool {
+    get_presenter :: proc(index: int) -> (Live_Event_Presenter, bool) {
         slot := _presenter_slot(index);
         if slot < 0 return {}, false;
         return .{
@@ -851,13 +896,23 @@ Server :: struct {
     queue_set_server_available :: proc(queue: string, available: bool)   #foreign "server_queue_set_server_available";
 
     transfer_player_to_game    :: proc(player: Player, game_id: string)  #foreign "server_transfer_player_to_game";
+    // Server only. Targets an existing instance of this game; normal access/capacity checks apply.
+    transfer_player_to_server :: proc(player: Player, server_id: string) #foreign "server_transfer_player_to_server";
 
     get_id :: proc() -> string #foreign "server_get_id";
-    get_private_server_host_id :: proc() -> string, bool #foreign "server_get_private_server_host_id";
+    get_private_server_host_id :: proc() -> (string, bool) #foreign "server_get_private_server_host_id";
 }
 
 Editor :: struct {
     is_entity_selected :: proc(entity: Entity) -> bool #foreign "editor_is_entity_selected";
+}
+
+// Define named notifications with title/body translation slugs through the game's
+// push-notification-definitions REST API before sending. Server only; user IDs may be offline.
+Push_Notifications :: struct {
+    send_now :: proc(player_id: string, notification_id: string) #foreign "push_notifications_send_now";
+    // UTC Unix seconds. Must be in the future and within 30 days. One pending push per game/player.
+    schedule :: proc(player_id: string, notification_id: string, send_at_unix_seconds: int) #foreign "push_notifications_schedule";
 }
 
 Chat :: struct {
@@ -879,10 +934,18 @@ Scene :: struct {
 
     get_all_components_in_range_raw :: proc(position: v2, range: float, results: ref [..]Component, component_type: typeid) #foreign;
 
-    get_closest_component_in_range_raw :: proc(position: v2, range: float, component_type: typeid) -> Component, bool #foreign;
+    get_closest_component_in_range_raw :: proc(position: v2, range: float, component_type: typeid) -> (Component, bool) #foreign;
 
     create_entity :: proc() -> Entity #foreign;
     instantiate :: proc(prefab: Prefab_Asset, position: v2 = {}, userdata: Object = {}, on_before_start: proc(entity: Entity, userdata: Object) = {}) -> Entity #foreign "prefab_instantiate";
+    instantiate :: proc(prefab: Prefab_Asset, position: v2, on_before_start: proc(entity: Entity)) -> Entity {
+        return Scene.instantiate(prefab, position, {}, proc(entity: Entity, userdata: Object) {
+            on_before_start(entity);
+        });
+    }
+    instantiate :: proc(prefab: Prefab_Asset, on_before_start: proc(entity: Entity)) -> Entity {
+        return Scene.instantiate(prefab, {}, on_before_start);
+    }
 
     get_player_inventory_capacity :: proc() -> int #foreign "scene_get_player_inventory_capacity";
     set_player_inventory_capacity :: proc(capacity: int) #foreign "scene_set_player_inventory_capacity";
@@ -893,7 +956,7 @@ Scene :: struct {
         Scene.get_all_components_in_range_raw(position, range, ref (&results).(*[..]Component).*, T);
     }
 
-    get_closest_component_in_range :: proc(position: v2, range: float, $T: typeid) -> T, bool {
+    get_closest_component_in_range :: proc(position: v2, range: float, $T: typeid) -> (T, bool) {
         v, ok := Scene.get_closest_component_in_range_raw(position, range, T);
         return v.(T), ok;
     }
@@ -909,15 +972,17 @@ JSON :: struct {
     try_deserialize_raw :: proc(json: string, out_value: *u8, t: typeid) -> bool #foreign "json_deserialize_raw";
 
     try_deserialize :: proc(json: string, out_value: ref $T) -> bool {
-        return try_deserialize_raw(json, (&out_value).(*u8), T);
+        #unsafe return try_deserialize_raw(json, (&out_value).(*u8), T);
     }
 }
 
 compute_current_stack_trace :: proc() -> string #foreign "compute_current_stack_trace";
 
 core_globals: struct "ao core globals" {
+    tutorials: [..]Tutorial;
     white_sprite:   Texture_Asset;
     tutorial_arrow: Texture_Asset;
+    tutorial_hand:  Texture_Asset;
     button_green:   Texture_Asset;
 
     ability_bg:                 Texture_Asset;
@@ -960,7 +1025,45 @@ try_get_constant_procedure :: proc(ti: Type_Info_Struct, name: string, $T: typei
             if ti.members[i].name == name {
                 offset := ti.members[i].offset;
                 assert(offset >= 0, "offset was invalid: % %, %, %", {ti.*, T, name, offset});
-                return (&ti.constant_storage[offset]).(*T).*;
+                if ti.members[i].type.kind == .OVERLOAD_SET {
+                    #unsafe overloads := (&ti.constant_storage[offset]).(*[]Type_Info_Overload).*;
+                    required_type := #type_info(T).(Type_Info_Procedure);
+                    for j: 0..overloads.count-1 #reverse {
+                        overload := overloads[j];
+                        compatible := overload.type.argument_types.count == required_type.argument_types.count;
+
+                        if compatible && overload.type.return_type != required_type.return_type {
+                            source_type := overload.type.return_type;
+                            target_type := required_type.return_type;
+                            compatible = source_type != null && target_type != null && source_type.kind == .CLASS && target_type.kind == .CLASS;
+                            if compatible {
+                                source_struct := source_type.(Type_Info_Class).reference_to.(Type_Info_Struct);
+                                target_struct := target_type.(Type_Info_Class).reference_to.(Type_Info_Struct);
+                                compatible = a_inherits_from_b(source_struct, target_struct);
+                            }
+                        }
+
+                        if compatible {
+                            for k: 0..overload.type.argument_types.count-1 {
+                                source_type := overload.type.argument_types[k];
+                                target_type := required_type.argument_types[k];
+                                if source_type == target_type continue;
+
+                                compatible = source_type.kind == .CLASS && target_type.kind == .CLASS;
+                                if compatible {
+                                    source_struct := source_type.(Type_Info_Class).reference_to.(Type_Info_Struct);
+                                    target_struct := target_type.(Type_Info_Class).reference_to.(Type_Info_Struct);
+                                    compatible = a_inherits_from_b(source_struct, target_struct);
+                                }
+                                if !compatible break;
+                            }
+                        }
+
+                        if compatible #unsafe return (&overload.procedure).(*T).*;
+                    }
+                    return null;
+                }
+                #unsafe return (&ti.constant_storage[offset]).(*T).*;
             }
         }
     }
@@ -969,7 +1072,9 @@ try_get_constant_procedure :: proc(ti: Type_Info_Struct, name: string, $T: typei
 
 Keybind :: u64;
 
-core_before_scene_load :: proc() {
+reify_all_abilities :: proc() {
+    core_globals.all_abilities.clear();
+
     ability_type := #type_info(Ability_Base).(Type_Info_Class).reference_to.(Type_Info_Struct);
     for ti: type_info_table {
         if ti == null continue;
@@ -991,9 +1096,37 @@ core_before_scene_load :: proc() {
             current = current.inherits_from;
         }
     }
+}
+
+ensure_player_has_ability :: proc(player: Player, ability: User_Ability_Info) {
+    for i: 0..player.abilities.count-1 {
+        if player.abilities[i] != null && player.abilities[i].type == ability.class_type {
+            return;
+        }
+    }
+
+    instance := dynamic_new(ability.class_type).(Ability_Base);
+    instance.type = ability.class_type;
+    instance.player = player;
+    instance._tutorial_id = format_string("%", {ability.class_type});
+    player.abilities.append(instance);
+    if ability.on_init != null {
+        ability.on_init(instance);
+    }
+}
+
+ensure_player_has_all_abilities :: proc(player: Player) {
+    for ability: core_globals.all_abilities {
+        ensure_player_has_ability(player, ability);
+    }
+}
+
+core_before_scene_load :: proc() {
+    reify_all_abilities();
 
     core_globals.white_sprite               = get_asset(Texture_Asset, "$AO/white.png");
     core_globals.tutorial_arrow             = get_asset(Texture_Asset, "$AO/big_arrow.png");
+    core_globals.tutorial_hand              = get_asset(Texture_Asset, "$AO/new/tutorial_hand.png");
     core_globals.button_green               = get_asset(Texture_Asset, "$AO/ui/kit/Game UI/Buttons/basic_buttons/button_large_green1.png");
     core_globals.ability_bg                 = get_asset(Texture_Asset, "$AO/new/Ability Buttons/v2/small_ability_button.png");
     core_globals.ability_pressed_bg         = get_asset(Texture_Asset, "$AO/new/Ability Buttons/v2/small_ability_button_pressed.png");
@@ -1019,6 +1152,19 @@ core_before_scene_load :: proc() {
 
     #if #exists(ao_before_scene_load) {
         ao_before_scene_load();
+    }
+}
+
+core_on_hotload :: proc() {
+    if !Game.is_server() return;
+
+    reify_all_abilities();
+    for player: component_iterator(Player) {
+        ensure_player_has_all_abilities(player);
+    }
+
+    #if #exists(ao_on_hotload) {
+        ao_on_hotload();
     }
 }
 
@@ -1054,6 +1200,12 @@ core_late_update :: proc(dt: float) {
     }
 }
 
+core_draw :: proc(dt: float) {
+    #if #exists(ao_draw) {
+        ao_draw(dt);
+    }
+}
+
 core_editor_start :: proc() {
     #if #exists(ao_editor_start) {
         ao_editor_start();
@@ -1069,6 +1221,12 @@ core_editor_update :: proc(dt: float) {
 core_editor_late_update :: proc(dt: float) {
     #if #exists(ao_editor_late_update) {
         ao_editor_late_update(dt);
+    }
+}
+
+core_editor_draw :: proc(dt: float) {
+    #if #exists(ao_editor_draw) {
+        ao_editor_draw(dt);
     }
 }
 
@@ -1125,15 +1283,7 @@ core_on_holding_interactable :: proc(interactable: Interactable, player: Player)
 
 
 core_player_start :: proc(player: Player) {
-    for ability: core_globals.all_abilities {
-        instance := dynamic_new(ability.class_type).(Ability_Base);
-        instance.type = ability.class_type;
-        instance.player = player;
-        player.abilities.append(instance);
-        if ability.on_init != null {
-            ability.on_init(instance);
-        }
-    }
+    ensure_player_has_all_abilities(player);
 }
 
 core_player_update :: proc(player: Player, dt: float) {
@@ -1167,7 +1317,7 @@ entity_iterator :: proc(include_disabled := false) -> Entity_Iterator #foreign "
 component_iterator_raw :: proc(t: typeid, include_disabled := false) -> Component_Iterator(Component) #foreign "component_iterator_raw";
 
 component_iterator :: proc($T: typeid, include_disabled := false) -> Component_Iterator(T) {
-    return (&component_iterator_raw(T, include_disabled)).(*Component_Iterator(T)).*;
+    #unsafe return (&component_iterator_raw(T, include_disabled)).(*Component_Iterator(T)).*;
 }
 
 List :: struct(T: typeid) {
@@ -1355,6 +1505,9 @@ UI :: struct {
 
     get_current_camera_size :: proc() -> float #foreign "ui_get_current_camera_size";
 
+    get_next_serial :: proc() -> int #foreign;
+    set_next_serial :: proc(serial: int) #foreign;
+
     begin_modal :: proc(rect: Rect, id: string, open: ref bool) #foreign "ui_begin_modal";
     end_modal :: proc() #foreign "ui_end_modal";
 
@@ -1422,7 +1575,7 @@ UI :: struct {
     drag_drop_source :: proc(rect: Rect, id: string, payload: Object, payload_id: string) -> bool #foreign "ui_drag_drop_source";
     drag_drop_target :: proc(rect: Rect, payload_id: string) -> Interact_Result #foreign "ui_drag_drop_target";
 
-    uidoc :: proc(document: UIDoc_Asset, consume: bool = false, userdata: Object = {}, callback: proc(event: UIDoc_Event, userdata: Object) = {}) #foreign "ui_uidoc";
+    uidoc :: proc(document: UIDoc_Asset, consume: bool = false, userdata: Object = {}, #no_captures callback: proc(event: UIDoc_Event, userdata: Object) = {}) #foreign "ui_uidoc";
     uidoc_clear_bindings :: proc() #foreign "ui_uidoc_clear_bindings";
     uidoc_bind_bool :: proc(name: string, value: bool) #foreign "ui_uidoc_bind_bool";
     uidoc_bind_text :: proc(name: string, value: string) #foreign "ui_uidoc_bind_text";
@@ -1858,6 +2011,8 @@ Product :: struct {
 
 Purchasing :: struct {
     prompt_purchase :: proc(player: Player, id: string)         #foreign "purchasing_prompt_purchase";
+    // Opens the VIP subscription purchase flow for the local player. Call once from a UI action.
+    prompt_vip_purchase :: proc(player: Player) #foreign "purchasing_prompt_vip_purchase";
     owns_product    :: proc(player: Player, id: string) -> bool #foreign "purchasing_owns_product";
     get_product     :: proc(id: string) -> Product              #foreign "purchasing_get_product";
 }
@@ -1942,9 +2097,9 @@ Shop :: struct {
     add_category          :: proc(shop_handle: u64, id: string) -> u64                    #foreign "shop_add_category";
     draw                  :: proc(shop_handle: u64, rect: Rect) -> bool                   #foreign "shop_draw";
     purchase              :: proc(shop_handle: u64, player: Player, product_handle: u64)  #foreign "shop_purchase";
-    set_purchase_handler  :: proc(shop_handle: u64, userdata: Object, handler: proc(player: Player, product_handle: u64, userdata: Object) -> bool)  #foreign "shop_set_purchase_handler";
-    set_purchase_modifier :: proc(shop_handle: u64, userdata: Object, modifier: proc(player: Player, product_handle: u64, userdata: Object) -> Shop_Purchase_Modification)  #foreign "shop_set_purchase_modifier";
-    set_custom_display    :: proc(shop_handle: u64, userdata: Object, display: proc(product_handle: u64, rect: Rect, userdata: Object))  #foreign "shop_set_custom_display";
+    set_purchase_handler  :: proc(shop_handle: u64, userdata: Object, #no_captures handler: proc(player: Player, product_handle: u64, userdata: Object) -> bool)  #foreign "shop_set_purchase_handler";
+    set_purchase_modifier :: proc(shop_handle: u64, userdata: Object, #no_captures modifier: proc(player: Player, product_handle: u64, userdata: Object) -> Shop_Purchase_Modification)  #foreign "shop_set_purchase_modifier";
+    set_custom_display    :: proc(shop_handle: u64, userdata: Object, #no_captures display: proc(product_handle: u64, rect: Rect, userdata: Object))  #foreign "shop_set_custom_display";
 }
 
 Ordered_Save_Entry :: struct {
@@ -1974,12 +2129,20 @@ Save_Game_Key :: struct {
 }
 
 Save :: struct {
+    set_item   :: proc(player: Player, key: string, item: Item_Instance)       #foreign "save_set_item";
+    get_item   :: proc(player: Player, key: string) -> Item_Instance           #foreign "save_get_item";
     set_string :: proc(player: Player, key: string, value: string)             #foreign "save_set_string";
     get_string :: proc(player: Player, key: string, default: string) -> string #foreign "save_get_string";
     set_int    :: proc(player: Player, key: string, value: s64)                #foreign "save_set_int";
     get_int    :: proc(player: Player, key: string, default: s64) -> s64       #foreign "save_get_int";
     set_f64    :: proc(player: Player, key: string, value: f64)                #foreign "save_set_f64";
     get_f64    :: proc(player: Player, key: string, default: f64) -> f64       #foreign "save_get_f64";
+    set_float  :: proc(player: Player, key: string, value: float) {
+        set_f64(player, key, value.(f64));
+    }
+    get_float  :: proc(player: Player, key: string, default: float) -> float {
+        return get_f64(player, key, default.(f64)).(float);
+    }
     delete_key     :: proc(player: Player, key: string)                         #foreign "save_delete_key";
     delete_all_keys :: proc(player: Player)                                    #foreign "save_delete_all_keys";
     get_all_keys   :: proc(player: Player) -> []string                         #foreign "save_get_all_keys";
@@ -1992,20 +2155,33 @@ Save :: struct {
     }
 
     try_get_json :: proc(player: Player, key: string, out_value: ref $T) -> bool {
-        return try_get_json_raw(player, key, (&out_value).(*u8), T);
+        #unsafe return try_get_json_raw(player, key, (&out_value).(*u8), T);
     }
 
-    set_game_string       :: proc(key: string, value: string)                                      #foreign "save_set_game_string";
+    // Compatibility bridge: old clients do not relocate the pending game-key deletion list.
+    // Game-string writes have no client-visible optimistic update; deletes can temporarily
+    // reconcile from server state. Keep both operations server-only until the next
+    // engine-memory-version boundary makes the native list safe for every client.
+    _set_game_string_native :: proc(key: string, value: string)                                    #foreign "save_set_game_string";
+    set_game_string       :: proc(key: string, value: string) {
+        if !Game.is_server() return;
+        _set_game_string_native(key, value);
+    }
     get_game_string       :: proc(key: string, default: string) -> string                          #foreign "save_get_game_string";
     increment_game_int    :: proc(key: string, amount: s64, optimistic_update: bool = true)        #foreign "save_increment_game_int";
     get_game_int          :: proc(key: string, default: s64) -> s64                                #foreign "save_get_game_int";
+    _delete_game_key_native :: proc(key: string)                                                   #foreign "save_delete_game_key";
+    delete_game_key       :: proc(key: string) {
+        if !Game.is_server() return;
+        _delete_game_key_native(key);
+    }
     get_all_game_strings  :: proc() -> []Save_Game_String                                          #foreign "save_get_all_game_strings";
     get_all_game_ints     :: proc() -> []Save_Game_Int                                             #foreign "save_get_all_game_ints";
     get_all_game_keys     :: proc() -> []Save_Game_Key                                             #foreign "save_get_all_game_keys";
 
     ordered_set     :: proc(document: string, key: string, value: f64) #foreign "save_ordered_set";
-    ordered_get     :: proc(document: string, key: string, default: f64, userdata: Object, callback: proc(entry: Ordered_Save_Entry, userdata: Object)) #foreign "save_ordered_get";
-    ordered_get_all :: proc(document: string, offset: s64, limit: s64, userdata: Object, callback: proc(entries: []Ordered_Save_Entry, userdata: Object)) #foreign "save_ordered_get_all";
+    ordered_get     :: proc(document: string, key: string, default: f64, userdata: Object, #no_captures callback: proc(entry: Ordered_Save_Entry, userdata: Object)) #foreign "save_ordered_get";
+    ordered_get_all :: proc(document: string, offset: s64, limit: s64, userdata: Object, #no_captures callback: proc(entries: []Ordered_Save_Entry, userdata: Object)) #foreign "save_ordered_get_all";
 }
 
 Items :: struct {
@@ -2088,7 +2264,23 @@ Item_Transaction_Entry :: struct {
     inventory: Inventory;
 }
 
+Inventory_Slot_Iterator :: struct {
+    inventory: Inventory;
+    cursor: s64;
+    current: Item_Instance;
+    current_index: s64;
+
+    next :: method() -> bool #foreign "inventory_slot_iterator_next";
+}
+
 Inventory :: class {
+    slots :: method() -> Inventory_Slot_Iterator {
+        iterator: Inventory_Slot_Iterator;
+        iterator.inventory = this;
+        iterator.current_index = -1;
+        return iterator;
+    }
+
     get_item :: proc(inventory: Inventory, index: s64) -> Item_Instance #foreign "inventory_get_item";
     has_item_id :: proc(inventory: Inventory, item_id: string) -> bool #foreign "inventory_has_item_id";
 
@@ -2180,7 +2372,7 @@ Ease :: struct {
 
 Keybinds :: struct {
     register                   :: proc(name: string, default: Input)     -> Keybind             #foreign "keybinds_register";
-    get_sprite_for_keybind     :: proc(player: Player, keybind: Keybind) -> Texture_Asset, bool #foreign "keybinds_get_sprite_for_keybind";
+    get_sprite_for_keybind     :: proc(player: Player, keybind: Keybind) -> (Texture_Asset, bool) #foreign "keybinds_get_sprite_for_keybind";
     get_keybind_string         :: proc(player: Player, keybind: Keybind) -> string              #foreign "keybinds_get_keybind_string";
 
     get_keybind_down :: proc(player: Player, keybind: Keybind) -> bool #foreign "keybinds_get_keybind_down";
@@ -2284,6 +2476,7 @@ Spine_Instance :: class : Spine_Instance_Fields {
     set_state_machine :: method(new_state_machine: State_Machine, transfer_ownership: bool)  #foreign "spine_instance_set_state_machine";
 
     get_bone_local_position :: method(bone_name: string) -> v2         #foreign "spine_instance_get_bone_position";
+    try_get_bone_local_transform :: method(bone_name: string) -> (Spine_Bone_Transform, bool) #foreign "spine_instance_try_get_bone_transform";
     set_bone_local_position :: method(bone_name: string, position: v2) #foreign "spine_instance_set_bone_position";
 
     create            :: proc() -> Spine_Instance                                            #foreign "spine_instance_create";
@@ -2309,9 +2502,9 @@ Spine_Instance :: class : Spine_Instance_Fields {
     set_color_replace_color      :: method(color: Color_Replace_Color) #foreign "spine_instance_set_color_replace_color";
     set_material                 :: method(material: Material, transfer_ownership: bool) #foreign "spine_instance_set_material";
 
-    set_on_event                 :: method(userdata: Object, callback: proc(userdata: Object, event: Spine_Event_Data)) #foreign "spine_instance_set_on_event";
-    set_on_animation_start       :: method(userdata: Object, callback: proc(userdata: Object, animation: string)) #foreign "spine_instance_set_on_animation_start";
-    set_on_animation_end         :: method(userdata: Object, callback: proc(userdata: Object, animation: string)) #foreign "spine_instance_set_on_animation_end";
+    set_on_event                 :: method(userdata: Object, #no_captures callback: proc(userdata: Object, event: Spine_Event_Data)) #foreign "spine_instance_set_on_event";
+    set_on_animation_start       :: method(userdata: Object, #no_captures callback: proc(userdata: Object, animation: string)) #foreign "spine_instance_set_on_animation_start";
+    set_on_animation_end         :: method(userdata: Object, #no_captures callback: proc(userdata: Object, animation: string)) #foreign "spine_instance_set_on_animation_end";
 
     set_to_setup_pose :: method()                                                            #foreign "spine_instance_set_to_setup_pose";
 
@@ -2366,21 +2559,40 @@ Player_Base :: class : AO_Player {
 
     add_freeze_reason    :: method(reason: string) #foreign "player_add_freeze_reason";
     remove_freeze_reason :: method(reason: string) #foreign "player_remove_freeze_reason";
+    has_freeze_reason    :: method(reason: string) -> bool #foreign "player_has_freeze_reason";
+    has_any_freeze_reason :: method() -> bool #foreign "player_has_any_freeze_reason";
 
     add_invisibility_reason    :: method(reason: string) #foreign "player_add_invisibility_reason";
     remove_invisibility_reason :: method(reason: string) #foreign "player_remove_invisibility_reason";
+    has_invisibility_reason    :: method(reason: string) -> bool #foreign "player_has_invisibility_reason";
+    has_any_invisibility_reason :: method() -> bool #foreign "player_has_any_invisibility_reason";
 
     add_name_invisibility_reason    :: method(reason: string) #foreign "player_add_name_invisibility_reason";
     remove_name_invisibility_reason :: method(reason: string) #foreign "player_remove_name_invisibility_reason";
+    has_name_invisibility_reason    :: method(reason: string) -> bool #foreign "player_has_name_invisibility_reason";
+    has_any_name_invisibility_reason :: method() -> bool #foreign "player_has_any_name_invisibility_reason";
 
     add_name_offset_reason    :: method(reason: string, offset: float) #foreign "player_add_name_offset_reason";
     remove_name_offset_reason :: method(reason: string) #foreign "player_remove_name_offset_reason";
+    has_name_offset_reason    :: method(reason: string) -> bool #foreign "player_has_name_offset_reason";
+    has_any_name_offset_reason :: method() -> bool #foreign "player_has_any_name_offset_reason";
 
+    // Synchronized and restored for late joiners; do not reapply in ao_on_state_sync.
+    // Reasons are counted (each add needs one remove); removing an absent reason is a no-op.
+    // This changes built-in player presentation only, not collision or gameplay targeting.
     add_ghost_reason    :: method(reason: string) #foreign "player_add_ghost_reason";
     remove_ghost_reason :: method(reason: string) #foreign "player_remove_ghost_reason";
+    has_ghost_reason    :: method(reason: string) -> bool #foreign "player_has_ghost_reason";
+    has_any_ghost_reason :: method() -> bool #foreign "player_has_any_ghost_reason";
 
     add_disable_movement_input_reason    :: method(reason: string) #foreign "player_add_disable_movement_input_reason";
     remove_disable_movement_input_reason :: method(reason: string) #foreign "player_remove_disable_movement_input_reason";
+    has_disable_movement_input_reason    :: method(reason: string) -> bool #foreign "player_has_disable_movement_input_reason";
+    has_any_disable_movement_input_reason :: method() -> bool #foreign "player_has_any_disable_movement_input_reason";
+
+    // Replaces input for the next movement step, including with v2{0, 0}.
+    // Applied after disabled-input reasons, so scripted movement can deliberately bypass them.
+    override_movement_input_for_next_step :: method(input: v2) #foreign "player_override_movement_input_for_next_step";
 
     has_equipped_emote :: method(animation_name: string) -> bool #foreign "player_has_equipped_emote";
 
@@ -2403,8 +2615,22 @@ Player_Base :: class : AO_Player {
         return false;
     }
 
-    is_emote_blocked :: method() -> bool {
+    has_emote_block_reason :: method(reason: string) -> bool {
+        for block_reason: emote_block_reasons {
+            if block_reason == reason {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    has_any_emote_block_reason :: method() -> bool {
         return emote_block_reasons.count > 0;
+    }
+
+    #deprecate_soft "Use has_any_emote_block_reason()."
+    is_emote_blocked :: method() -> bool {
+        return has_any_emote_block_reason();
     }
 
     try_trigger_emote :: method(animation_name: string) -> bool {
@@ -2417,6 +2643,8 @@ Player_Base :: class : AO_Player {
 
     add_joystick_disable_reason    :: method(reason: string) #foreign "player_add_joystick_disable_reason";
     remove_joystick_disable_reason :: method(reason: string) #foreign "player_remove_joystick_disable_reason";
+    has_joystick_disable_reason    :: method(reason: string) -> bool #foreign "player_has_joystick_disable_reason";
+    has_any_joystick_disable_reason :: method() -> bool #foreign "player_has_any_joystick_disable_reason";
 
     is_local_or_server :: method() -> bool #foreign "player_is_local_or_server";
     is_local           :: method() -> bool #foreign "player_is_local";
@@ -2432,7 +2660,7 @@ Player_Base :: class : AO_Player {
     // Poll from the same player's callbacks. ok is false until a sample has arrived.
     // serial increases for each completed request and lets callers consume each sticky,
     // redundantly-transmitted input value once. Color is opaque composited RGB.
-    try_get_scene_color_sample :: method() -> v4, u64, s64, bool #foreign "player_try_get_scene_color_sample";
+    try_get_scene_color_sample :: method() -> (v4, u64, s64, bool) #foreign "player_try_get_scene_color_sample";
 
     is_chat_open              :: method() -> bool #foreign "player_is_chat_open";
     is_ptt_button_visible     :: method() -> bool #foreign "player_is_ptt_button_visible";
@@ -2441,8 +2669,14 @@ Player_Base :: class : AO_Player {
     get_system_buttons_rect :: method() -> Rect #foreign "player_get_system_buttons_rect";
     get_ptt_rect            :: method() -> Rect #foreign "player_get_ptt_rect";
 
-    is_admin           :: method() -> bool #foreign "player_is_admin";
+    // Game owner = the account that owns the game; editor = someone the owner added to the
+    // team. This is what "admin" means inside a game (platform staff is not exposed).
+    is_game_owner      :: method() -> bool #foreign "player_is_game_owner";
+    is_game_editor     :: method() -> bool #foreign "player_is_game_editor";
+    is_owner_or_editor :: method() -> bool #foreign "player_is_owner_or_editor";
     is_vip             :: method() -> bool #foreign "player_is_vip";
+    // Recorded friend-code referrals, refreshed on joining a server. Independent of capped Spark bonuses.
+    get_friend_referral_count :: method() -> int #foreign "player_get_friend_referral_count";
     is_moderator       :: method() -> bool #foreign "player_is_moderator";
     is_youtuber        :: method() -> bool #foreign "player_is_youtuber";
 
@@ -2469,6 +2703,12 @@ Player_Base :: class : AO_Player {
     was_aiming_ability_frame_number: u64;
     active_ability: Ability_Base;
     last_aim_direction: v2;
+
+    failed_aimed_ability_tap_count: s64;
+    last_failed_aimed_ability_tap_time: float;
+    aimed_ability_drag_hint: Ability_Base;
+    aimed_ability_drag_hint_started_at: float;
+    aimed_ability_drag_hint_position_interp: Position_Interpolation_Helper;
 }
 
 //
@@ -2484,10 +2724,11 @@ Effect_Base :: class {
         disable_movement_inputs: bool;
     };
 
-    #interface effect_start           :: proc(c: Effect_Base);
-    #interface effect_update          :: proc(c: Effect_Base, dt: float);
-    #interface effect_late_update     :: proc(c: Effect_Base, dt: float);
-    #interface effect_end             :: proc(c: Effect_Base, interrupt: bool);
+    #interface effect_start           :: method();
+    #interface effect_update          :: method(dt: float);
+    #interface effect_late_update     :: method(dt: float);
+    #interface effect_draw            :: method(dt: float);
+    #interface effect_end             :: method(interrupt: bool);
 
     internal: struct {
         already_ending: bool;
@@ -2498,6 +2739,7 @@ Effect_Base :: class {
         start_proc:       proc(c: Effect_Base);
         update_proc:      proc(c: Effect_Base, dt: float);
         late_update_proc: proc(c: Effect_Base, dt: float);
+        draw_proc:        proc(c: Effect_Base, dt: float);
         end_proc:         proc(c: Effect_Base, interrupt: bool);
     };
 
@@ -2564,14 +2806,12 @@ Effect_Base :: class {
         if internal.end_proc != null {
             internal.end_proc(this, interrupt);
         }
-
-        #unrootify_object(this);
     }
-} #gc_root
+}
 
 set_active_effect :: proc(entity: Entity, new_active_effect: $T) #unsafe {
     if entity.effect_data == null {
-        entity.effect_data = new();
+        entity.effect_data = #alloc_root();
     }
     current_active_effect := entity.effect_data.active_effect;
     if current_active_effect != null {
@@ -2586,8 +2826,6 @@ set_active_effect :: proc(entity: Entity, new_active_effect: $T) #unsafe {
 }
 
 add_passive_effect :: proc(entity: Entity, new_effect: $T) #unsafe {
-    #rootify_object(new_effect);
-
     new_effect.start_time = get_time();
     new_effect.entity = entity;
     new_effect.player = entity.get_component(Player);
@@ -2601,12 +2839,15 @@ add_passive_effect :: proc(entity: Entity, new_effect: $T) #unsafe {
     #if #exists(T.effect_late_update) {
         new_effect.internal.late_update_proc = T.effect_late_update;
     }
+    #if #exists(T.effect_draw) {
+        new_effect.internal.draw_proc = T.effect_draw;
+    }
     #if #exists(T.effect_end) {
         new_effect.internal.end_proc = T.effect_end;
     }
 
     if entity.effect_data == null {
-        entity.effect_data = new();
+        entity.effect_data = #alloc_root();
     }
 
     effect_data := entity.effect_data;
@@ -2725,7 +2966,7 @@ try_get_effect_dynamic :: proc(entity: Entity, type: typeid, mode := Try_Get_Eff
     return null;
 }
 
-get_effect :: proc(entity: Entity, $T: typeid, mode := Try_Get_Effect_Mode.EXACT_MATCH) -> T, bool {
+get_effect :: proc(entity: Entity, $T: typeid, mode := Try_Get_Effect_Mode.EXACT_MATCH) -> (T, bool) {
     effect := try_get_effect_dynamic(entity, T, mode).(T);
     return effect, effect != null;
 }
@@ -2742,7 +2983,7 @@ core_update_effects :: proc(entity: Entity, dt: float) {
 
     current := entity.effect_data.first_effect;
     while current != null {
-        next := current.next_effect; // cache because the effect might remove itself in update
+        next := current.next_effect; // cache because the effect might remove itself
         defer current = next;
 
         if current.internal.remove_at_time != 0 {
@@ -2764,11 +3005,26 @@ core_late_update_effects :: proc(entity: Entity, dt: float) {
     }
     current := entity.effect_data.first_effect;
     while current != null {
-        next := current.next_effect; // cache because the effect might remove itself in update
+        next := current.next_effect; // cache because the effect might remove itself
         defer current = next;
 
         if current.internal.late_update_proc != null {
             current.internal.late_update_proc(current, dt);
+        }
+    }
+}
+
+core_draw_effects :: proc(entity: Entity, dt: float) {
+    if entity.effect_data == null {
+        return;
+    }
+    current := entity.effect_data.first_effect;
+    while current != null {
+        next := current.next_effect; // cache because the effect might remove itself
+        defer current = next;
+
+        if current.internal.draw_proc != null {
+            current.internal.draw_proc(current, dt);
         }
     }
 }
@@ -2939,7 +3195,7 @@ player_try_trigger_emote :: proc(player: Player_Base, animation_name: string) ->
         return false;
     }
 
-    if player.is_emote_blocked() {
+    if player.has_any_emote_block_reason() {
         if player.is_local() && Game.is_predicted_frame() {
             Notifier.notify("You cannot emote right now");
         }
@@ -2975,6 +3231,8 @@ core_player_try_trigger_emote :: proc(player: Player, animation_name: string) ->
 // Abilities
 //
 
+AIMED_ABILITY_DRAG_THRESHOLD :: 0.25;
+
 Ability_Base :: class {
     player: Player;
 
@@ -2983,16 +3241,18 @@ Ability_Base :: class {
 
     current_cooldown: float;
     type: typeid;
+    _tutorial_id: string;
     is_aimed_ability: bool;
     mouse_position_on_press: v2;
+    max_drag_offset_this_press: float;
 
     keybind_override: Keybind;
     disable_keybind: bool;
     draw_but_dont_use_keybind: bool;
 
-    #interface on_update      :: proc(ability: Ability_Base, params: ref Ability_Update_Params);
-    #interface can_use        :: proc(ability: Ability_Base) -> bool ;
-    #interface on_draw_button :: proc(ability: Ability_Base, rect: Rect);
+    #interface on_update      :: method(params: ref Ability_Update_Params);
+    #interface can_use        :: method() -> bool ;
+    #interface on_draw_button :: method(rect: Rect);
 
 }
 
@@ -3096,6 +3356,14 @@ draw_aiming_arrows_interpolated :: proc(rect: Rect, previous_rect: Rect, previou
     }
 }
 
+// Use an existing foreign API so newly published games still compile on older clients.
+observe_ability_button :: proc(player: Player, index: int, can_use: bool, aiming_blocked: bool, is_aimed: bool, cooldown: float) {
+    if Game.is_launched_from_editor() && player.is_local() {
+        log_debug("[automation ability] player=% slot=% can_use=% aiming_blocked=% is_aimed=% cooldown=%",
+            {player, index, can_use, aiming_blocked, is_aimed, cooldown});
+    }
+}
+
 draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
     ability: Ability_Base;
     for i: 0..player.abilities.count-1 {
@@ -3130,6 +3398,7 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
     }
 
     ability_button_rect: Rect;
+    ability_layout_scale: float;
 
     {
         scale_factor := 0.6;
@@ -3140,6 +3409,7 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
 
         UI.push_scale_factor(UI.get_current_scale_factor() * scale_factor);
         defer UI.pop_scale_factor();
+        ability_layout_scale = UI.get_current_scale_factor();
 
         button_offsets := ([6]v2){
             {-105, 90},
@@ -3176,6 +3446,10 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
         defer UI.pop_id();
 
         was_aiming := player.was_aiming_ability_frame_number == get_frame_number() || player.was_aiming_ability_frame_number == get_frame_number() - 1;
+        observe_ability_button(player, index, can_use, was_aiming && index != player.was_aiming_ability_index, ability.is_aimed_ability, ability.current_cooldown);
+        if Game.is_launched_from_editor() && player.is_local() {
+            log_debug("[automation ability identity] player=% slot=% ability=%", {player, index, ability});
+        }
 
         disabled := false;
         switch {
@@ -3215,9 +3489,9 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
                 UI.quad(interact.rect.fit_aspect(ability.icon.get_aspect()).scale(0.7, 0.7), ability.icon);
             }
             else if ability.name.count > 0 {
-                #static ts := UI.default_text_settings();
-                ts.size = 56;
-                UI.text(interact.rect, ts, ability.name);
+                #static ability_name_ts := UI.default_text_settings();
+                ability_name_ts.size = 56;
+                UI.text(interact.rect, ability_name_ts, ability.name);
             }
 
             if should_draw_keybind {
@@ -3227,16 +3501,52 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
                     UI.quad(keybind_rect.fit_aspect(keybind_sprite.get_aspect(), .KEEP_BIGGER), keybind_sprite);
                 }
                 else {
-                    #static ts := UI.default_text_settings();
+                    #static keybind_ts := UI.default_text_settings();
                     keybind_string := Keybinds.get_keybind_string(player, keybind);
                     if keybind_string != "Unbound" {
-                        UI.text(keybind_rect, ts, keybind_string);
+                        UI.text(keybind_rect, keybind_ts, keybind_string);
                     }
                 }
             }
 
             #if #exists(T.on_draw_button) {
                 T.on_draw_button(ability.(T), interact.rect);
+            }
+        }
+
+        tutorial_hand := _tutorial_ability_element(player, ability._tutorial_id, ability_button_rect,
+            ability.is_aimed_ability, interact.active, ability_layout_scale);
+        if player.is_mobile() && player.aimed_ability_drag_hint == ability && !tutorial_hand {
+            hint_elapsed := get_time() - player.aimed_ability_drag_hint_started_at;
+            if hint_elapsed >= 2.4 {
+                player.aimed_ability_drag_hint = null;
+            }
+            else {
+                hint_cycle_t := (hint_elapsed % 1.2) / 1.2;
+                hint_drag_t := Ease.in_out_quad(linear_step(0.15, 0.60, hint_cycle_t));
+                hint_alpha := linear_step(0.0, 0.12, hint_cycle_t) * (1.0 - linear_step(0.68, 0.78, hint_cycle_t));
+                if hint_cycle_t > 0.80 {
+                    hint_drag_t = 1.0 - Ease.in_out_quad(linear_step(0.80, 1.0, hint_cycle_t));
+                }
+
+                drag_start := ability_button_rect.center();
+                outward_direction := normalize(drag_start - UI.get_screen_rect().center());
+                drag_direction := -outward_direction;
+                hand_position := drag_start + drag_direction * ability_button_rect.width() * 0.9 * 2.2 * hint_drag_t;
+                hand_size := ability_button_rect.width();
+                hand_rect := Rect{hand_position, hand_position}.grow(0, hand_size * 0.5, hand_size, hand_size * 0.5).fit_aspect(core_globals.tutorial_hand.get_aspect()).offset(hand_size * 0.125, 0);
+                hand_rotation := to_degrees(atan2(outward_direction.y, outward_direction.x)) - 90;
+
+                UI.push_layer_relative(2); {
+                    defer UI.pop_layer();
+                    UI.push_interpolation_offset(player.aimed_ability_drag_hint_position_interp.update(hand_position)); {
+                        defer UI.pop_interpolation_offset();
+                        UI.push_matrix(Matrix4.rotate_about_point(hand_position, hand_rotation)); {
+                            defer UI.pop_matrix();
+                            UI.quad(hand_rect, core_globals.tutorial_hand, {1, 1, 1, hint_alpha});
+                        }
+                    }
+                }
             }
         }
     }
@@ -3251,6 +3561,7 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
 
     if interact.just_pressed {
         ability.mouse_position_on_press = interact.mouse_position;
+        ability.max_drag_offset_this_press = 0;
     }
 
     if ability.is_aimed_ability && interact.active {
@@ -3266,6 +3577,27 @@ draw_ability_button :: proc(player: Player, $T: typeid, index: int) {
         drag := normalize_vector_to_radius(offset, ability_button_rect.width() * 0.5);
         params.drag_offset = drag;
         params.drag_direction = normalize(offset);
+        ability.max_drag_offset_this_press = max(ability.max_drag_offset_this_press, length(drag));
+    }
+
+    if ability.is_aimed_ability && player.is_mobile() {
+        if (params.active || params.released) && ability.max_drag_offset_this_press > AIMED_ABILITY_DRAG_THRESHOLD {
+            player.failed_aimed_ability_tap_count = 0;
+            player.aimed_ability_drag_hint = null;
+        }
+        else if params.released && params.can_use && player.aimed_ability_drag_hint == null {
+            now := get_time();
+            if player.failed_aimed_ability_tap_count > 0 && now - player.last_failed_aimed_ability_tap_time <= 5.0 {
+                player.failed_aimed_ability_tap_count = 0;
+                player.aimed_ability_drag_hint = ability;
+                player.aimed_ability_drag_hint_started_at = now;
+                player.aimed_ability_drag_hint_position_interp.last_frame_rendered = get_frame_number() + 1;
+            }
+            else {
+                player.failed_aimed_ability_tap_count = 1;
+            }
+            player.last_failed_aimed_ability_tap_time = now;
+        }
     }
     T.on_update(ability.(T), ref params);
 }
@@ -3316,7 +3648,7 @@ Ability_Utilities :: struct {
             }
         }
         else {
-            if length(params.drag_offset) > 0.25 {
+            if length(params.drag_offset) > AIMED_ABILITY_DRAG_THRESHOLD {
                 result.aim_direction = params.drag_direction;
                 if params.released {
                     result.activate = true;
@@ -4400,7 +4732,7 @@ UIK :: struct {
     grid_begin :: proc(columns: s64, cell_height: float) #foreign "uik_grid_begin";
     grid_end :: proc() #foreign "uik_grid_end";
 
-    card_begin :: proc(id: string, desc: Card_Desc, before_draw: u64 = 0, after_draw: u64 = 0, userdata: u64 = 0) #foreign "uik_card_begin";
+    card_begin :: proc(id: string, desc: Card_Desc, #no_captures before_draw: proc(rect: Rect, userdata: Object) = {}, #no_captures after_draw: proc(rect: Rect, userdata: Object) = {}, userdata: Object = {}) #foreign "uik_card_begin";
     card_end :: proc() -> Interact_Result #foreign "uik_card_end";
     card_zone :: proc(zone: Card_Zone) #foreign "uik_card_zone";
     card_zone_end :: proc() #foreign "uik_card_zone_end";
@@ -4705,5 +5037,776 @@ UIK :: struct {
 
     rect_dialog :: proc() -> Rect {
         return UI.get_safe_screen_rect().top_center_rect().grow_bottom(275).grow(0, 250, 0, 250).offset(0, -15);
+    }
+}
+
+Particle_Emission :: struct {
+    kind: enum "particle_emission_kind" {
+        NONE;
+        BURST;
+        CONTINUOUS;
+    };
+    burst_count: int;
+    rate: float;
+
+    burst :: proc(particle_count: int) -> Particle_Emission {
+        result: Particle_Emission;
+        result.kind = .BURST;
+        result.burst_count = particle_count;
+        return result;
+    }
+
+    continuous :: proc(particles_per_second: float) -> Particle_Emission {
+        result: Particle_Emission;
+        result.kind = .CONTINUOUS;
+        result.rate = particles_per_second;
+        return result;
+    }
+
+    get_slot_count :: method(maximum_lifetime: float) -> int {
+        if kind == .BURST {
+            return burst_count;
+        }
+        if kind != .CONTINUOUS || rate <= 0 || maximum_lifetime <= 0 {
+            return 0;
+        }
+
+        required_slots := rate * maximum_lifetime;
+        result := required_slots.(int);
+        if result.(float) < required_slots {
+            result += 1;
+        }
+        return max(1, result);
+    }
+}
+
+Particle_System_Desc :: struct {
+    Range :: struct(T: typeid) {
+        min: T;
+        max: T;
+    }
+
+    Over_Lifetime :: struct(T: typeid) {
+        start: T;
+        end: T;
+    }
+
+    Timing :: struct {
+        spawned: bool;
+        life_index: int;
+        age: float;
+    }
+
+    Sample :: struct {
+        alive: bool;
+        life_index: int;
+        position: v2;
+        half_size: v2;
+        color: v4;
+        rotation_degrees: float;
+    }
+
+    Sampling_Context :: struct {
+        direction: v2;
+        use_friction: bool;
+        friction_coefficient: float;
+        inverse_friction_coefficient: float;
+        terminal_velocity: v2;
+    }
+
+    World_Slot :: struct {
+        has_birth: bool #foreign;
+        life_index: int #foreign;
+        birth_position: v2 #foreign;
+    } #foreign_struct "CSL_Particle_System_World_Slot"
+
+    State :: struct {
+        initialized: bool;
+        seed: u64;
+        start_time: float;
+        activation_index: u64;
+        configured_slot_count: int;
+
+        // WORLD emitters need only one birth origin per reusable particle slot.
+        world_slots: [..]World_Slot;
+        last_emitter_position: v2;
+        last_update_time: float;
+    }
+
+    Native_Draw_Args :: struct {
+        seed: u64 #foreign;
+        start_time: float #foreign;
+        emitter_position: v2 #foreign;
+        time: float #foreign;
+        previous_time: float #foreign;
+        particle_count: int #foreign;
+        emission_kind: int #foreign;
+        emission_rate: float #foreign;
+        prewarm: bool #foreign;
+        simulation_space: int #foreign;
+        spawn_rect_size: v2 #foreign;
+        spawn_position_radius: float #foreign;
+        color_start: v4 #foreign;
+        color_end: v4 #foreign;
+        direction: v2 #foreign;
+        use_friction: bool #foreign;
+        friction_coefficient: float #foreign;
+        inverse_friction_coefficient: float #foreign;
+        terminal_velocity: v2 #foreign;
+        direction_spread_degrees: float #foreign;
+        initial_rotation_min: float #foreign;
+        initial_rotation_max: float #foreign;
+        speed_min: float #foreign;
+        speed_max: float #foreign;
+        lifetime_min: float #foreign;
+        lifetime_max: float #foreign;
+        angular_velocity_min: float #foreign;
+        angular_velocity_max: float #foreign;
+        face_direction: bool #foreign;
+        fade_in_seconds: float #foreign;
+        fade_out_seconds: float #foreign;
+        gravity: v2 #foreign;
+        size_start: v2 #foreign;
+        size_end: v2 #foreign;
+        sprite: Texture_Asset #foreign;
+    } #foreign_struct "CSL_Particle_System_Draw_Args"
+
+    draw_native :: proc(args: Native_Draw_Args, world_slots: ref [..]World_Slot) #foreign "particle_system_draw_native";
+    update_world_birth_positions_native :: proc(start_time: float, time: float, emitter_position: v2, particle_count: int, emission_kind: int, emission_rate: float, prewarm: bool, world_slots: ref [..]World_Slot, last_emitter_position: ref v2, last_update_time: ref float) #foreign "particle_system_update_world_birth_positions_native";
+
+    range_float :: proc(value: float) -> Range(float) {
+        return {value, value};
+    }
+
+    range_float :: proc(minimum: float, maximum: float) -> Range(float) {
+        return {minimum, maximum};
+    }
+
+    over_lifetime_v2 :: proc(value: v2) -> Over_Lifetime(v2) {
+        return {value, value};
+    }
+
+    over_lifetime_v2 :: proc(start: v2, end: v2) -> Over_Lifetime(v2) {
+        return {start, end};
+    }
+
+    over_lifetime_v4 :: proc(value: v4) -> Over_Lifetime(v4) {
+        return {value, value};
+    }
+
+    over_lifetime_v4 :: proc(start: v4, end: v4) -> Over_Lifetime(v4) {
+        return {start, end};
+    }
+
+    size_from_sprite_height :: proc(sprite: Texture_Asset, height: float) -> Over_Lifetime(v2) {
+        return over_lifetime_v2({height * sprite.get_aspect(), height});
+    }
+
+    size_from_sprite_height :: proc(sprite: Texture_Asset, start_height: float, end_height: float) -> Over_Lifetime(v2) {
+        aspect := sprite.get_aspect();
+        return over_lifetime_v2({start_height * aspect, start_height}, {end_height * aspect, end_height});
+    }
+
+    simulation_space: enum "simulation_space" {
+        // Existing particles continue to follow the emitter's translation.
+        LOCAL;
+        // Each particle keeps the emitter position from the moment it spawned.
+        WORLD;
+    };
+
+    seed_salt: u64;
+    spawn_offset: v2;
+    spawn_rect_size: v2;
+    spawn_position_radius: float;
+
+    color_over_lifetime: Over_Lifetime(v4);
+
+    direction: v2;
+    direction_spread_degrees: float;
+    initial_rotation_degrees: Range(float);
+    speed: Range(float);
+    lifetime: Range(float);
+    angular_velocity_degrees: Range(float);
+    face_direction: bool;
+    fade_in_seconds: float;
+    fade_out_seconds: float;
+    emission: Particle_Emission;
+    prewarm: bool;
+    auto_disable_when_finished: bool;
+    friction: float; // Fraction of velocity lost per 1/60-second frame.
+    gravity: v2;
+
+    size_over_lifetime: Over_Lifetime(v2);
+    sprite: Texture_Asset;
+
+    preset_default :: proc() -> Particle_System_Desc {
+        desc: Particle_System_Desc;
+        desc.emission = Particle_Emission.burst(16);
+        desc.simulation_space = .WORLD;
+        desc.color_over_lifetime = over_lifetime_v4({1, 1, 1, 1});
+        desc.direction = {0, 1};
+        desc.initial_rotation_degrees = range_float(0);
+        desc.speed = range_float(1, 2);
+        desc.lifetime = range_float(0.5, 1);
+        desc.angular_velocity_degrees = range_float(0);
+        desc.fade_out_seconds = 0.2;
+        desc.auto_disable_when_finished = true;
+        desc.size_over_lifetime = over_lifetime_v2({0.16, 0.16}, {});
+        desc.sprite = core_globals.white_sprite;
+        return desc;
+    }
+
+    preset_shotgun :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.color_over_lifetime = over_lifetime_v4({1, 0.9, 0.45, 1}, {1, 0.25, 0.05, 1});
+        desc.direction = {1, 0};
+        desc.direction_spread_degrees = 18;
+        desc.speed = range_float(8, 14);
+        desc.lifetime = range_float(0.12, 0.25);
+        desc.face_direction = true;
+        desc.fade_out_seconds = 0.08;
+        desc.emission = Particle_Emission.burst(14);
+        desc.friction = 0.02;
+        desc.gravity = {0, -3};
+        desc.size_over_lifetime = over_lifetime_v2({0.20, 0.05}, {0.05, 0.012});
+        return desc;
+    }
+
+    preset_firework :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.color_over_lifetime = over_lifetime_v4({1, 0.85, 0.2, 1}, {1, 0.1, 0.65, 1});
+        desc.direction_spread_degrees = 360;
+        desc.speed = range_float(3.5, 7);
+        desc.lifetime = range_float(0.8, 1.5);
+        desc.fade_in_seconds = 0.03;
+        desc.fade_out_seconds = 0.5;
+        desc.emission = Particle_Emission.burst(72);
+        desc.friction = 0.005;
+        desc.gravity = {0, -5};
+        desc.size_over_lifetime = over_lifetime_v2({0.15, 0.15}, {0.03, 0.03});
+        return desc;
+    }
+
+    preset_explosion :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.spawn_position_radius = 0.08;
+        desc.color_over_lifetime = over_lifetime_v4({1, 0.95, 0.35, 1}, {0.8, 0.05, 0.01, 1});
+        desc.direction_spread_degrees = 360;
+        desc.speed = range_float(2, 8);
+        desc.lifetime = range_float(0.18, 0.5);
+        desc.fade_out_seconds = 0.18;
+        desc.emission = Particle_Emission.burst(48);
+        desc.friction = 0.025;
+        desc.size_over_lifetime = over_lifetime_v2({0.4, 0.4}, {});
+        return desc;
+    }
+
+    preset_sparks :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.color_over_lifetime = over_lifetime_v4({1, 1, 0.65, 1}, {1, 0.2, 0.01, 1});
+        desc.direction_spread_degrees = 100;
+        desc.speed = range_float(3, 8);
+        desc.lifetime = range_float(0.25, 0.75);
+        desc.face_direction = true;
+        desc.fade_out_seconds = 0.2;
+        desc.emission = Particle_Emission.burst(28);
+        desc.friction = 0.005;
+        desc.gravity = {0, -12};
+        desc.size_over_lifetime = over_lifetime_v2({0.16, 0.03}, {0.04, 0.008});
+        return desc;
+    }
+
+    preset_smoke :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.emission = Particle_Emission.continuous(10);
+        desc.spawn_position_radius = 0.15;
+        desc.color_over_lifetime = over_lifetime_v4({0.3, 0.3, 0.3, 1}, {0.08, 0.08, 0.08, 1});
+        desc.direction_spread_degrees = 45;
+        desc.initial_rotation_degrees = range_float(0, 360);
+        desc.speed = range_float(0.25, 0.8);
+        desc.lifetime = range_float(1.5, 3);
+        desc.angular_velocity_degrees = range_float(-30, 30);
+        desc.fade_in_seconds = 0.3;
+        desc.fade_out_seconds = 1;
+        desc.prewarm = true;
+        desc.auto_disable_when_finished = false;
+        desc.friction = 0.008;
+        desc.gravity = {0, 0.1};
+        desc.size_over_lifetime = over_lifetime_v2({0.2, 0.2}, {0.9, 0.9});
+        return desc;
+    }
+
+    preset_dust :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.spawn_position_radius = 0.25;
+        desc.color_over_lifetime = over_lifetime_v4({0.65, 0.5, 0.3, 1}, {0.3, 0.25, 0.2, 1});
+        desc.direction_spread_degrees = 150;
+        desc.initial_rotation_degrees = range_float(0, 360);
+        desc.speed = range_float(0.3, 1.5);
+        desc.lifetime = range_float(0.4, 1);
+        desc.angular_velocity_degrees = range_float(-90, 90);
+        desc.fade_in_seconds = 0.05;
+        desc.fade_out_seconds = 0.4;
+        desc.emission = Particle_Emission.burst(20);
+        desc.friction = 0.035;
+        desc.gravity = {0, -1};
+        desc.size_over_lifetime = over_lifetime_v2({0.16, 0.16}, {0.44, 0.44});
+        return desc;
+    }
+
+    preset_fountain :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.emission = Particle_Emission.continuous(24);
+        desc.spawn_position_radius = 0.08;
+        desc.color_over_lifetime = over_lifetime_v4({0.65, 0.95, 1, 1}, {0.1, 0.35, 1, 1});
+        desc.direction_spread_degrees = 28;
+        desc.speed = range_float(4, 7);
+        desc.lifetime = range_float(1, 1.8);
+        desc.fade_in_seconds = 0.05;
+        desc.fade_out_seconds = 0.25;
+        desc.auto_disable_when_finished = false;
+        desc.gravity = {0, -9.8};
+        desc.size_over_lifetime = over_lifetime_v2({0.11, 0.11}, {0.05, 0.05});
+        return desc;
+    }
+
+    preset_embers :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.emission = Particle_Emission.continuous(10);
+        desc.spawn_position_radius = 0.35;
+        desc.color_over_lifetime = over_lifetime_v4({1, 0.75, 0.1, 1}, {0.8, 0.05, 0.01, 1});
+        desc.direction_spread_degrees = 60;
+        desc.initial_rotation_degrees = range_float(0, 360);
+        desc.speed = range_float(0.2, 1.1);
+        desc.lifetime = range_float(1, 2.5);
+        desc.angular_velocity_degrees = range_float(-120, 120);
+        desc.fade_in_seconds = 0.2;
+        desc.fade_out_seconds = 0.8;
+        desc.prewarm = true;
+        desc.auto_disable_when_finished = false;
+        desc.friction = 0.004;
+        desc.gravity = {0, 0.25};
+        desc.size_over_lifetime = over_lifetime_v2({0.08, 0.08}, {0.02, 0.02});
+        return desc;
+    }
+
+    preset_snow :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.emission = Particle_Emission.continuous(8);
+        desc.spawn_rect_size = {8, 0};
+        desc.color_over_lifetime = over_lifetime_v4({1, 1, 1, 1}, {0.7, 0.85, 1, 1});
+        desc.direction = {0, -1};
+        desc.direction_spread_degrees = 25;
+        desc.initial_rotation_degrees = range_float(0, 360);
+        desc.speed = range_float(0.35, 0.9);
+        desc.lifetime = range_float(5, 8);
+        desc.angular_velocity_degrees = range_float(-30, 30);
+        desc.fade_in_seconds = 0.5;
+        desc.fade_out_seconds = 1;
+        desc.prewarm = true;
+        desc.auto_disable_when_finished = false;
+        desc.friction = 0.002;
+        desc.gravity = {0, -0.05};
+        desc.size_over_lifetime = over_lifetime_v2({0.09, 0.09}, {0.15, 0.15});
+        return desc;
+    }
+
+    preset_rain :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.emission = Particle_Emission.continuous(60);
+        desc.spawn_rect_size = {10, 0};
+        desc.color_over_lifetime = over_lifetime_v4({0.65, 0.8, 1, 1}, {0.25, 0.45, 0.9, 1});
+        desc.direction = {0, -1};
+        desc.direction_spread_degrees = 6;
+        desc.speed = range_float(8, 12);
+        desc.lifetime = range_float(0.8, 1.2);
+        desc.face_direction = true;
+        desc.fade_in_seconds = 0.05;
+        desc.fade_out_seconds = 0.15;
+        desc.prewarm = true;
+        desc.auto_disable_when_finished = false;
+        desc.gravity = {0, -4};
+        desc.size_over_lifetime = over_lifetime_v2({0.20, 0.024}, {0.10, 0.012});
+        return desc;
+    }
+
+    preset_confetti :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.color_over_lifetime = over_lifetime_v4({1, 0.15, 0.55, 1}, {0.1, 0.9, 1, 1});
+        desc.direction_spread_degrees = 60;
+        desc.initial_rotation_degrees = range_float(0, 360);
+        desc.speed = range_float(4, 8);
+        desc.lifetime = range_float(1.2, 2.2);
+        desc.angular_velocity_degrees = range_float(-360, 360);
+        desc.fade_out_seconds = 0.5;
+        desc.emission = Particle_Emission.burst(48);
+        desc.friction = 0.002;
+        desc.gravity = {0, -7};
+        desc.size_over_lifetime = over_lifetime_v2({0.12, 0.12}, {0.09, 0.09});
+        return desc;
+    }
+
+    preset_magic_aura :: proc() -> Particle_System_Desc {
+        desc := preset_default();
+        desc.emission = Particle_Emission.continuous(20);
+        desc.simulation_space = .LOCAL;
+        desc.spawn_position_radius = 0.4;
+        desc.color_over_lifetime = over_lifetime_v4({0.8, 0.2, 1, 1}, {0.1, 0.9, 1, 1});
+        desc.direction_spread_degrees = 360;
+        desc.initial_rotation_degrees = range_float(0, 360);
+        desc.speed = range_float(0.15, 0.8);
+        desc.lifetime = range_float(0.8, 1.6);
+        desc.angular_velocity_degrees = range_float(-120, 120);
+        desc.fade_in_seconds = 0.15;
+        desc.fade_out_seconds = 0.4;
+        desc.prewarm = true;
+        desc.auto_disable_when_finished = false;
+        desc.friction = 0.01;
+        desc.size_over_lifetime = over_lifetime_v2({0.12, 0.12}, {});
+        return desc;
+    }
+
+    get_particle_count :: method() -> int {
+        return emission.get_slot_count(lifetime.max);
+    }
+
+    validation_error :: method() -> string {
+        if emission.kind == .NONE {
+            return "Particle system emission was not configured; use Particle_Emission.burst() or Particle_Emission.continuous()";
+        }
+        if emission.kind == .BURST && emission.burst_count <= 0 {
+            return format_string("Particle system burst count must be greater than zero, got %", {emission.burst_count});
+        }
+        if emission.kind == .CONTINUOUS && emission.rate <= 0 {
+            return format_string("Continuous particle system rate must be greater than zero, got %", {emission.rate});
+        }
+        if prewarm && emission.kind != .CONTINUOUS {
+            return "Particle system prewarm is only valid for continuous emission; set prewarm = false when changing a preset to burst emission";
+        }
+        if lifetime.min <= 0 || lifetime.max < lifetime.min {
+            return format_string("Particle system lifetime must be an ordered positive range, got % to %", {lifetime.min, lifetime.max});
+        }
+        if speed.min < 0 || speed.max < speed.min {
+            return format_string("Particle system speed must be an ordered non-negative range, got % to %", {speed.min, speed.max});
+        }
+        if initial_rotation_degrees.max < initial_rotation_degrees.min {
+            return format_string("Particle system initial rotation range was reversed: % to %", {initial_rotation_degrees.min, initial_rotation_degrees.max});
+        }
+        if angular_velocity_degrees.max < angular_velocity_degrees.min {
+            return format_string("Particle system angular velocity range was reversed: % to %", {angular_velocity_degrees.min, angular_velocity_degrees.max});
+        }
+        if length_squared(direction) <= 0.000001 {
+            return "Particle system direction must be non-zero";
+        }
+        if direction_spread_degrees < 0 {
+            return format_string("Particle system direction_spread_degrees must be non-negative, got %", {direction_spread_degrees});
+        }
+        if spawn_rect_size.x < 0 || spawn_rect_size.y < 0 {
+            return format_string("Particle system spawn_rect_size must be non-negative, got %", {spawn_rect_size});
+        }
+        if spawn_position_radius < 0 {
+            return format_string("Particle system spawn_position_radius must be non-negative, got %", {spawn_position_radius});
+        }
+        if fade_in_seconds < 0 || fade_out_seconds < 0 {
+            return format_string("Particle system fade times must be non-negative, got % and %", {fade_in_seconds, fade_out_seconds});
+        }
+        if friction < 0 || friction >= 1 {
+            return format_string("Particle system friction must be in [0, 1), got %", {friction});
+        }
+        if size_over_lifetime.start.x < 0 || size_over_lifetime.start.y < 0 || size_over_lifetime.end.x < 0 || size_over_lifetime.end.y < 0 {
+            return "Particle system sizes must be non-negative";
+        }
+        return "";
+    }
+
+    try_validate :: method(error: ref string) -> bool {
+        error = this.validation_error();
+        return error.count == 0;
+    }
+
+    assert_valid :: method() {
+        error := this.validation_error();
+        assert(error.count == 0, "%", {error});
+    }
+
+    get_timing :: method(start_time: float, time: float, particle_index: int) -> Timing {
+        result: Timing;
+        elapsed := time - start_time;
+        if elapsed < 0 {
+            return result;
+        }
+
+        if emission.kind == .BURST {
+            result.spawned = true;
+            result.age = elapsed;
+            return result;
+        }
+
+        particle_count := this.get_particle_count();
+        cycle_duration := particle_count.(float) / emission.rate;
+        schedule_time := elapsed;
+        if prewarm {
+            schedule_time += cycle_duration;
+        }
+
+        slot_offset := particle_index.(float) / emission.rate;
+        if schedule_time < slot_offset {
+            return result;
+        }
+
+        result.spawned = true;
+        result.life_index = ((schedule_time - slot_offset) / cycle_duration).(int);
+        result.age = schedule_time - (slot_offset + result.life_index.(float) * cycle_duration);
+        return result;
+    }
+
+    is_finished :: method(start_time: float, time: float) -> bool {
+        return emission.kind == .BURST && time - start_time >= lifetime.max;
+    }
+
+    make_sampling_context :: method() -> Sampling_Context {
+        result: Sampling_Context;
+        result.direction = normalize(direction);
+        result.use_friction = friction != 0;
+        if result.use_friction {
+            result.friction_coefficient = -Math.log(1 - friction) * 60;
+            result.inverse_friction_coefficient = 1.0 / result.friction_coefficient;
+            result.terminal_velocity = gravity * result.inverse_friction_coefficient;
+        }
+        return result;
+    }
+
+    sample :: method(seed: u64, start_time: float, context: Sampling_Context, emitter_position: v2, time: float, particle_index: int) -> Sample {
+        result: Sample;
+        timing := this.get_timing(start_time, time, particle_index);
+        if !timing.spawned {
+            return result;
+        }
+
+        life_rng := rng_seed(seed);
+        rng_mix(ref life_rng, particle_index.(u64));
+        rng_mix(ref life_rng, timing.life_index.(u64));
+
+        particle_lifetime := rng_range_float(ref life_rng, lifetime.min, lifetime.max);
+        if timing.age >= particle_lifetime {
+            return result;
+        }
+
+        start_position := emitter_position;
+        start_position += v2.{
+            (rng_range_float(ref life_rng, 0, 1) - 0.5) * spawn_rect_size.x,
+            (rng_range_float(ref life_rng, 0, 1) - 0.5) * spawn_rect_size.y,
+        };
+        start_position += rng_disk(ref life_rng) * spawn_position_radius;
+
+        direction_angle := rng_range_float(ref life_rng, direction_spread_degrees * -0.5, direction_spread_degrees * 0.5);
+        radians := to_radians(direction_angle);
+        ct := cos(radians);
+        st := sin(radians);
+        particle_direction := v2.{context.direction.x * ct + context.direction.y * -st, context.direction.x * st + context.direction.y * ct};
+
+        particle_speed := rng_range_float(ref life_rng, speed.min, speed.max);
+        initial_velocity := particle_direction * particle_speed;
+        velocity: v2;
+        if !context.use_friction {
+            result.position = start_position + initial_velocity * timing.age + gravity * (0.5 * timing.age * timing.age);
+            velocity = initial_velocity + gravity * timing.age;
+        }
+        else {
+            decay := Math.exp(-context.friction_coefficient * timing.age);
+            result.position = start_position + (initial_velocity - context.terminal_velocity) * ((1 - decay) * context.inverse_friction_coefficient) + context.terminal_velocity * timing.age;
+            velocity = (initial_velocity - context.terminal_velocity) * decay + context.terminal_velocity;
+        }
+
+        lifetime_t := timing.age / particle_lifetime;
+        result.color = lerp(color_over_lifetime.start, color_over_lifetime.end, lifetime_t);
+        fade_in := fade_in_seconds == 0 ? 1.0 : timing.age / fade_in_seconds;
+        fade_out := fade_out_seconds == 0 ? 1.0 : (particle_lifetime - timing.age) / fade_out_seconds;
+        result.color.w *= max(0.0, min(1.0, min(fade_in, fade_out)));
+
+        result.rotation_degrees = rng_range_float(ref life_rng, initial_rotation_degrees.min, initial_rotation_degrees.max);
+        if face_direction {
+            result.rotation_degrees += to_degrees(atan2(velocity.y, velocity.x));
+        }
+        else {
+            angular_velocity := rng_range_float(ref life_rng, angular_velocity_degrees.min, angular_velocity_degrees.max);
+            result.rotation_degrees += angular_velocity * timing.age;
+        }
+
+        result.alive = true;
+        result.life_index = timing.life_index;
+        result.half_size = lerp(size_over_lifetime.start, size_over_lifetime.end, lifetime_t) * 0.5;
+        return result;
+    }
+
+    draw :: method(state: State, emitter_position: v2, time: float) {
+        assert(state.initialized, "Particle system state was not initialized; call Particle_System_Component.restart()");
+        particle_count := this.get_particle_count();
+        assert(state.configured_slot_count == particle_count, "Particle system slot count changed from % to % without play()", {state.configured_slot_count, particle_count});
+
+        context := this.make_sampling_context();
+        previous_time := max(state.start_time, time - get_fixed_delta_time());
+        if simulation_space == .WORLD {
+            assert(state.world_slots.count == particle_count, "World particle state did not match slot count %", {particle_count});
+        }
+
+        args: Native_Draw_Args;
+        args.seed = state.seed;
+        args.start_time = state.start_time;
+        args.emitter_position = emitter_position;
+        args.time = time;
+        args.previous_time = previous_time;
+        args.particle_count = particle_count;
+        args.emission_kind = emission.kind.(int);
+        args.emission_rate = emission.rate;
+        args.prewarm = prewarm;
+        args.simulation_space = simulation_space.(int);
+        args.spawn_rect_size = spawn_rect_size;
+        args.spawn_position_radius = spawn_position_radius;
+        args.color_start = color_over_lifetime.start;
+        args.color_end = color_over_lifetime.end;
+        args.direction = context.direction;
+        args.use_friction = context.use_friction;
+        args.friction_coefficient = context.friction_coefficient;
+        args.inverse_friction_coefficient = context.inverse_friction_coefficient;
+        args.terminal_velocity = context.terminal_velocity;
+        args.direction_spread_degrees = direction_spread_degrees;
+        args.initial_rotation_min = initial_rotation_degrees.min;
+        args.initial_rotation_max = initial_rotation_degrees.max;
+        args.speed_min = speed.min;
+        args.speed_max = speed.max;
+        args.lifetime_min = lifetime.min;
+        args.lifetime_max = lifetime.max;
+        args.angular_velocity_min = angular_velocity_degrees.min;
+        args.angular_velocity_max = angular_velocity_degrees.max;
+        args.face_direction = face_direction;
+        args.fade_in_seconds = fade_in_seconds;
+        args.fade_out_seconds = fade_out_seconds;
+        args.gravity = gravity;
+        args.size_start = size_over_lifetime.start;
+        args.size_end = size_over_lifetime.end;
+        args.sprite = sprite;
+        draw_native(args, ref state.world_slots);
+    }
+}
+
+Particle_System_Component :: class : Component {
+    desc: Particle_System_Desc #read_only("use play()");
+    state: Particle_System_Desc.State;
+    layer: int;
+    z_offset: float;
+
+    get_desc :: method() -> Particle_System_Desc {
+        return desc;
+    }
+
+    emitter_position :: method() -> v2 {
+        return entity.world_position + desc.spawn_offset;
+    }
+
+    update_world_birth_positions :: method(time: float, emitter_position: v2) {
+        if desc.simulation_space != .WORLD {
+            return;
+        }
+
+        particle_count := desc.get_particle_count();
+        assert(state.world_slots.count == particle_count, "World particle state did not match particle count %", {particle_count});
+        Particle_System_Desc.update_world_birth_positions_native(
+            state.start_time,
+            time,
+            emitter_position,
+            particle_count,
+            desc.emission.kind.(int),
+            desc.emission.rate,
+            desc.prewarm,
+            ref state.world_slots,
+            ref state.last_emitter_position,
+            ref state.last_update_time,
+        );
+    }
+
+    restart :: method() {
+        desc.assert_valid();
+        particle_count := desc.get_particle_count();
+
+        state.activation_index += 1;
+        state.seed = rng_seed(rng_root_seed());
+        rng_mix(ref state.seed, entity.id);
+        rng_mix(ref state.seed, desc.seed_salt);
+        rng_mix(ref state.seed, state.activation_index);
+        state.start_time = get_time();
+        state.configured_slot_count = particle_count;
+        state.initialized = true;
+
+        state.world_slots.clear();
+        if desc.simulation_space == .WORLD {
+            for i: 0..<particle_count {
+                state.world_slots.append(Particle_System_Desc.World_Slot{});
+            }
+        }
+
+        emitter_position := this.emitter_position();
+        state.last_emitter_position = emitter_position;
+        state.last_update_time = state.start_time;
+        this.update_world_birth_positions(state.start_time, emitter_position);
+        set_enabled(true);
+    }
+
+    play :: method(new_desc: Particle_System_Desc) #unsafe {
+        new_desc.assert_valid();
+        desc = new_desc;
+        this.restart();
+    }
+
+    stop :: method() {
+        set_enabled(false);
+    }
+
+    is_playing :: method() -> bool {
+        return state.initialized && get_enabled() && entity.get_world_enabled();
+    }
+
+    ao_start :: method() {
+        if desc.emission.kind == .NONE {
+            set_enabled(false);
+            return;
+        }
+        this.restart();
+    }
+
+    ao_update :: method(dt: float) {
+        if !state.initialized {
+            return;
+        }
+        time := get_time();
+        this.update_world_birth_positions(time, this.emitter_position());
+        if desc.auto_disable_when_finished && desc.is_finished(state.start_time, time) {
+            set_enabled(false);
+        }
+    }
+
+    ao_draw :: method(dt: float) {
+        if !state.initialized {
+            return;
+        }
+
+        UI.push_layer(layer);
+        defer UI.pop_layer();
+
+        UI.push_z(entity.world_position.y + z_offset);
+        defer UI.pop_z();
+
+        emitter_position := this.emitter_position();
+        if desc.simulation_space == .WORLD {
+            UI.push_interpolation_offset({});
+            defer UI.pop_interpolation_offset();
+            // Birth positions are authoritative only through the latest sim update.
+            // Holding analytical sampling at that watermark keeps legal start/enable
+            // lifecycle gaps render-safe without mutating deterministic state here.
+            desc.draw(state, emitter_position, min(get_time(), state.last_update_time));
+        }
+        else {
+            desc.draw(state, emitter_position, get_time());
+        }
     }
 }

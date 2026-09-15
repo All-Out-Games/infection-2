@@ -45,6 +45,13 @@ memcpy :: proc(dst: *u8, src: *u8, count: int) #foreign "csl_memcpy";
 
 
 
+Math :: struct {
+    exp :: proc(v: f32) -> f32 #intrinsic "exp_f32";
+    exp :: proc(v: f64) -> f64 #intrinsic "exp_f64";
+    log :: proc(v: f32) -> f32 #intrinsic "log_f32";
+    log :: proc(v: f64) -> f64 #intrinsic "log_f64";
+}
+
 sin   :: proc(v: float) -> float #intrinsic "sin_f32";
 sin   :: proc(v: f64) -> f64 #intrinsic "sin_f64";
 cos   :: proc(v: float) -> float #intrinsic "cos_f32";
@@ -52,13 +59,10 @@ cos   :: proc(v: f64) -> f64 #intrinsic "cos_f64";
 atan2 :: proc(y: float, x: float) -> float #intrinsic "atan2_f32";
 atan2 :: proc(y: f64, x: f64) -> f64 #intrinsic "atan2_f64";
 
-to_degrees :: proc(radians: float) -> float {
-    return radians * 180.0 / PI;
-}
-
-to_radians :: proc(degrees: float) -> float {
-    return degrees * PI / 180.0;
-}
+to_degrees :: proc(radians: f32) -> f32 #intrinsic "to_degrees_f32";
+to_degrees :: proc(radians: f64) -> f64 #intrinsic "to_degrees_f64";
+to_radians :: proc(degrees: f32) -> f32 #intrinsic "to_radians_f32";
+to_radians :: proc(degrees: f64) -> f64 #intrinsic "to_radians_f64";
 
 Matrix4 :: struct {
     elements: [4][4]float;
@@ -94,6 +98,9 @@ to_upper    :: proc(str: string) -> string #foreign;
 rng_seed        :: proc(seed: u64)                          -> u64   #foreign;
 rng_range_float :: proc(rng: ref u64, lo: float, hi: float) -> float #foreign;
 rng_range_int   :: proc(rng: ref u64, lo: s64,   hi: s64)   -> s64   #foreign;
+
+mix_u64 :: proc(a: u64, b: u64) -> u64 #intrinsic "mix_u64";
+rng_mix :: proc(rng: ref u64, value: u64) #intrinsic "rng_mix";
 
 rng_shuffle :: proc(rng: ref u64, array: []$T) {
     for i: 0..array.count-1 {
@@ -137,7 +144,7 @@ reserve :: proc(list: ref [..]$T, new_capacity: int) {
     if new_capacity > list.capacity {
         new_elements := new(T, new_capacity);
         if list.data != null {
-            memcpy((&new_elements.data.*).(*u8), (&list.data.*).(*u8), list.count * #size_of(T));
+            #unsafe memcpy((&new_elements.data.*).(*u8), (&list.data.*).(*u8), list.count * #size_of(T));
         }
         #unsafe list.data = new_elements.data;
         #unsafe list.capacity = new_capacity;
@@ -217,27 +224,19 @@ pow :: proc(b: float, e: float) -> float #intrinsic "pow_f32";
 pow :: proc(b: f64, e: f64) -> f64 #intrinsic "pow_f64";
 sqrt :: proc(x: float) -> float #intrinsic "sqrt_f32";
 sqrt :: proc(x: f64) -> f64 #intrinsic "sqrt_f64";
-next_power_of_two :: proc(n: s64) -> s64 {
-    if n <= 0 {
-        return 0;
-    }
-    n -= 1;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n |= n >> 32;
-    n += 1;
-    return n;
-}
 
-sign :: proc(v: $T) -> T {
-    if v < 0 {
-        return -1;
-    }
-    return 1;
-}
+// Round toward positive/negative infinity, preserving the floating-point type.
+ceil  :: proc(x: f32) -> f32 #intrinsic "ceil_f32";
+ceil  :: proc(x: f64) -> f64 #intrinsic "ceil_f64";
+floor :: proc(x: f32) -> f32 #intrinsic "floor_f32";
+floor :: proc(x: f64) -> f64 #intrinsic "floor_f64";
+
+// Round to nearest, with halfway cases away from zero.
+round :: proc(x: f32) -> f32 #intrinsic "round_f32";
+round :: proc(x: f64) -> f64 #intrinsic "round_f64";
+
+next_power_of_two :: proc(n: s64) -> s64 #intrinsic "next_power_of_two";
+sign :: proc(v: $T) -> T #intrinsic "sign";
 
 length :: proc(v: v2) -> float #intrinsic "length_v2";
 length :: proc(v: v3) -> float #intrinsic "length_v3";
@@ -256,7 +255,7 @@ in_range :: proc(v: $T, distance: float) -> bool {
 }
 
 in_range :: proc(a: $T, b: T, distance: float) -> bool {
-    return length_squared(a, b) <= (distance*distance);
+    return length_squared(a - b) <= (distance*distance);
 }
 
 normalize_vector_to_radius :: proc(v: $T, max_length: float) -> T {
@@ -267,67 +266,26 @@ normalize_vector_to_radius :: proc(v: $T, max_length: float) -> T {
     return v / max_length;
 }
 
-dot :: proc(a: v2, b: v2) -> float {
-    return a.x*b.x + a.y*b.y;
-}
-
-dot :: proc(a: v3, b: v3) -> float {
-    return a.x*b.x + a.y*b.y + a.z*b.z;
-}
-
-dot :: proc(a: v4, b: v4) -> float {
-    return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
-}
+dot :: proc(a: v2, b: v2) -> float #intrinsic "dot_v2";
+dot :: proc(a: v3, b: v3) -> float #intrinsic "dot_v3";
+dot :: proc(a: v4, b: v4) -> float #intrinsic "dot_v4";
 
 PI :: 3.14159265359;
 
-lerp :: proc(a: v2, b: v2, t: float) -> v2 { return a + (b - a) * t; }
-lerp :: proc(a: v3, b: v3, t: float) -> v3 { return a + (b - a) * t; }
-lerp :: proc(a: v4, b: v4, t: float) -> v4 { return a + (b - a) * t; }
-lerp :: proc(a: float, b: float, t: float) -> float { return a + (b - a) * t; }
+lerp :: proc(a: v2, b: v2, t: float) -> v2 #intrinsic "lerp_v2";
+lerp :: proc(a: v3, b: v3, t: float) -> v3 #intrinsic "lerp_v3";
+lerp :: proc(a: v4, b: v4, t: float) -> v4 #intrinsic "lerp_v4";
+lerp :: proc(a: f32, b: f32, t: f32) -> f32 #intrinsic "lerp_f32";
+lerp :: proc(a: f64, b: f64, t: f64) -> f64 #intrinsic "lerp_f64";
 
-clamp :: proc(a: int, min: int, max: int) -> int {
-    if a < min return min;
-    if a > max return max;
-    return a;
-}
-
-clamp :: proc(a: float, min: float, max: float) -> float {
-    if a < min return min;
-    if a > max return max;
-    return a;
-}
-
-max :: proc(a: float, b: float) -> float {
-    if a > b return a;
-    return b;
-}
-
-min :: proc(a: float, b: float) -> float {
-    if a < b return a;
-    return b;
-}
-
-max :: proc(a: int, b: int) -> int {
-    if a > b return a;
-    return b;
-}
-
-min :: proc(a: int, b: int) -> int {
-    if a < b return a;
-    return b;
-}
-
-abs :: proc(a: $T) -> T {
-    if a < 0 return -a;
-    return a;
-}
-
-linear_step :: proc(start: float, end: float, time: float) -> float {
-    denom := end-start;
-    if denom == 0 {
-        return 1;
-    }
-    t := (time-start) / (end-start);
-    return clamp(t, 0, 1);
-}
+clamp :: proc(a: int, min: int, max: int) -> int #intrinsic "clamp_s64";
+clamp :: proc(a: f32, min: f32, max: f32) -> f32 #intrinsic "clamp_f32";
+clamp :: proc(a: f64, min: f64, max: f64) -> f64 #intrinsic "clamp_f64";
+min :: proc(a: int, b: int) -> int #intrinsic "min_s64";
+min :: proc(a: f32, b: f32) -> f32 #intrinsic "min_f32";
+min :: proc(a: f64, b: f64) -> f64 #intrinsic "min_f64";
+max :: proc(a: int, b: int) -> int #intrinsic "max_s64";
+max :: proc(a: f32, b: f32) -> f32 #intrinsic "max_f32";
+max :: proc(a: f64, b: f64) -> f64 #intrinsic "max_f64";
+abs :: proc(a: $T) -> T #intrinsic "abs";
+linear_step :: proc(start: float, end: float, time: float) -> float #intrinsic "linear_step";

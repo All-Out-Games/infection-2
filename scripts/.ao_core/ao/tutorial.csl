@@ -1,0 +1,222 @@
+Tutorial_State :: enum { NOT_STARTED; LOADING; QUEUED; ACTIVE; PAUSED; COMPLETED; }
+Tutorial_Cue_Style :: enum { NONE; GLOW; HAND; GLOW_AND_HAND; }
+
+Tutorial_Status :: struct {
+    state: Tutorial_State;
+    generation: u64;
+    event_count: int;
+    step_id: string;
+}
+
+Tutorial_View :: struct {
+    step_id: string;
+    instruction: string;
+    progress_text: string;
+    current: int;
+    required: int;
+    step_number: int;
+    step_count: int;
+    visible: bool;
+    show_continue: bool;
+    step_completed: bool;
+}
+
+Tutorial_Target :: struct {
+    _kind: int;
+    _position: v2;
+    _entity: Entity;
+    _resolve: proc(player: Player) -> Entity;
+    _document: string;
+    _element: string;
+    _item_key: string;
+
+    world :: proc(position: v2) -> Tutorial_Target {
+        return {_kind=1, _position=position};
+    }
+    entity :: proc(target: Entity) -> Tutorial_Target {
+        assert(#alive(target), "Tutorial entity target must be alive; use Tutorial_Target.resolve for targets created later or replaced");
+        return {_kind=2, _entity=target};
+    }
+    resolve :: proc(#no_captures resolver: proc(player: Player) -> Entity) -> Tutorial_Target {
+        assert(resolver != null, "Tutorial target resolver is required");
+        return {_kind=2, _resolve=resolver};
+    }
+    ui :: proc(document: UIDoc_Asset, element_id: string, item_key: string = "") -> Tutorial_Target {
+        assert(document != null, "Tutorial UI document is required");
+        return {_kind=3, _document=_tutorial_document_id(document), _element=element_id, _item_key=item_key};
+    }
+    ability :: proc($T: typeid) -> Tutorial_Target {
+        return {_kind=4, _element=_tutorial_ability_id(T)};
+    }
+}
+
+Tutorial_Step :: struct {
+    _id: string;
+    _text: string;
+    _kind: int;
+    _target: Tutorial_Target;
+    _complete_when: proc(player: Player) -> bool;
+    _radius: float;
+    _event_id: string;
+    _count: int;
+    cue_style: Tutorial_Cue_Style;
+    cue_color: v4;
+
+    reach :: proc(id: string, target: Tutorial_Target, radius: float = 2, text: string = "", #no_captures complete_when: proc(player: Player) -> bool = null) -> Tutorial_Step {
+        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=0, _target=target, _radius=radius, _complete_when=complete_when};
+    }
+    click :: proc(id: string, target: Tutorial_Target, text: string = "", #no_captures complete_when: proc(player: Player) -> bool = null) -> Tutorial_Step {
+        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=1, _target=target, _complete_when=complete_when};
+    }
+    wait_for :: proc(id: string, #no_captures complete_when: proc(player: Player) -> (bool), point_to: Tutorial_Target = {}, text: string = "") -> Tutorial_Step {
+        assert(complete_when != null, "Tutorial completion predicate is required");
+        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=2, _target=point_to, _complete_when=complete_when};
+    }
+    event :: proc(id: string, event_id: string, count: int = 1, point_to: Tutorial_Target = {}, text: string = "", #no_captures complete_when: proc(player: Player) -> bool = null) -> Tutorial_Step {
+        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=3, _target=point_to, _event_id=event_id, _count=count, _complete_when=complete_when};
+    }
+    message :: proc(id: string, text: string) -> Tutorial_Step {
+        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=4};
+    }
+    use_ability :: proc(id: string, $T: typeid, count: int = 1, text: string = "", #no_captures complete_when: proc(player: Player) -> bool = null) -> Tutorial_Step {
+        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text,
+            _kind=5, _target=Tutorial_Target.ability(T), _count=count, _complete_when=complete_when};
+    }
+}
+
+// Mirrors the native value record; callbacks stay in the rooted CSL registry.
+_Tutorial_Goal_Data :: struct {
+    kind: int;
+    target_kind: int;
+    position: v2;
+    radius: float;
+    document: string;
+    element: string;
+    item_key: string;
+    event_id: string;
+    event_count: int;
+    cue_style: int;
+    cue_color: v4;
+    has_complete_when: int;
+}
+
+Tutorial :: class {
+    _handle: u64;
+    _steps: []Tutorial_Step;
+
+    define :: proc(id: string, steps: []Tutorial_Step, revision: int = 1, persistent: bool = true, show_panel: bool = true) -> Tutorial {
+        result := new(Tutorial);
+        result._handle = _define(id, revision, persistent, show_panel);
+        result._steps = new(Tutorial_Step, steps.count);
+        for i: 0..<steps.count {
+            step := steps[i];
+            result._steps[i] = step;
+            goal := _Tutorial_Goal_Data{
+                kind=step._kind, target_kind=step._target._kind,
+                position=step._target._position, radius=step._radius,
+                document=step._target._document, element=step._target._element,
+                item_key=step._target._item_key, event_id=step._event_id,
+                event_count=step._count, cue_style=step.cue_style.(int), cue_color=step.cue_color,
+                has_complete_when=step._kind != 2 && step._complete_when != null ? 1 : 0,
+            };
+            _add_step(result._handle, step._id, step._text, goal);
+        }
+        _seal(result._handle);
+        core_globals.tutorials.append(result);
+        return result;
+    }
+
+    // Idempotent at every stage. Completed tutorials remain completed.
+    start :: method(player: Player) { _control(_handle, player, 0); }
+    restart :: method(player: Player) { _control(_handle, player, 1); }
+    pause :: method(player: Player) { _control(_handle, player, 2); }
+    resume :: method(player: Player) { _control(_handle, player, 3); }
+    cancel :: method(player: Player) { _control(_handle, player, 4); }
+    get_status :: method(player: Player) -> Tutorial_Status { return _status(_handle, player); }
+    get_view :: method(player: Player) -> Tutorial_View { return _view(_handle, player); }
+    continue_step :: method(player: Player) { _control(_handle, player, 5); }
+    // Call before UI.uidoc; use show_panel=false when drawing a custom presenter.
+    bind_ui :: method(player: Player, prefix: string = "tutorial") {
+        view := get_view(player);
+        UI.uidoc_bind_bool(`{prefix}.visible`, view.visible);
+        UI.uidoc_bind_bool(`{prefix}.show_continue`, view.show_continue);
+        UI.uidoc_bind_bool(`{prefix}.step_completed`, view.step_completed);
+        UI.uidoc_bind_text(`{prefix}.instruction`, view.instruction);
+        UI.uidoc_bind_text(`{prefix}.progress`, view.progress_text);
+        UI.uidoc_bind_text(`{prefix}.step`, `{view.step_number}/{view.step_count}`);
+    }
+    is_complete :: method(player: Player) -> bool { return get_status(player).state == .COMPLETED; }
+    report :: proc(player: Player, event_id: string, amount: int = 1) #foreign "tutorial_report";
+    // Report once after the successful gameplay action, in the shared predicted path.
+    report_ability_used :: proc(ability: Ability_Base) {
+        assert(ability != null, "Tutorial ability is required");
+        _report_ability_used(ability.player, ability._tutorial_id);
+    }
+
+    _report_ability_used :: proc(player: Player, ability_id: string) #foreign "tutorial_report_ability_used";
+    _define :: proc(id: string, revision: int, persistent: bool, show_panel: bool) -> u64 #foreign "tutorial_define_sequence";
+    _add_step :: proc(handle: u64, id: string, text: string, goal: _Tutorial_Goal_Data) #foreign "tutorial_add_sequence_step";
+    _seal :: proc(handle: u64) #foreign "tutorial_seal_sequence";
+    _control :: proc(handle: u64, player: Player, operation: int) #foreign "tutorial_control";
+    _status :: proc(handle: u64, player: Player) -> Tutorial_Status #foreign "tutorial_status";
+    _view :: proc(handle: u64, player: Player) -> Tutorial_View #foreign "tutorial_view";
+}
+
+core_tutorial_check :: proc(handle: u64, index: int, player: Player) -> u64 {
+    for tutorial: core_globals.tutorials {
+        if tutorial._handle != handle { continue; }
+        check := tutorial._steps[index]._complete_when;
+        assert(check != null, "Tutorial completion predicate is missing");
+        return check(player) ? 1.(u64) : 0.(u64);
+    }
+    assert(false, "Tutorial definition was not found in the CSL registry");
+    return 0;
+}
+
+core_tutorial_target :: proc(handle: u64, index: int, player: Player) -> Entity {
+    for tutorial: core_globals.tutorials {
+        if tutorial._handle != handle { continue; }
+        target := tutorial._steps[index]._target;
+        if target._resolve != null { return target._resolve(player); }
+        if #alive(target._entity) { return target._entity; }
+        return null;
+    }
+    assert(false, "Tutorial definition was not found in the CSL registry");
+    return null;
+}
+
+Tutorial_Cue :: struct {
+    ability :: proc(player: Player, $T: typeid, style: Tutorial_Cue_Style = .GLOW_AND_HAND, color: v4 = {1, 0.65, 0.12, 1}) {
+        _ability(player, _tutorial_ability_id(T), style.(int), color);
+    }
+    world :: proc(player: Player, target: Entity) {
+        if !#alive(target) { return; }
+        _world(player, {}, target);
+    }
+    world :: proc(player: Player, position: v2) { _world(player, position, null); }
+    ui :: proc(player: Player, document: UIDoc_Asset, element_id: string, item_key: string = "", style: Tutorial_Cue_Style = .GLOW_AND_HAND, color: v4 = {1, 0.65, 0.12, 1}) {
+        _ui(player, _tutorial_document_id(document), element_id, item_key, style.(int), color);
+    }
+    rect :: proc(id: string, rect: Rect, style: Tutorial_Cue_Style = .GLOW_AND_HAND, color: v4 = {1, 0.65, 0.12, 1}) #foreign "tutorial_rect_cue";
+    _world :: proc(player: Player, position: v2, entity: Entity) #foreign "tutorial_world_cue";
+    _ui :: proc(player: Player, document: string, element: string, item_key: string, style: int, color: v4) #foreign "tutorial_ui_cue";
+    _ability :: proc(player: Player, ability_id: string, style: int, color: v4) #foreign "tutorial_ability_cue";
+}
+
+_tutorial_document_id :: proc(document: UIDoc_Asset) -> string #foreign "tutorial_document_id";
+
+_tutorial_ability_id :: proc($T: typeid) -> string {
+    info := #type_info(T).(Type_Info);
+    assert(info.kind == .CLASS, "Tutorial ability target must be an Ability_Base subclass, got %", {T});
+    current := info.(Type_Info_Class).reference_to.(Type_Info_Struct).inherits_from;
+    ability_base_type := #type_info(Ability_Base).(Type_Info_Class).reference_to.(Type_Info_Struct);
+    while current != null {
+        if current == ability_base_type { return format_string("%", {T}); }
+        current = current.inherits_from;
+    }
+    assert(false, "Tutorial ability target must be an Ability_Base subclass, got %", {T});
+    return "";
+}
+
+_tutorial_ability_element :: proc(player: Player, ability_id: string, rect: Rect,
+    aimed: bool, interacting: bool, layout_scale: float) -> bool #foreign "tutorial_ability_element";

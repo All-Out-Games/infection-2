@@ -140,7 +140,7 @@ Hashtable :: struct(Key: typeid, Value: typeid) {
         return entries[index].hash != HASH_EMPTY;
     }
 
-    find :: method(key: Key) -> Value, bool {
+    find :: method(key: Key) -> (Value, bool) {
         if capacity == 0 {
             return {}, false;
         }
@@ -230,9 +230,9 @@ Hashtable :: struct(Key: typeid, Value: typeid) {
     hash_key :: proc(key: Key, h: u64 = 0) -> u64 {
         result: u64;
         #if Key == string {
-            result = hash_murmur32(key.count == 0 ? null : &key.data.*, key.count, h);
+            #unsafe result = hash_murmur32(key.count == 0 ? null : &key.data.*, key.count, h);
         } else {
-            result = hash_murmur32((&key).(*u8), #size_of(Key), h);
+            #unsafe result = hash_murmur32((&key).(*u8), #size_of(Key), h);
         }
         if result == 0 {
             result = 1;

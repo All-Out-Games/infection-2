@@ -1,111 +1,63 @@
 ---
 name: save
-description: "For persisting player data across joins if required  "
+description: "Persist per-player and game-wide state across sessions via the Save API: restore/write patterns, JSON records, migration authority rules, concurrent-safe game counters"
 ---
 # CSL Save System
-Per-player key-value store that persists across sessions.
+Game-scoped KV store. Per-player data keyed by user id (survives rejoin, any server); game-level shared by all. Plain fields do NOT survive disconnect. Economy/inventory persist themselves — never mirror into Save.
 
-## Save API Reference
+## API
 ```csl
-Save :: struct {
-    set_string :: proc(player: Player, key: string, value: string);
-    get_string :: proc(player: Player, key: string, default: string) -> string;
-
-    set_int    :: proc(player: Player, key: string, value: s64);
-    get_int    :: proc(player: Player, key: string, default: s64) -> s64;
-
-    set_f64    :: proc(player: Player, key: string, value: f64);
-    get_f64    :: proc(player: Player, key: string, default: f64) -> f64;
-
-    // For complex data — see the json skill (and make sure you use @ao_serialize!)
-    set_json     :: proc(player: Player, key: string, value: ref $T);
-    try_get_json :: proc(player: Player, key: string, out: ref $T) -> bool;
-
-    delete_key :: proc(player: Player, key: string);
-}
+// Per-player:
+Save.set_string(player: Player, key: string, value: string);
+Save.get_string(player: Player, key: string, default: string) -> string;
+Save.set_int(player: Player, key: string, value: s64);
+Save.get_int(player: Player, key: string, default: s64) -> s64;
+Save.set_f64(player: Player, key: string, value: f64);
+Save.get_f64(player: Player, key: string, default: f64) -> f64;
+Save.set_float(player: Player, key: string, value: float); // convenience alias stored through set_f64
+Save.get_float(player: Player, key: string, default: float) -> float; // get_f64 narrowed to float
+Save.set_item(player: Player, key: string, item: Item_Instance); // requires auto-saved default_inventory; null deletes
+Save.get_item(player: Player, key: string) -> Item_Instance; // null if missing or no longer in that inventory
+Save.set_json(player: Player, key: string, value: ref $T); // @ao_serialize fields
+Save.try_get_json(player: Player, key: string, out_value: ref $T) -> bool;
+Save.delete_key(player: Player, key: string); // missing is ok
+Save.delete_all_keys(player: Player);
+Save.get_all_keys(player: Player) -> []string;
+// Game-level (no Player; shared by ALL):
+Save.set_game_string(key, v: string);  Save.get_game_string(key, default) -> string;
+Save.increment_game_int(key, amount: s64, optimistic_update: bool = true);
+Save.get_game_int(key, default: s64) -> s64;
+Save.delete_game_key(key); // deletes a game string or int; missing is ok; batched with game saves
+Save.get_all_game_strings()|get_all_game_ints()|get_all_game_keys(); // []{key,value} / {key,kind:.INT/.STRING}
+// Ordered docs: async f64 scores; copy cb results into synced fields; prefer Global_Leaderboard.
+Save.ordered_set(doc,key:string,v:f64);
+Save.ordered_get(doc,key,default:f64,ud:Object,cb:proc(Ordered_Save_Entry{key,value:f64,position:s64},Object));
+Save.ordered_get_all(doc,offset,limit:s64,ud,cb:proc([]Ordered_Save_Entry,Object));
 ```
+Per-player stored value kinds are string, int, f64, item reference, and JSON. `get_float` / `set_float` are f32 convenience aliases over f64 storage, not another stored kind. No: bool get/set (int 0/1); `set_game_int`/any game absolute setter; game-level f64/json (pack JSON into a game string); load/flush/has_key/is_loaded (reads always work, giving `default`); string->number parsing in CSL.
 
-## Basic Usage
-Load in `ao_start`, save on change:
+## Rules
+- Persist only what's required — nothing transient/derivable.
+- One get/set pair per key, same literal; wrong-type reads return garbage/0 silently.
+- Per-player and game ints preserve the full signed 64-bit CSL range.
+- Write at every change point (all paths), never per frame.
+- Client writes are prediction-only; only the server run persists — an `is_local()`-only write is silently lost. Reads work both sides.
+- `$AO.` keys are engine-reserved (write/delete raises); delete_all_keys/get_all_keys skip them — resets yours, not Economy/inventory.
+- `ao_start` reads are safe (data loads before spawn); no wait-until-loaded code.
+- Item references require automatic player inventory saving and are opaque links into `player.default_inventory`: slot rearrangement preserves them; removing, dropping, destroying, or transferring the item makes `get_item` return null. Use these for equipped selections instead of copying inventory ownership or item properties into Save.
+- Accumulators: write at bounded moments + final Player `ao_end` write (persists; runs pre-unload).
+- Restore in `ao_start` into Player fields, never globals. One-time grants: read 0, set 1, grant.
 
-```csl
-Player :: class : Player_Base {
-    current_xp: s64;
-    current_level: s64;
+## JSON
+- `try_get_json` false ONLY on missing key/malformed text (out untouched, maybe null): build full defaults. Wrong-shaped valid JSON panics.
+- Success replaces the record wholesale: absent fields come back at class initializers (zero if none / structs) — version records, default new fields after load.
+- Never retype a stored field: kind changes (string<->number, scalar<->object) panic on old saves; numeric retypes silently truncate. Add a new field + migrate.
 
-    ao_start :: method() {
-        current_xp = Save.get_int(this, "xp", 0);
-        current_level = Save.get_int(this, "level", 1);
-    }
-}
+## Migrations
+Ascending `if v < N` steps before other reads; each idempotent, no-op on blank saves; write version key AFTER steps; delete stale keys. Overlapping keys: authority = schema history, NEVER magnitude — max/min/sum silently corrupts. Non-idempotent step: guard on the old key holding a meaningful value.
 
-// Save when data changes
-Save.set_int(player, "xp", player.current_xp);
-Save.set_string(player, "selected_skin", "knight");
-Save.set_f64(player, "music_volume", 0.8);
-```
-
-## Boolean Storage
-No native bool save — store as int:
-
-```csl
-Save.set_int(player, "tutorial_complete", tutorial_complete ? 1 : 0);
-tutorial_complete = Save.get_int(player, "tutorial_complete", 0) != 0;
-```
-
-## Save Versioning
-Store a `"version"` key. In `ao_start`, load it and run migrations in order (`if version < N`), then save the new version. Use `Save.delete_key` to clean up old keys during migration:
-
-```csl
-ao_start :: method() {
-    save_version := Save.get_int(this, "version", 0);
-    if save_version < 5 {
-        save_version = 5;
-        Save.delete_key(this, "xp");
-    }
-    Save.set_int(this, "version", save_version);
-    current_xp = Save.get_int(this, "xp", 0);
-}
-```
-
-## Game-Level Save API
-For data shared across all players (global state, not per-player):
-
-```csl
-Save :: struct {
-    set_game_string      :: proc(key: string, value: string);
-    get_game_string      :: proc(key: string, default: string) -> string;
-    get_all_game_strings :: proc() -> []Save_Game_String;
-
-    increment_game_int   :: proc(key: string, amount: s64, optimistic_update: bool = true);
-    get_game_int         :: proc(key: string, default: s64) -> s64;
-    get_all_game_ints    :: proc() -> []Save_Game_Int;
-}
-
-Save_Game_String :: struct { key: string; value: string; }
-Save_Game_Int    :: struct { key: string; value: s64; }
-```
-
-```csl
-Save.set_game_string("world_record_holder", player.get_username());
-difficulty := Save.get_game_string("server_difficulty", "normal");
-
-// Atomically increment — safe for concurrent updates from multiple players
-// optimistic_update (default true) updates local value immediately while server confirms
-Save.increment_game_int("total_games_played", 1);
-total_games := Save.get_game_int("total_games_played", 0);
-```
-
-### Iterating All Game Data
-```csl
-all_strings := Save.get_all_game_strings();
-for entry: all_strings {
-    log_info(`Key: {entry.key}, Value: {entry.value}`);
-}
-```
-
-| Use Case | API |
-|----------|-----|
-| Player XP, inventory, preferences | `Save.set_int(player, ...)` / `Save.set_string(player, ...)` |
-| Global counters (kills, games played) | `Save.increment_game_int(...)` |
-| World records, server config | `Save.set_game_string(...)` |
+## Game-level
+No per-player progress (shared key = mutual overwrite).
+- `increment_game_int` sends server-applied deltas: concurrent increments accumulate across instances — never get-then-set a counter. Default optimistic_update shows the delta at once; false waits. No absolute setter; reset (increment by -current) is racy — absolute values go in a game string.
+- `delete_game_key` is batched and deduplicated. A later game-string set cancels it; a later game-int increment runs after the delete and therefore restarts the counter from zero.
+- Game strings: last-writer-wins; set NOT visible to get until round-trip — durable storage, not shared memory; keep live copy in synced fields.

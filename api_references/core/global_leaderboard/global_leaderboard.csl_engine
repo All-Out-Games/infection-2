@@ -52,8 +52,10 @@ Global_Leaderboard :: class : Component {
         base_ts.outline_thickness = 3;
         base_ts.outline_color = v4.{0, 0, 0, 1};
 
-        this.refresh_entries();
-        last_refresh_time = get_time();
+        // leaderboard_id is usually assigned right after add_component, so it can still be empty
+        // here; refresh_entries() reports that and ao_late_update retries each frame until it is set.
+        if this.refresh_entries() { last_refresh_time = get_time(); }
+        else { last_refresh_time = -1000.0; }
     }
 
     ao_editor_start :: method() {
@@ -65,8 +67,7 @@ Global_Leaderboard :: class : Component {
     ao_late_update :: method(dt: float) {
         now := get_time();
         if now - last_refresh_time > REFRESH_INTERVAL {
-            last_refresh_time = now;
-            this.refresh_entries();
+            if this.refresh_entries() { last_refresh_time = now; }
         }
     }
 
@@ -76,12 +77,14 @@ Global_Leaderboard :: class : Component {
         this.draw();
     }
 
-    refresh_entries :: method() {
+    refresh_entries :: method() -> bool {
+        if leaderboard_id.count == 0 { return false; }
         Save.ordered_get_all(leaderboard_id, 0, 50, this, on_entries_received);
         if local_player, ok := Game.get_local_player(); ok {
             user_id := local_player.get_user_id();
             Save.ordered_get(leaderboard_id, user_id, 0, this, on_my_entry_received);
         }
+        return true;
     }
 
     draw :: method() {
@@ -143,7 +146,9 @@ Global_Leaderboard :: class : Component {
                     entry_rect := content_cut.cut_top(h);
                     if i == 0 { entry_rect = entry_rect.grow(0, 0.075, 0, 0); }
 
-                    this.draw_entry(entry_rect, i);
+                    if entry_rect.overlaps(viewport_rect) {
+                        this.draw_entry(entry_rect, i);
+                    }
                     UI.expand_current_scroll_view(entry_rect);
                     content_cut.cut_top(0.05);
                 }
@@ -310,12 +315,10 @@ Global_Leaderboard :: class : Component {
         data.leaderboard_id = leaderboard_id;
         data.user_id = player.get_user_id();
         data.amount = amount;
-        #rootify_object(data);
         Save.ordered_get(leaderboard_id, data.user_id, 0.0, data, proc(entry: Ordered_Save_Entry, userdata: Object) {
             d := userdata.(Increment_Data);
             new_score := entry.value + d.amount;
             Save.ordered_set(d.leaderboard_id, d.user_id, new_score);
-            #free_root(d);
         });
     }
 

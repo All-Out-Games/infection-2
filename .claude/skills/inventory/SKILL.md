@@ -7,7 +7,16 @@ description: Any item or inventory system in your game MUST use the API describe
 3. **Inventory** - Container holding item instances in slots
 4. Every Player has `player.default_inventory` built in
 
-> **Persistence:** To automatically save player inventories across sessions, call `Scene.set_auto_save_player_inventory(true)` in `ao_before_scene_load`.
+> **Persistent player inventories:** Configure persistence and capacity in `ao_before_scene_load`, before player inventories are created or restored:
+> ```csl
+> ao_before_scene_load :: proc() {
+>     Scene.set_player_inventory_capacity(32);
+>     Scene.set_auto_save_player_inventory(true);
+> }
+> ```
+> The configured capacity is the minimum used when restoring a persistent inventory; a larger capacity stored in the save is preserved. Setting it in `Player.ao_start` is too late for that player's restored `default_inventory` and does not resize the existing inventory. To resize an existing inventory, call `Items.set_capacity` (shrinking fails if a removed slot contains an item).
+>
+> Leave auto-save off for per-round/session loadouts (shooters) and reset the inventory at round start instead.
 
 ## Creating Custom Item Types
 Extend `Item_Definition` and `Item_Instance` for custom properties:
@@ -24,6 +33,8 @@ Weapon_Item :: class : Item_Instance {
     kills: int @ao_serialize;
 }
 ```
+
+Every custom `Item_Instance` field that must survive inventory save and restore needs `@ao_serialize`. Fields without it return to their normal defaults after restoration. Apply it to the containing field as well as the fields inside any nested custom class that must persist.
 
 ## Registering Item Definitions
 Register in `ao_before_scene_load` using `Items.register_item_definition`:
@@ -71,7 +82,7 @@ Create an instance, then move it into their inventory with `Items.move_item_to_i
 
 ```csl
 item := Items.create_item_instance(sword_defn, 1);
-will_destroy: bool;
+will_destroy: bool; // True if moving merges into an existing stack and destroys the original instance.
 if Items.can_move_item_to_inventory(item, player.default_inventory, ref will_destroy) {
     Items.move_item_to_inventory(item, player.default_inventory);
 } else {
@@ -81,14 +92,20 @@ if Items.can_move_item_to_inventory(item, player.default_inventory, ref will_des
 
 To drop an item in the world instead, see the `inventory-droppable-placeable-items` skill (`Dropped_Item.spawn`).
 
+### Persisting an Equipped Item
+
+Use a Save item reference when persistent state needs to select a particular item from `player.default_inventory`:
+
+```csl
+Save.set_item(player, "equipped_weapon", item);
+equipped_weapon := Save.get_item(player, "equipped_weapon");
+Save.set_item(player, "equipped_weapon", null); // Clear the selection.
+```
+
+This requires `Scene.set_auto_save_player_inventory(true)`. The reference remains valid when slots are rearranged. Removing, dropping, destroying, or transferring the item out of that player's default inventory invalidates it, and `get_item` returns `null`. Inventory remains authoritative for ownership and item fields; do not duplicate those values in Save. Resolve saved equipment during `Player.ao_start`; `ao_on_state_sync` may rebuild visuals from synchronized equipment state but must not change Save or inventory state.
+
 ### Adding Items to Inventory
 ```csl
-will_destroy_item: bool;
-if Items.can_move_item_to_inventory(item, player.default_inventory, ref will_destroy_item) {
-    Items.move_item_to_inventory(item, player.default_inventory);
-    // will_destroy_item is true if item merged into existing stack
-}
-
 destroyed_item: bool;
 amount_moved := Items.move_as_many_items_as_possible_to_inventory(item, player.default_inventory, ref destroyed_item);
 ```
@@ -103,17 +120,16 @@ Items.destroy_item_instance(item, 5); // Or remove only 5
 
 ### Iterating Inventory
 ```csl
-for i: 0..player.default_inventory.capacity-1 {
-    item := player.default_inventory.get_item(i);
-    if item == null continue;
-
+for item, slot: player.default_inventory.slots() if item != null {
     defn := item.get_definition();
     if defn.#type == Weapon_Definition {
         weapon_defn := defn.(Weapon_Definition);
-        log_info(`Found weapon with {weapon_defn.damage} damage`);
+        log_info(`Found weapon in slot {slot} with {weapon_defn.damage} damage`);
     }
 }
 ```
+
+`slots()` visits every slot in order and yields `null` for empty slots. Use `get_item(index)` only for random slot access.
 
 ### Swapping Items
 ```csl
@@ -123,6 +139,20 @@ if Items.can_swap_items(inventory_a, inventory_b, slot_a, slot_b) {
 ```
 
 ## Inventory API Reference
+
+### Player Inventory Configuration
+
+Call the setters in `ao_before_scene_load`. The getters return the current scene configuration.
+
+```csl
+Scene :: struct {
+    get_player_inventory_capacity :: proc() -> int;
+    set_player_inventory_capacity :: proc(capacity: int);
+    get_auto_save_player_inventory :: proc() -> bool;
+    set_auto_save_player_inventory :: proc(enabled: bool);
+}
+```
+
 ### Items Struct (Static Functions)
 
 ```csl
@@ -145,6 +175,7 @@ Items :: struct {
     can_swap_items                       :: proc(inventory_a: Inventory, inventory_b: Inventory, slot_a: s64, slot_b: s64) -> bool;
     swap_items                           :: proc(inventory_a: Inventory, inventory_b: Inventory, slot_a: s64, slot_b: s64);
 
+    // Returns true while the inventory should remain open; false when its exit button is clicked.
     draw_inventory :: proc(rect: Rect, inventory: Inventory, options: Inventory_Draw_Options) -> bool;
     draw_hotbar    :: proc(player: Player, inventory: Inventory, options: Inventory_Draw_Options) -> Draw_Hotbar_Result;
 }
@@ -169,6 +200,7 @@ item.get_definition() -> Item_Definition;
 ### Inventory Methods
 
 ```csl
+for item, slot: inventory.slots() if item != null { /* ... */ }
 inventory.get_item(index: s64) -> Item_Instance; // May return null
 inventory.capacity
 ```
@@ -194,7 +226,7 @@ You must draw the inventory in `ao_late_update` inside `is_local_or_server()`.
 ```csl
 ao_late_update :: method(dt: float) {
     if this.is_local_or_server() {
-        options := Inventory_Draw_Options.default();
+        options := Inventory_Draw_Options.hotbar_default();
         options.hotbar_item_count = 5;
         options.enable_use_from_hotbar = true;
         options.scroll_item_selection = true;
@@ -215,15 +247,15 @@ ao_late_update :: method(dt: float) {
 ### Popup Inventory Grid (Chests, etc...)
 ```csl
 inventory_rect := UI.get_safe_screen_rect().inset(100);
-options := Inventory_Draw_Options.default();
+options := Inventory_Draw_Options.inventory_default();
 options.title = "Inventory";
 options.show_exit_button = true;
 options.show_background = true;
 options.columns = 5;
 options.rows = 4;
 
-closed := Items.draw_inventory(inventory_rect, player.default_inventory, options);
-if closed { inventory_open = false; }
+stay_open := Items.draw_inventory(inventory_rect, player.default_inventory, options);
+if !stay_open { inventory_open = false; }
 ```
 
 ### Inventory_Draw_Options
@@ -236,10 +268,10 @@ Inventory_Draw_Options :: struct {
     show_background: bool;
     allow_drag_drop: bool;
     drag_drop_color_multiplier: v4;
-    hotbar_item_count: s32; // default: 6
-    columns: s32;
-    rows: s32;
-    force_select_hotbar_index: s32; // -1 = none
+    hotbar_item_count: int; // inventory_default: 0; hotbar_default: 6
+    columns: int;
+    rows: int;
+    force_select_hotbar_index: int; // -1 = none
     hide_bag_button: bool;
     enable_selection: bool;
     scroll_item_selection: bool;
@@ -247,7 +279,8 @@ Inventory_Draw_Options :: struct {
     enable_use_from_hotbar: bool;
     on_before_draw: (proc(item: Item_Instance, rect: Rect));
     on_after_draw: (proc(item: Item_Instance, rect: Rect));
-    default :: proc() -> Inventory_Draw_Options;
+    inventory_default :: proc() -> Inventory_Draw_Options;
+    hotbar_default :: proc() -> Inventory_Draw_Options;
 }
 ```
 
