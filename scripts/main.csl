@@ -1498,7 +1498,7 @@ Player :: class : Player_Base {
                 e.set_local_scale(entity.local_scale * 1.5);
                 animator := e.add_component(Spine_Animator);
                 brightness := rng_range_float(ref dust_rng, 0.5, 1);
-                animator.color_multiplier = {brightness, brightness, brightness, 0.25};
+                animator.color = {brightness, brightness, brightness, 0.25};
                 animator.set_skeleton(dust_spine);
                 animator.set_animation("running_dust_poof", false, 0, 1);
                 e.queue_for_destruction(0.5);
