@@ -1,7 +1,7 @@
 # Infection player rig migration
 
-Status: original import/compile and native rig comparison passed. Hosted
-multiplayer validation is running; no candidate publication or activation yet.
+Status: original multiplayer, candidate compilation, native rig comparison and
+compact source preparation passed. No candidate publication or activation yet.
 
 Repository: All-Out-Games/infection-2. Baseline master:
 `7b1b94ad37f8c75ced98be09e5bf4f6fddb5c7a4`. Isolated branch:
@@ -69,3 +69,30 @@ loading/retention claims. Do not start another Poki Player Fit test.
 
 Detailed evidence and action state are under
 `C:/allout-rig-startup-local/.codex-tmp/rig-startup/infection-*`.
+
+## Original gameplay and reviewed compact archive
+
+Three isolated Chrome clients loaded the exact original hosted primary package
+in full local development, started a round and displayed survivor/zombie roles.
+Trusted inputs exercised movement, survivor shooting and ammunition change,
+dodge-roll motion, sprint input and zombie slash motion/cooldown. The round
+timed out with the existing zombie win screen and all clients entered the next
+round. None had a JavaScript exception; each logged one expected runtime merge.
+Direct infection/death and the complete multi-stage escape objective were not
+verified in this observation. Native import was concurrent, so these captures
+are functional evidence only. All three clients were closed successfully.
+
+Candidate compilation passed with the same existing `icons/fuel.png` warning.
+Normal native preparation produced a 2,065,413-byte compact source archive,
+SHA-256 `d5bfffea89a04f59afc9524b67df8efd9c7532e25ce2356fb8ac6137e6785033`.
+All seven source scripts are unchanged from both published originals. All 356
+entity identities, AOIDs and values match after 29 native `tint` to `color`
+normalizations; native save also renames entity files. The sole scene config
+change selects `player_composed/player.spine`. No entity was edited manually.
+
+The runtime manifest has eight external ordinary rigs, zero bundled rigs and
+zero merge recipes, 196 manifest entries and 11 bundled entries. The required
+custom texture page is preserved. Archive size is not total join bandwidth.
+Evidence: `migration-candidates/infection-baked.json`,
+`infection-rig-native-comparison-summary.json`, `infection-source-preflight.json`
+and `infection-original-multiplayer` in the engine evidence folder.

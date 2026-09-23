@@ -23,7 +23,7 @@
   "internal_component_type": "Sprite_Renderer",
   "data": {
     "texture": "$AO/circle.png",
-    "tint": {
+    "color": {
       "X": 0,
       "Z": 0
     },
