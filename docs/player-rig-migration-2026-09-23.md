@@ -1,10 +1,9 @@
 # Infection player rig migration
 
-Status: original multiplayer, candidate compilation, native rig comparison,
-compact source preparation, both inactive hosted candidates and cold A/B passed.
-Separate primary/staging multiplayer and OPFS restart checks passed. Ready for
-guarded activation after master integration. Neither candidate is active in
-production yet.
+Status: primary and staging are deployed and independently verified. Native rig
+comparison, compilation, hosted source inspection, separate multiplayer and
+OPFS restart checks passed. Actual primary production rendering, movement and
+persistent-cache reuse also passed. Do not repeat either upload or activation.
 
 Repository: All-Out-Games/infection-2. Baseline master:
 `7b1b94ad37f8c75ced98be09e5bf4f6fddb5c7a4`. Isolated branch:
@@ -61,13 +60,13 @@ outside the `ao_player` authoring bundle itself. It was already absent from the
 published cooked bundle; archiving it is not a claimed network saving. The
 custom `fat_rig2` base and PNG remain because the composed atlas uses its page.
 
-## Remaining release checks
+## Release completion
 
-Commit the validation, integrate the game master and request guarded staging
-then primary activation of the existing candidates. Do not repeat the uploads or
-the completed canonical same-session cold Chrome comparison.
-Keep fresh production verification separate from local timing and population
-loading/retention claims. Do not start another Poki Player Fit test.
+Source and validation through `7e7aeb7527a863d81d69c9d193ea16b2ca9e86c2` were
+integrated and pushed to game master before the deployment coordinator activated
+the existing candidates, staging first. The final deployment evidence is below.
+Local timing and controlled production checks do not establish population
+loading or retention. No new Poki Player Fit test was started.
 
 Detailed evidence and action state are under
 `C:/allout-rig-startup-local/.codex-tmp/rig-startup/infection-*`.
@@ -101,7 +100,7 @@ and `infection-original-multiplayer` in the engine evidence folder.
 
 ## Hosted candidates and cold comparison
 
-Both candidates compiled under protocol 48 and remain inactive during validation.
+Both candidates compiled under protocol 48 and stayed inactive during validation.
 Primary `6ab3b0a62e1d629109ef6641` has build hash `a740bf75af344f98`, DAT
 2,079,840 bytes, SHA-256
 `cf1965106218a5362a3a1393ff729c8b85ac40f507aaf02917a5ea705afa856e`.
@@ -195,8 +194,49 @@ with zero runtime merges or page exceptions; that helper also exited 0. Evidence
 `infection-staging-multiplayer-cache-restart/opfs-only.json`. The owned staging
 local game job was then stopped; both editors and all browser sessions are closed.
 
-Fresh production readbacks after validation still select the original primary
-and staging versions, with both reviewed candidates compiled successfully under
-protocol 48. Gameplay source and the fuel-canister prefab have zero Git diff
-against the original master. Activation must use these existing candidates,
-preserve visibility/channel settings and retain both previous versions.
+Production readbacks immediately before activation still selected the original
+versions, with both reviewed candidates compiled successfully under protocol 48.
+Gameplay source and the fuel-canister prefab have zero Git diff against the
+original master.
+
+## Deployment and actual production verification
+
+The deployment coordinator activated staging at 2026-09-23 16:09:32.733 UTC and
+primary at 16:09:37.261 UTC through the normal guarded API. Both returned HTTP
+200, retained the previous version and original private/public/stable settings,
+and left no pending version. Independent production reads confirm:
+
+| Target | Active version | Build hash |
+|---|---|---|
+| Staging | `6ab3b0a12e1d629109ef6640` | `6497ad16b7678e5c` |
+| Primary | `6ab3b0a62e1d629109ef6641` | `a740bf75af344f98` |
+
+No new engine, server, Jenkins, protocol, asset-format or configuration rollout
+was required. Sanitized activation receipts are in
+`C:/Users/matth/AppData/Local/Temp/infection-activation-20260923/`; independent
+readbacks are `infection-{primary,staging}-active-readback.json` in the engine
+evidence directory.
+
+Actual primary production used deployed PRIMARY web
+`4932bc8a15714e3c3bf5f98e5c990564c53968f8`, with a fresh isolated Chrome profile
+and no bundle or game-data override. The exact new game version spawned,
+rendered and accepted trusted movement in its waiting lobby with zero runtime
+merges, engine error-state transitions or page exceptions. This is a production
+startup/movement check; the three-player round checks above used each hosted
+candidate in isolated full development.
+
+Fresh-profile game assets totaled 17,652,160 encoded bytes through spawn and
+30,123,518 bytes over the full observation after additional streaming. The next
+Chrome process cleared HTTP cache but retained OPFS. It reused all 265 stored
+asset files with zero game-asset requests/bytes, including the rigs, and again
+rendered, spawned and moved without runtime merges or page exceptions. Both
+helpers exited 0 and closed their browser contexts. Evidence:
+`infection-production-migration-{cold,opfs}/result.json` and before/after input
+screenshots. These were unthrottled functional checks while a separate native
+asset import ran, so no production timing claim is made.
+
+This confirms the deployed general OPFS reader on this game; merge-output caching
+was not changed. The cold A/B tradeoff remains +2.959 MB transfer for a modest
+startup and construction-memory improvement. Minimum payload, exhaustive
+gameplay equivalence and the broader 90% real-player loading goal are not
+established by this release. Other game migrations remain in progress.
