@@ -1,7 +1,10 @@
 # Infection player rig migration
 
-Status: original multiplayer, candidate compilation, native rig comparison and
-compact source preparation passed. No candidate publication or activation yet.
+Status: original multiplayer, candidate compilation, native rig comparison,
+compact source preparation, both inactive hosted candidates and cold A/B passed.
+Separate primary/staging multiplayer and OPFS restart checks passed. Ready for
+guarded activation after master integration. Neither candidate is active in
+production yet.
 
 Repository: All-Out-Games/infection-2. Baseline master:
 `7b1b94ad37f8c75ced98be09e5bf4f6fddb5c7a4`. Isolated branch:
@@ -60,10 +63,9 @@ custom `fat_rig2` base and PNG remain because the composed atlas uses its page.
 
 ## Remaining release checks
 
-Preserve and audit native source preparation, then publish inactive candidates.
-Verify each hosted source/DAT and manifest, run the canonical same-session cold
-Chrome comparison without concurrent heavy work, exercise multiplayer behavior,
-and restart with HTTP cache cleared/OPFS retained before guarded activation.
+Commit the validation, integrate the game master and request guarded staging
+then primary activation of the existing candidates. Do not repeat the uploads or
+the completed canonical same-session cold Chrome comparison.
 Keep fresh production verification separate from local timing and population
 loading/retention claims. Do not start another Poki Player Fit test.
 
@@ -96,3 +98,105 @@ custom texture page is preserved. Archive size is not total join bandwidth.
 Evidence: `migration-candidates/infection-baked.json`,
 `infection-rig-native-comparison-summary.json`, `infection-source-preflight.json`
 and `infection-original-multiplayer` in the engine evidence folder.
+
+## Hosted candidates and cold comparison
+
+Both candidates compiled under protocol 48 and remain inactive during validation.
+Primary `6ab3b0a62e1d629109ef6641` has build hash `a740bf75af344f98`, DAT
+2,079,840 bytes, SHA-256
+`cf1965106218a5362a3a1393ff729c8b85ac40f507aaf02917a5ea705afa856e`.
+Staging `6ab3b0a12e1d629109ef6640` has build hash `6497ad16b7678e5c`, DAT
+2,080,664 bytes, SHA-256
+`f68aeaa07b1d114ac5894a10b9ab525f23020a31aafb326cced9c2e50e32cfeb`.
+Independent hosted downloads verify the reviewed source bytes, runtime manifest,
+scene config and bundled asset entries for each target.
+
+Canonical same-session Chrome used the isolated full dev environment, CPU6,
+slow4g (655,360 bytes/s, 80 ms), server warmup and fresh profiles with all storage
+cleared. Two runs per version passed without retries or a tiebreaker. No editor,
+heavy build or second gameplay client ran concurrently. Debug Wasm SHA-256 was
+unchanged before/after:
+`a8ccde20a30e7cea03e30133c4dfdb3ef9698c680860f27ff599d3b50a980ac6`.
+
+| Median through spawn | Original | Authored rig |
+|---|---:|---:|
+| Navigation to spawn | 72.336 s | 70.607 s |
+| Encoded whole-page transfer | 36,353,550 bytes | 39,312,182 bytes |
+| Game-data transfer | 5,974,591 bytes | 1,660,779 bytes |
+| Separate game-asset transfer | 10,377,997 bytes | 17,650,224 bytes |
+| Wasm heap capacity | 765,362,176 bytes | 556,793,856 bytes |
+| Native allocated-byte snapshot | 264,133,684 bytes | 262,030,408 bytes |
+
+This is a 1.729-second startup improvement (2.4%) with 2.959 MB more cold transfer.
+The 208.568-MB capacity decrease is not a peak or resident-memory measurement;
+worker heap allocation stayed 113,770,496 bytes. These Debug measurements do
+not establish production timing, minimum payload or player retention.
+
+Infection and Fat Simulator have identical authored player-rig JSON (SHA-256
+`165a7bcb4069894e33c72813dff4d2fe00f271c3fd4723bc92ae19fe78d40cff`), but their
+freshly cooked runtime content IDs differ. No cross-game reuse of that rig is
+claimed. The earlier asset serialization determinism investigation remains open;
+this observation alone does not establish the cause. No serializer, asset-format
+or cache implementation was changed here.
+
+## Primary candidate multiplayer
+
+Three isolated Chrome profiles loaded the exact hosted primary candidate through
+the full local development stack without bundle or game-data overrides. All
+three spawned and rendered with zero runtime merges, engine error-state
+transitions or JavaScript exceptions. Trusted input and screenshots verified
+survivor shooting with an ammunition change, dodge-roll motion, sprint motion,
+and zombie slash motion/cooldown. One zombie's slash killed the second survivor:
+the victim displayed the named killer and respawn countdown, then reappeared as
+a zombie with the matching objective and Slash ability. The next round also
+started; movement and slash motion were observed there. All clients closed with
+exit 0. Evidence: `infection-primary-multiplayer`, especially captures 06, 09,
+11, 24, 27 and 30. The complete task-carrying/escape sequence was not exercised;
+its unchanged source positions carried objects using the player entity rather
+than a rig bone. These are scoped functional checks, not exhaustive gameplay or
+production performance measurements.
+
+Primary's fresh Chrome process then retained OPFS while clearing HTTP cache.
+It reused all 310 previously stored asset files without requesting any again,
+including all eight external rigs. Five previously absent assets downloaded
+29,615 encoded bytes. The exact hosted candidate spawned, rendered and accepted
+movement with zero runtime merges or page exceptions; the helper exited 0.
+Evidence: `infection-primary-multiplayer-cache-restart/opfs-only.json`. No cache
+implementation change was needed. The primary local game job was then stopped
+before starting the separate staging fixture.
+
+## Staging candidate multiplayer
+
+Three new isolated Chrome profiles separately loaded the exact staging candidate
+through full local development. All spawned with zero runtime rig merges,
+engine error-state transitions or page exceptions. Screenshots and trusted input
+verified survivor shooting/ammunition use, roll and sprint motion, zombie slash,
+movement, the round-timeout result and entry into the following round.
+
+The second round additionally verified fuel pickup, moving with the following
+fuel sprite/shadow and the Drop action returning to the pickup prompt (captures
+56, 58 and 59 in `infection-staging-multiplayer`). The first short E tap was
+below the authored 500 ms hold threshold, and a second attempt was outside the
+one-unit radius; neither is counted as a successful pickup. A 900 ms hold in
+range succeeded. The complete multi-stage escape objective remains unplayed.
+The unchanged carrying logic does not attach to rig bones.
+
+The anonymous staging session also logs HTTP 401 responses from its existing
+`translated.allout.game/.../unseen-strings` endpoint. These are preserved in the
+capture and did not prevent play; zero page exceptions is not a claim of zero
+unsuccessful network responses. The pre-existing missing `icons/fuel.png` icon
+does not prevent the text-labelled Drop ability working.
+
+All three staging profiles closed with exit 0. A separate Chrome restart with
+HTTP cache cleared and OPFS retained reused all 305 previously stored assets
+without refetching any, including all eight rigs. Six new cache misses downloaded
+224,310 encoded bytes. The expected staging version spawned, rendered and moved
+with zero runtime merges or page exceptions; that helper also exited 0. Evidence:
+`infection-staging-multiplayer-cache-restart/opfs-only.json`. The owned staging
+local game job was then stopped; both editors and all browser sessions are closed.
+
+Fresh production readbacks after validation still select the original primary
+and staging versions, with both reviewed candidates compiled successfully under
+protocol 48. Gameplay source and the fuel-canister prefab have zero Git diff
+against the original master. Activation must use these existing candidates,
+preserve visibility/channel settings and retain both previous versions.
