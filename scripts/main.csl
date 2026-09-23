@@ -1607,12 +1607,13 @@ Player :: class : Player_Base {
                                     }
                                     else {
                                         for fuel: component_iterator(Fuel_Canister) {
+                                            if !#alive(fuel.entity) || !#alive(fuel.carried_item) { continue; }
                                             if !fuel.carried_item.is_picked_up {
                                                 Tutorial_Arrow.draw(this, fuel.entity.world_position, tutorial_arrow_options);
                                             }
                                             else {
                                                 // Someone is carrying - point to them so others know to protect
-                                                if carrier := fuel.carried_item.carrier; carrier != null {
+                                                if carrier := fuel.carried_item.carrier; #alive(carrier) && #alive(carrier.entity) {
                                                     far_only_options := tutorial_arrow_options;
                                                     far_only_options.near = false;
                                                     Tutorial_Arrow.draw(this, carrier.entity.world_position, far_only_options);
@@ -1622,11 +1623,11 @@ Player :: class : Player_Base {
                                     }
                                 }
                                 case .CHARGE_BATTERY: {
-                                    if battery := get_boat_battery(); battery != null {
+                                    if battery := get_boat_battery(); #alive(battery) && #alive(battery.entity) && #alive(battery.carried_item) {
                                         switch battery.state {
                                             case .UNCHARGED: {
                                                 if battery.carried_item.is_picked_up {
-                                                    if carrier := battery.carried_item.carrier; carrier != null {
+                                                    if carrier := battery.carried_item.carrier; #alive(carrier) && #alive(carrier.entity) {
                                                         if carrier == this {
                                                             // I'm carrying - point to charger
                                                             for charger: component_iterator(Battery_Charger) {
@@ -1652,7 +1653,7 @@ Player :: class : Player_Base {
                                             }
                                             case .CHARGED: {
                                                 if battery.carried_item.is_picked_up {
-                                                    if carrier := battery.carried_item.carrier; carrier != null {
+                                                    if carrier := battery.carried_item.carrier; #alive(carrier) && #alive(carrier.entity) {
                                                         if carrier == this {
                                                             // I'm carrying - point to trolley delivery
                                                             for delivery: component_iterator(Battery_Delivery_Point) {
