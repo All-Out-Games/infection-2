@@ -1302,10 +1302,12 @@ Player :: class : Player_Base {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
-        UI.push_z(entity.world_position.y-0.001);
+        vp := entity.calculate_visual_position();
+
+        UI.push_z(vp.y-0.001);
         defer UI.pop_z();
 
-        bar_pos := entity.world_position + v2{0, 1.75};
+        bar_pos := vp + v2{0, 1.75};
         bar_width := 0.8;
         bar_height := 0.2;
         segment_gap := 0.02;
@@ -1359,11 +1361,13 @@ Player :: class : Player_Base {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
-        UI.push_z(entity.world_position.y-0.001);
+        vp := entity.calculate_visual_position();
+
+        UI.push_z(vp.y-0.001);
         defer UI.pop_z();
 
         // Position below the ammo bar
-        bar_pos := entity.world_position + v2{0, 1.6};
+        bar_pos := vp + v2{0, 1.6};
         bar_width := 0.6;
         bar_height := 0.12;
 
