@@ -17,7 +17,6 @@ Tutorial_View :: struct {
     step_number: int;
     step_count: int;
     visible: bool;
-    show_continue: bool;
     step_completed: bool;
 }
 
@@ -75,12 +74,9 @@ Tutorial_Step :: struct {
     event :: proc(id: string, event_id: string, count: int = 1, point_to: Tutorial_Target = {}, text: string = "", #no_captures complete_when: proc(player: Player) -> bool = null) -> Tutorial_Step {
         return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=3, _target=point_to, _event_id=event_id, _count=count, _complete_when=complete_when};
     }
-    message :: proc(id: string, text: string) -> Tutorial_Step {
-        return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text, _kind=4};
-    }
     use_ability :: proc(id: string, $T: typeid, count: int = 1, text: string = "", #no_captures complete_when: proc(player: Player) -> bool = null) -> Tutorial_Step {
         return {_id=id, cue_style=.GLOW_AND_HAND, cue_color={1, 0.65, 0.12, 1}, _text=text,
-            _kind=5, _target=Tutorial_Target.ability(T), _count=count, _complete_when=complete_when};
+            _kind=4, _target=Tutorial_Target.ability(T), _count=count, _complete_when=complete_when};
     }
 }
 
@@ -134,12 +130,10 @@ Tutorial :: class {
     cancel :: method(player: Player) { _control(_handle, player, 4); }
     get_status :: method(player: Player) -> Tutorial_Status { return _status(_handle, player); }
     get_view :: method(player: Player) -> Tutorial_View { return _view(_handle, player); }
-    continue_step :: method(player: Player) { _control(_handle, player, 5); }
     // Call before UI.uidoc; use show_panel=false when drawing a custom presenter.
     bind_ui :: method(player: Player, prefix: string = "tutorial") {
         view := get_view(player);
         UI.uidoc_bind_bool(`{prefix}.visible`, view.visible);
-        UI.uidoc_bind_bool(`{prefix}.show_continue`, view.show_continue);
         UI.uidoc_bind_bool(`{prefix}.step_completed`, view.step_completed);
         UI.uidoc_bind_text(`{prefix}.instruction`, view.instruction);
         UI.uidoc_bind_text(`{prefix}.progress`, view.progress_text);

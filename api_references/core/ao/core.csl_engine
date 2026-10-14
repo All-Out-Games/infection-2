@@ -13,7 +13,7 @@ Entity :: class {
     get_name                   :: method() -> string                                                                                                                    #foreign "entity_get_name";
     set_name                   :: method(new_name: string)                                                                                                              #foreign "entity_set_name";
     compare_name               :: method(name: string) -> bool                                                                                                          #foreign "entity_compare_name";
-    set_parent                 :: method(new_parent: Entity, keep_world_position: bool)                                                                                 #foreign "entity_set_parent";
+    set_parent                 :: method(new_parent: Entity, keep_world_transform: bool)                                                                                #foreign "entity_set_parent";
     set_local_position         :: method(p: v2)                                                                                                                         #foreign "entity_set_local_position";
     set_world_position         :: method(p: v2)                                                                                                                         #foreign "entity_set_world_position";
     lerp_local_position        :: method(target: v2, t: float)                                                                                                          #foreign "entity_lerp_local_position";
@@ -121,8 +121,8 @@ Sprite_Renderer :: class : Component {
     set_material :: method(material: Material, transfer_ownership: bool) #foreign "sprite_renderer_set_material";
     get_world_size :: method() -> v2 #foreign "sprite_renderer_get_world_size";
     #error_on_use "`Sprite_Renderer.tint` does not exist. Did you mean to use `Sprite_Renderer.color`?"
-    tint: v4           #foreign;
-    color: v4           #foreign "tint";
+    tint: v4           #foreign "color";
+    color: v4          #foreign;
     depth_offset: float #foreign;
     layer: s64          #foreign;
     scale: v2           #foreign;
@@ -854,6 +854,20 @@ Game :: struct {
 
     #deprecate_soft "Use Server.get_id()"
     get_server_id :: proc() -> string #foreign "server_get_id";
+}
+
+// Protocol 48. Funnels are defined in game code and appear automatically in Studio.
+// The complete ordered labels travel with each event, including unreached steps.
+Analytics :: struct {
+    // step is 1-based. Use the same name and ordered labels at every call site.
+    // Example: Analytics.funnel_step(player, "onboarding", {"Spawned", "First coin", "Upgrade"}, 1);
+    // Names: 1–64 ASCII letters/digits/underscores/dots/hyphens, starting with a letter.
+    // Labels: 2–20 entries, each 1–80 UTF-8 bytes without surrounding whitespace.
+    // Changing the name or labels starts a separate series; old data is preserved.
+    // Returns true when queued, not delivered. False on clients, editor play,
+    // disconnected players, or after 256 events/session or 20 events/second.
+    // Call once per milestone, never every frame. Do not include personal data.
+    funnel_step :: proc(player: Player, name: string, steps: []string, step: int) -> bool #foreign "analytics_funnel_step";
 }
 
 Live_Event_Presenter :: struct {
@@ -2129,8 +2143,8 @@ Save_Game_Key :: struct {
 }
 
 Save :: struct {
-    set_item   :: proc(player: Player, key: string, item: Item_Instance)       #foreign "save_set_item";
-    get_item   :: proc(player: Player, key: string) -> Item_Instance           #foreign "save_get_item";
+    save_item_reference :: proc(player: Player, key: string, item: Item_Instance) #foreign "save_save_item_reference";
+    get_item_reference  :: proc(player: Player, key: string) -> Item_Instance     #foreign "save_get_item_reference";
     set_string :: proc(player: Player, key: string, value: string)             #foreign "save_set_string";
     get_string :: proc(player: Player, key: string, default: string) -> string #foreign "save_get_string";
     set_int    :: proc(player: Player, key: string, value: s64)                #foreign "save_set_int";
@@ -2185,6 +2199,9 @@ Save :: struct {
 }
 
 Items :: struct {
+    // Only callable during this player's ao_start. Store the returned inventory for later use.
+    create_player_inventory                     :: proc(player: Player, key: string, capacity: s64) -> Inventory #foreign "items_create_player_inventory";
+    mark_item_dirty                             :: proc(item: Item_Instance) #foreign "items_mark_item_dirty";
     create_inventory                            :: proc(unique_id: string, capacity: s64)                                                             -> Inventory          #foreign "items_create_inventory";
     destroy_inventory                           :: proc(inventory: Inventory)                                                                -> bool               #foreign "items_destroy_inventory";
 
@@ -2310,9 +2327,10 @@ Item_Definition :: class {
 Item_Instance :: class {
     get_definition :: method() -> Item_Definition #foreign "item_instance_get_definition";
 
-    inventory: Inventory  #read_only #foreign "inventory_csl_handle";
-    slot_index: s64       #read_only #foreign "inventory_slot";
-    quantity:   s64       #read_only #foreign;
+    inventory:            Inventory #read_only #foreign "inventory_csl_handle";
+    slot_index:           s64       #read_only #foreign "inventory_slot";
+    entry_id_in_inventory: s64      #read_only #foreign "inventory_entry_id";
+    quantity:             s64       #read_only #foreign;
 } #gc_root #foreign_struct "Item_Instance"
 
 Notifier :: struct {
@@ -2463,7 +2481,9 @@ color_replace_get_color :: proc(color: Color_Replace_Color) -> v4 #foreign "csl_
 
 Spine_Instance_Fields :: class {
     state_machine:    State_Machine                  #foreign "state_machine_csl_handle"           #read_only("use set_state_machine()");
-    color_multiplier: v4                             #foreign;
+    #error_on_use "`color_multiplier` was renamed to `color` on Spine_Instance and Spine_Animator."
+    color_multiplier: v4                             #foreign "color";
+    color:            v4                             #foreign;
     scale:            v2                             #foreign "skeleton_scale";
     speed_multiplier: float                          #foreign;
     color_replace_color: Color_Replace_Color         #foreign "last_set_crewchsia_color"           #read_only("use set_color_replace_color()");
