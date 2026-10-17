@@ -293,7 +293,7 @@ ao_update :: proc(dt: float) {
                 canister_prefab := get_asset(Prefab_Asset, "fuel_canister.prefab");
                 for i: 0..canisters_to_spawn-1 {
                     spawn_point := fuel_spawn_points[i];
-                    canister_entity := Scene.instantiate(canister_prefab, spawn_point.entity.world_position);
+                    canister_entity := Scene.instantiate(canister_prefab, spawn_point.entity.world_position.xy);
                 }
             }
 
@@ -302,7 +302,7 @@ ao_update :: proc(dt: float) {
                 #static prefab := get_asset(Prefab_Asset, "Boat Battery.prefab");
 
                 battery_spawn := try_get_random_component(ref server_rng, Boat_Battery_Spawn_Point);
-                battery := Scene.instantiate(prefab, battery_spawn.entity.world_position);
+                battery := Scene.instantiate(prefab, battery_spawn.entity.world_position.xy);
             }
 
             g_game.state = .WAITING_FOR_PLAYERS;
@@ -656,14 +656,14 @@ respawn_player :: proc(using player: Player) {
         case .SURVIVOR: {
             spawn := get_random(ref server_rng, all_survivor_spawns);
             offset := v2{rng_range_float(ref server_rng, -0.5, 0.5), rng_range_float(ref server_rng, -0.5, 0.5)};
-            player.entity.set_local_position(spawn.world_position + offset);
+            player.entity.set_local_position(spawn.world_position.xy + offset);
         }
         case .ZOMBIE: {
             valid_spawns: [..]Entity;
             for spawn: all_zombie_spawns {
                 spawn_ok := true;
                 for player: component_iterator(Player) if player.team == .SURVIVOR {
-                    if in_range(spawn.world_position - player.entity.world_position, 10) {
+                    if in_range(spawn.world_position.xy - player.entity.world_position.xy, 10) {
                         spawn_ok = false;
                         break;
                     }
@@ -676,12 +676,12 @@ respawn_player :: proc(using player: Player) {
             if valid_spawns.count > 0 {
                 index := rng_range_int(ref server_rng, 0, valid_spawns.count-1);
                 spawn := valid_spawns[index];
-                player.entity.set_local_position(spawn.world_position);
+                player.entity.set_local_position(spawn.world_position.xy);
             }
             else {
                 index := rng_range_int(ref server_rng, 0, all_zombie_spawns.count-1);
                 spawn := all_zombie_spawns[index];
-                player.entity.set_local_position(spawn.world_position);
+                player.entity.set_local_position(spawn.world_position.xy);
             }
         }
     }
@@ -714,13 +714,13 @@ Shoot_Ability :: class : Ability_Base {
         if activation.activate {
             current_cooldown = 0.5;
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(player.entity.local_position);
+            sfx.set_position(player.entity.local_position.xy);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
             if player.current_ammo > 0 {
                 player.current_ammo -= 1;
                 player.current_ammo_float -= 1;
-                shoot_projectile(player.entity.world_position, activation.direction * 10.0, 1, 0.5, player.team, player.entity);
+                shoot_projectile(player.entity.world_position.xy, activation.direction * 10.0, 1, 0.5, player.team, player.entity);
                 player.time_last_shot[player.current_ammo] = get_time();
                 SFX.play(get_asset(SFX_Asset, "sfx/shoot.wav"), sfx);
             }
@@ -771,7 +771,7 @@ Slash_Effect :: class : Effect_Base {
         player.set_facing_right(direction.x > 0);
         {
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(player.entity.world_position);
+            sfx.set_position(player.entity.world_position.xy);
             sfx.volume = 0.75;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.2;
@@ -785,7 +785,7 @@ Slash_Effect :: class : Effect_Base {
         for other: component_iterator(Player) {
             if other.team == player.team continue;
             if other.team != .SURVIVOR continue;
-            if in_range(other.entity.world_position - player.entity.world_position, 0.75) {
+            if in_range(other.entity.world_position.xy - player.entity.world_position.xy, 0.75) {
                 already_hit := false;
                 for hit: already_hit_list {
                     if hit == other {
@@ -800,7 +800,7 @@ Slash_Effect :: class : Effect_Base {
                 already_hit_list.append(other);
                 {
                     sfx := SFX.default_sfx_desc();
-                    sfx.set_position(other.entity.world_position);
+                    sfx.set_position(other.entity.world_position.xy);
                     sfx.volume = 0.75;
                     sfx.volume_perturb = 0.1;
                     sfx.speed_perturb = 0.2;
@@ -838,7 +838,7 @@ Drop_Item_Ability :: class : Ability_Base {
         if params.clicked && params.can_use {
             item := get_player_carried_item(player);
             if item != null {
-                drop_carried_item(item, player.entity.world_position);
+                drop_carried_item(item, player.entity.world_position.xy);
             }
         }
     }
@@ -898,7 +898,7 @@ Roll_Effect :: class : Effect_Base {
     effect_start :: method() {
         {
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(player.entity.world_position);
+            sfx.set_position(player.entity.world_position.xy);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.1;
@@ -1045,7 +1045,7 @@ Health_Component :: class : Component {
         health_percent := get_health_percent();
         // if health_percent >= 1.0 return;
 
-        bar_pos := entity.world_position + health_bar_offset;
+        bar_pos := entity.world_position.xy + health_bar_offset;
         bar_rect := Rect{bar_pos, bar_pos}.grow(0.1, 0.4, 0.1, 0.4);
 
         UI.quad(bar_rect, white_sprite, {0.01, 0.01, 0.01, 1});
@@ -1064,7 +1064,7 @@ Health_Component :: class : Component {
         last_damage_time = get_time();
 
         // Spawn damage number
-        spawn_damage_number(amount, entity.world_position + v2{0, 0.5});
+        spawn_damage_number(amount, entity.world_position.xy + v2{0, 0.5});
 
         if current_health <= 0 {
             current_health = 0;
@@ -1132,7 +1132,7 @@ Damage_Number :: class : Component {
         UI.push_layer(100);
         defer UI.pop_layer();
 
-        rect := Rect{entity.local_position, entity.local_position}.grow(0.2, 0.4, 0.2, 0.4);
+        rect := Rect{entity.local_position.xy, entity.local_position.xy}.grow(0.2, 0.4, 0.2, 0.4);
 
         fade_t := linear_step(lifetime-1, lifetime, time_alive);
         ts := UI.default_text_settings();
@@ -1171,7 +1171,7 @@ Death_Effect :: class : Effect_Base {
         player.player_set_trigger("death");
         if Game.is_server() {
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(player.entity.world_position);
+            sfx.set_position(player.entity.world_position.xy);
             sfx.volume = 0.5;
             sfx.speed_perturb = 0.15;
             SFX.play(get_asset(SFX_Asset, "sfx/death.wav"), sfx);
@@ -1302,7 +1302,7 @@ Player :: class : Player_Base {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
-        vp := entity.calculate_visual_position();
+        vp := entity.calculate_visual_position().xy;
 
         UI.push_z(vp.y-0.001);
         defer UI.pop_z();
@@ -1361,7 +1361,7 @@ Player :: class : Player_Base {
         UI.push_world_draw_context();
         defer UI.pop_draw_context();
 
-        vp := entity.calculate_visual_position();
+        vp := entity.calculate_visual_position().xy;
 
         UI.push_z(vp.y-0.001);
         defer UI.pop_z();
@@ -1498,8 +1498,8 @@ Player :: class : Player_Base {
                 dust_serial += 1;
                 dust_rng := rng_seed(dust_serial);
                 e := Scene.create_entity();
-                e.set_local_position(entity.world_position);
-                e.set_local_scale(entity.local_scale * 1.5);
+                e.set_local_position(entity.world_position.xy);
+                e.set_local_scale(entity.local_scale.xy * 1.5);
                 animator := e.add_component(Spine_Animator);
                 brightness := rng_range_float(ref dust_rng, 0.5, 1);
                 animator.color = {brightness, brightness, brightness, 0.25};
@@ -1606,21 +1606,21 @@ Player :: class : Player_Base {
                                 case .FUEL_CANISTERS: {
                                     if is_player_carrying_item(this) {
                                         for delivery: component_iterator(Fuel_Delivery_Point) {
-                                            Tutorial_Arrow.draw(this, delivery.entity.world_position, tutorial_arrow_options);
+                                            Tutorial_Arrow.draw(this, delivery.entity.world_position.xy, tutorial_arrow_options);
                                         }
                                     }
                                     else {
                                         for fuel: component_iterator(Fuel_Canister) {
                                             if !#alive(fuel.entity) || !#alive(fuel.carried_item) { continue; }
                                             if !fuel.carried_item.is_picked_up {
-                                                Tutorial_Arrow.draw(this, fuel.entity.world_position, tutorial_arrow_options);
+                                                Tutorial_Arrow.draw(this, fuel.entity.world_position.xy, tutorial_arrow_options);
                                             }
                                             else {
                                                 // Someone is carrying - point to them so others know to protect
                                                 if carrier := fuel.carried_item.carrier; #alive(carrier) && #alive(carrier.entity) {
                                                     far_only_options := tutorial_arrow_options;
                                                     far_only_options.near = false;
-                                                    Tutorial_Arrow.draw(this, carrier.entity.world_position, far_only_options);
+                                                    Tutorial_Arrow.draw(this, carrier.entity.world_position.xy, far_only_options);
                                                 }
                                             }
                                         }
@@ -1635,25 +1635,25 @@ Player :: class : Player_Base {
                                                         if carrier == this {
                                                             // I'm carrying - point to charger
                                                             for charger: component_iterator(Battery_Charger) {
-                                                                Tutorial_Arrow.draw(this, charger.entity.world_position, tutorial_arrow_options);
+                                                                Tutorial_Arrow.draw(this, charger.entity.world_position.xy, tutorial_arrow_options);
                                                             }
                                                         }
                                                         else {
                                                             // Someone else is carrying - point to them
                                                             far_only_options := tutorial_arrow_options;
                                                             far_only_options.near = false;
-                                                            Tutorial_Arrow.draw(this, carrier.entity.world_position, far_only_options);
+                                                            Tutorial_Arrow.draw(this, carrier.entity.world_position.xy, far_only_options);
                                                         }
                                                     }
                                                 }
                                                 else {
                                                     // Point to battery
-                                                    Tutorial_Arrow.draw(this, battery.entity.world_position, tutorial_arrow_options);
+                                                    Tutorial_Arrow.draw(this, battery.entity.world_position.xy, tutorial_arrow_options);
                                                 }
                                             }
                                             case .CHARGING: {
                                                 // Point to battery while charging
-                                                Tutorial_Arrow.draw(this, battery.entity.world_position, tutorial_arrow_options);
+                                                Tutorial_Arrow.draw(this, battery.entity.world_position.xy, tutorial_arrow_options);
                                             }
                                             case .CHARGED: {
                                                 if battery.carried_item.is_picked_up {
@@ -1661,20 +1661,20 @@ Player :: class : Player_Base {
                                                         if carrier == this {
                                                             // I'm carrying - point to trolley delivery
                                                             for delivery: component_iterator(Battery_Delivery_Point) {
-                                                                Tutorial_Arrow.draw(this, delivery.entity.world_position, tutorial_arrow_options);
+                                                                Tutorial_Arrow.draw(this, delivery.entity.world_position.xy, tutorial_arrow_options);
                                                             }
                                                         }
                                                         else {
                                                             // Someone else is carrying - point to them
                                                             far_only_options := tutorial_arrow_options;
                                                             far_only_options.near = false;
-                                                            Tutorial_Arrow.draw(this, carrier.entity.world_position, far_only_options);
+                                                            Tutorial_Arrow.draw(this, carrier.entity.world_position.xy, far_only_options);
                                                         }
                                                     }
                                                 }
                                                 else {
                                                     // Point to battery to pick up
-                                                    Tutorial_Arrow.draw(this, battery.entity.world_position, tutorial_arrow_options);
+                                                    Tutorial_Arrow.draw(this, battery.entity.world_position.xy, tutorial_arrow_options);
                                                 }
                                             }
                                         }
@@ -1683,9 +1683,9 @@ Player :: class : Player_Base {
                                 case .PUSH_TROLLEY: {
                                     if trolley := get_trolley(); trolley != null && !trolley.has_reached_destination {
                                         // Don't show arrow if I'm already pushing (within range)
-                                        am_pushing := in_range(entity.world_position - trolley.entity.world_position, TROLLEY_SURVIVOR_RANGE);
+                                        am_pushing := in_range(entity.world_position.xy - trolley.entity.world_position.xy, TROLLEY_SURVIVOR_RANGE);
                                         if !am_pushing {
-                                            Tutorial_Arrow.draw(this, trolley.entity.world_position, tutorial_arrow_options);
+                                            Tutorial_Arrow.draw(this, trolley.entity.world_position.xy, tutorial_arrow_options);
                                         }
                                     }
                                 }
@@ -1696,7 +1696,7 @@ Player :: class : Player_Base {
                                         break;
                                     }
                                     if !is_on_boat {
-                                        Tutorial_Arrow.draw(this, takeoff.entity.world_position, tutorial_arrow_options);
+                                        Tutorial_Arrow.draw(this, takeoff.entity.world_position.xy, tutorial_arrow_options);
                                     }
                                 }
                             }
@@ -1705,11 +1705,11 @@ Player :: class : Player_Base {
                             survivor_hint_options := Tutorial_Arrow.default_options();
                             survivor_hint_options.near = false;
                             for other: component_iterator(Player) if other.team == .SURVIVOR && !other.health.is_dead {
-                                distance := length(other.entity.world_position - entity.world_position);
+                                distance := length(other.entity.world_position.xy - entity.world_position.xy);
                                 alpha := linear_step(20, 0, distance);
                                 if alpha > 0 {
                                     survivor_hint_options.alpha = alpha;
-                                    Tutorial_Arrow.draw(this, other.entity.world_position, survivor_hint_options);
+                                    Tutorial_Arrow.draw(this, other.entity.world_position.xy, survivor_hint_options);
                                 }
                             }
                         }
@@ -1850,12 +1850,12 @@ Food_Projectile :: class : Component {
                 if #alive(owner) && owner == player.entity continue;
                 if player.team == team continue;
                 if player.team != .ZOMBIE continue;
-                if in_range(player.entity.world_position - entity.world_position, hit_radius) {
+                if in_range(player.entity.world_position.xy - entity.world_position.xy, hit_radius) {
                     player.take_damage(1);
                     destroy_self = true;
                     {
                         sfx := SFX.default_sfx_desc();
-                        sfx.set_position(player.entity.world_position);
+                        sfx.set_position(player.entity.world_position.xy);
                         sfx.volume = 0.75;
                         sfx.volume_perturb = 0.1;
                         sfx.speed_perturb = 0.2;
@@ -1874,8 +1874,8 @@ Food_Projectile :: class : Component {
             point: v2;
             // todo(josh): this crashes!!!:
             // if Game_Manager.bullet_navmesh.try_find_closest_point_on_navmesh(entity.world_position, &point) {
-            if get_game_manager().bullet_navmesh.try_find_closest_point_on_navmesh(entity.world_position, ref point, ref triangle_hint) {
-                if !in_range(point - entity.world_position, 0.01) {
+            if get_game_manager().bullet_navmesh.try_find_closest_point_on_navmesh(entity.world_position.xy, ref point, ref triangle_hint) {
+                if !in_range(point - entity.world_position.xy, 0.01) {
                     destroy_self = true;
                 }
             }
@@ -1886,12 +1886,12 @@ Food_Projectile :: class : Component {
             effect := Scene.instantiate(hit_effect);
             rng := rng_seed(entity.id);
             effect.get_first_child().set_local_rotation(rng_range_float(ref rng, 0, 360));
-            effect.set_local_position(entity.world_position);
+            effect.set_local_position(entity.world_position.xy);
             effect.queue_for_destruction(0.5);
             entity.destroy();
 
             #static sfx := SFX.default_sfx_desc();
-            sfx.set_position(entity.world_position);
+            sfx.set_position(entity.world_position.xy);
             sfx.volume = 0.5;
             sfx.volume_perturb = 0.1;
             sfx.speed_perturb = 0.1;
@@ -1976,13 +1976,13 @@ Carried_Item :: class : Component {
     pickup_notification: string;
 
     ao_start :: method() {
-        shadow_scale = shadow_sprite.entity.local_scale;
+        shadow_scale = shadow_sprite.entity.local_scale.xy;
     }
 
     ao_late_update :: method(dt: float) {
         if is_picked_up && carrier != null {
             if #alive(carrier) {
-                last_carrier_position = carrier.entity.world_position;
+                last_carrier_position = carrier.entity.world_position.xy;
             }
             if !#alive(carrier) || carrier.health.is_dead {
                 // Carrier died or disconnected, drop the item
@@ -1990,9 +1990,9 @@ Carried_Item :: class : Component {
             }
             else {
                 // Follow the carrier
-                vector := normalize_vector_to_radius(entity.local_position - carrier.entity.local_position, 1);
-                target_position := carrier.entity.local_position + vector;
-                new_position := lerp(entity.local_position, target_position, 0.25);
+                vector := normalize_vector_to_radius(entity.local_position.xy - carrier.entity.local_position.xy, 1);
+                target_position := carrier.entity.local_position.xy + vector;
+                new_position := lerp(entity.local_position.xy, target_position, 0.25);
                 entity.set_local_position(new_position);
             }
         }
@@ -2041,7 +2041,7 @@ pickup_carried_item :: proc(using item: Carried_Item, player: Player) {
     }
     if pickup_sfx.count > 0 {
         sfx := SFX.default_sfx_desc();
-        sfx.set_position(item.entity.world_position);
+        sfx.set_position(item.entity.world_position.xy);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
         SFX.play(get_asset(SFX_Asset, pickup_sfx), sfx);
@@ -2054,7 +2054,7 @@ drop_carried_item :: proc(using item: Carried_Item, position: v2) {
     carrier = null;
     if drop_sfx.count > 0 {
         sfx := SFX.default_sfx_desc();
-        sfx.set_position(item.entity.world_position);
+        sfx.set_position(item.entity.world_position.xy);
         sfx.volume_perturb = 0.1;
         sfx.speed_perturb = 0.1;
         SFX.play(get_asset(SFX_Asset, drop_sfx), sfx);
@@ -2119,7 +2119,7 @@ Fuel_Delivery_Point :: class : Interactable {
         g_game.fuel_deposited += 1;
         {
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(entity.world_position);
+            sfx.set_position(entity.world_position.xy);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
@@ -2186,7 +2186,7 @@ Boat_Battery :: class : Interactable {
 
         if state == .CHARGING {
             // Float towards charger
-            entity.lerp_local_position(charger.entity.world_position + v2{0, 0.4}, 15 * dt);
+            entity.lerp_local_position(charger.entity.world_position.xy + v2{0, 0.4}, 15 * dt);
 
             // Charging progress
             charge_t += dt / BATTERY_CHARGE_TIME;
@@ -2215,7 +2215,7 @@ Boat_Battery :: class : Interactable {
             defer UI.pop_draw_context();
 
             options := World_Progress_Bar.default_options();
-            World_Progress_Bar.draw(entity.world_position, charge_t, options);
+            World_Progress_Bar.draw(entity.world_position.xy, charge_t, options);
         }
     }
 
@@ -2289,7 +2289,7 @@ Battery_Charger :: class : Interactable {
 
         {
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(entity.world_position);
+            sfx.set_position(entity.world_position.xy);
             SFX.play(get_asset(SFX_Asset, "sfx/align_takeoff.wav"), sfx); // TODO: charging sound
         }
     }
@@ -2331,7 +2331,7 @@ Battery_Delivery_Point :: class : Interactable {
         g_game.battery_delivered = true;
         {
             sfx := SFX.default_sfx_desc();
-            sfx.set_position(entity.world_position);
+            sfx.set_position(entity.world_position.xy);
             sfx.volume_perturb = 0.2;
             sfx.speed_perturb = 0.1;
             SFX.play(get_asset(SFX_Asset, "sfx/deposit.wav"), sfx);
@@ -2379,7 +2379,7 @@ Trolley :: class : Component {
         g_trolley = this;
         agent = entity.get_component(Movement_Agent);
         agent.set_navmesh_to_lock_to(get_game_manager().trolley_navmesh);
-        start_position = entity.world_position;
+        start_position = entity.world_position.xy;
         reset_trolley(this);
     }
 
@@ -2395,12 +2395,12 @@ Trolley :: class : Component {
             if player.health.is_dead continue;
             switch player.team {
                 case .SURVIVOR: {
-                    if in_range(player.entity.world_position - entity.world_position, TROLLEY_SURVIVOR_RANGE) {
+                    if in_range(player.entity.world_position.xy - entity.world_position.xy, TROLLEY_SURVIVOR_RANGE) {
                         survivor_nearby = true;
                     }
                 }
                 case .ZOMBIE: {
-                    if in_range(player.entity.world_position - entity.world_position, TROLLEY_ZOMBIE_RANGE) {
+                    if in_range(player.entity.world_position.xy - entity.world_position.xy, TROLLEY_ZOMBIE_RANGE) {
                         zombie_nearby = true;
                     }
                 }
@@ -2412,11 +2412,11 @@ Trolley :: class : Component {
         if is_being_pushed {
             // Move toward destination using Movement_Agent pathfinding
             if destination != null && #alive(destination) {
-                result := agent.set_path_target(destination.world_position, 60);
+                result := agent.set_path_target(destination.world_position.xy, 60);
 
                 // Flip sprite based on movement direction
                 if result.success && sprite != null {
-                    new_scale := sprite.entity.local_scale;
+                    new_scale := sprite.entity.local_scale.xy;
                     if result.move_direction.x > 0.01 {
                         new_scale.x = abs(new_scale.x);
                     }
@@ -2427,7 +2427,7 @@ Trolley :: class : Component {
                 }
 
                 // Check if reached destination
-                if in_range(entity.world_position - destination.world_position, 0.5) {
+                if in_range(entity.world_position.xy - destination.world_position.xy, 0.5) {
                     on_reached_destination();
                 }
             }
@@ -2446,7 +2446,7 @@ Trolley :: class : Component {
         defer UI.pop_layer();
 
         // Show push status above trolley
-        bar_position := entity.world_position + v2{0, 1.2};
+        bar_position := entity.world_position.xy + v2{0, 1.2};
 
         ts := UI.default_text_settings();
         ts.size = 0.3;
@@ -2460,7 +2460,7 @@ Trolley :: class : Component {
             zombie_nearby := false;
             for player: component_iterator(Player) {
                 if player.team != .ZOMBIE continue;
-                if in_range(player.entity.world_position - entity.world_position, TROLLEY_ZOMBIE_RANGE) {
+                if in_range(player.entity.world_position.xy - entity.world_position.xy, TROLLEY_ZOMBIE_RANGE) {
                     zombie_nearby = true;
                     break;
                 }
