@@ -863,10 +863,10 @@ Sprint_Ability :: class : Ability_Base {
     on_update :: method(params: ref Ability_Update_Params) {
         holding := Ability_Utilities.update_holding_ability(player, ref params, keybind_sprint);
         if holding.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
-            player.game_is_sprinting = true;
+            player.is_infection_sprinting = true;
         }
         else {
-            player.game_is_sprinting = false;
+            player.is_infection_sprinting = false;
         }
     }
 }
@@ -1250,7 +1250,7 @@ Player :: class : Player_Base {
     // Sprint system
     sprint_stamina: float;
     sprite_dust_timer: float;
-    game_is_sprinting: bool;
+    is_infection_sprinting: bool;
     sprint_exhausted: bool;
     dust_serial: u64;
     last_exhaust_recover_time: float;
@@ -1386,7 +1386,7 @@ Player :: class : Player_Base {
             if sprint_exhausted {
                 give {1, 0, 0, 1};
             }
-            if game_is_sprinting {
+            if is_infection_sprinting {
                 give lerp(v4{1, 0.3, 0, 1}, {1, 0.8, 0, 1}, sprint_stamina);
             }
             give lerp(v4{1, 0.3, 0, 1}, {0.3, 1, 0, 1}, sprint_stamina);
@@ -1483,7 +1483,7 @@ Player :: class : Player_Base {
         }
 
         // Apply sprint speed bonus
-        if game_is_sprinting {
+        if is_infection_sprinting {
             agent.movement_speed *= SPRINT_SPEED_BONUS;
             if Game.is_launched_from_editor() {
                 agent.movement_speed *= 3;
@@ -1492,7 +1492,7 @@ Player :: class : Player_Base {
 
         // Sprint stamina drain/regen
         sprite_dust_timer = max(0.0, sprite_dust_timer - dt);
-        if game_is_sprinting {
+        if is_infection_sprinting {
             if sprite_dust_timer <= 0 {
                 sprite_dust_timer = 0.15;
                 dust_serial += 1;
@@ -1517,7 +1517,7 @@ Player :: class : Player_Base {
             }
             if sprint_stamina <= 0 {
                 sprint_stamina = 0;
-                game_is_sprinting = false;
+                is_infection_sprinting = false;
                 sprint_exhausted = true;
                 last_exhaust_time = get_time();
             }
