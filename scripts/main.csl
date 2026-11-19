@@ -863,10 +863,10 @@ Sprint_Ability :: class : Ability_Base {
     on_update :: method(params: ref Ability_Update_Params) {
         holding := Ability_Utilities.update_holding_ability(player, ref params, keybind_sprint);
         if holding.active && player.sprint_stamina > 0 && player.team == .SURVIVOR && length_squared(player.agent.velocity) > 0.001 && !player.sprint_exhausted {
-            player.is_sprinting = true;
+            player.game_is_sprinting = true;
         }
         else {
-            player.is_sprinting = false;
+            player.game_is_sprinting = false;
         }
     }
 }
@@ -1250,7 +1250,7 @@ Player :: class : Player_Base {
     // Sprint system
     sprint_stamina: float;
     sprite_dust_timer: float;
-    is_sprinting: bool;
+    game_is_sprinting: bool;
     sprint_exhausted: bool;
     dust_serial: u64;
     last_exhaust_recover_time: float;
@@ -1386,7 +1386,7 @@ Player :: class : Player_Base {
             if sprint_exhausted {
                 give {1, 0, 0, 1};
             }
-            if is_sprinting {
+            if game_is_sprinting {
                 give lerp(v4{1, 0.3, 0, 1}, {1, 0.8, 0, 1}, sprint_stamina);
             }
             give lerp(v4{1, 0.3, 0, 1}, {0.3, 1, 0, 1}, sprint_stamina);
@@ -1483,7 +1483,7 @@ Player :: class : Player_Base {
         }
 
         // Apply sprint speed bonus
-        if is_sprinting {
+        if game_is_sprinting {
             agent.movement_speed *= SPRINT_SPEED_BONUS;
             if Game.is_launched_from_editor() {
                 agent.movement_speed *= 3;
@@ -1492,7 +1492,7 @@ Player :: class : Player_Base {
 
         // Sprint stamina drain/regen
         sprite_dust_timer = max(0.0, sprite_dust_timer - dt);
-        if is_sprinting {
+        if game_is_sprinting {
             if sprite_dust_timer <= 0 {
                 sprite_dust_timer = 0.15;
                 dust_serial += 1;
@@ -1517,7 +1517,7 @@ Player :: class : Player_Base {
             }
             if sprint_stamina <= 0 {
                 sprint_stamina = 0;
-                is_sprinting = false;
+                game_is_sprinting = false;
                 sprint_exhausted = true;
                 last_exhaust_time = get_time();
             }
